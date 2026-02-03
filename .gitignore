@@ -1,0 +1,286 @@
+# ============================================
+# Node.js Dependencies
+# ============================================
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+lerna-debug.log*
+package-lock.json.bak
+
+# ============================================
+# Build Outputs
+# ============================================
+dist/
+build/
+out/
+*.tsbuildinfo
+.next/
+.nuxt/
+.cache/
+.parcel-cache/
+
+# ============================================
+# Environment Variables (CRITICAL - DO NOT COMMIT)
+# ============================================
+.env
+.env.local
+.env.development
+.env.development.local
+.env.test
+.env.test.local
+.env.production
+.env.production.local
+.env.staging
+.env.*.local
+
+# Keep example files
+!.env.example
+!.env.sample
+
+# ============================================
+# AWS Specific
+# ============================================
+# CDK outputs
+cdk.out/
+cdk.context.json
+*.d.ts.map
+
+# AWS credentials and config
+.aws/
+aws-exports.js
+aws-exports.ts
+
+# Deployment info (contains account-specific data)
+deployment-info.json
+*-deployment-info.json
+
+# Lambda packages
+*.zip
+lambda-packages/
+lambda-layer/nodejs/node_modules/
+
+# Amplify
+amplify/backend/awscloudformation/
+amplify/.config/
+amplify/mock-data/
+amplify/mock-api-resources/
+amplify/#current-cloud-backend/
+amplify/team-provider-info.json
+
+# ============================================
+# IDE and Editor Files
+# ============================================
+# VSCode
+.vscode/
+!.vscode/settings.json.example
+!.vscode/extensions.json
+*.code-workspace
+
+# JetBrains IDEs
+.idea/
+*.iml
+*.iws
+*.ipr
+out/
+
+# Sublime Text
+*.sublime-project
+*.sublime-workspace
+
+# Vim
+*.swp
+*.swo
+*~
+.vim/
+
+# Emacs
+*~
+\#*\#
+.\#*
+
+# ============================================
+# Operating System Files
+# ============================================
+# macOS
+.DS_Store
+.AppleDouble
+.LSOverride
+._*
+.DocumentRevisions-V100
+.fseventsd
+.Spotlight-V100
+.TemporaryItems
+.Trashes
+.VolumeIcon.icns
+.com.apple.timemachine.donotpresent
+
+# Windows
+Thumbs.db
+Thumbs.db:encryptable
+ehthumbs.db
+ehthumbs_vista.db
+*.stackdump
+[Dd]esktop.ini
+$RECYCLE.BIN/
+*.lnk
+
+# Linux
+.directory
+.Trash-*
+.nfs*
+
+# ============================================
+# Logs and Runtime Data
+# ============================================
+logs/
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+lerna-debug.log*
+
+# Runtime data
+pids/
+*.pid
+*.seed
+*.pid.lock
+lib-cov/
+
+# ============================================
+# Testing and Coverage
+# ============================================
+coverage/
+*.lcov
+.nyc_output/
+.grunt/
+.lock-wscript
+.node_repl_history
+*.tgz
+.yarn-integrity
+.eslintcache
+.stylelintcache
+
+# Jest
+jest-results/
+.jest-cache/
+
+# ============================================
+# Temporary Files
+# ============================================
+tmp/
+temp/
+*.tmp
+*.temp
+*.bak
+*.backup
+*.old
+*.orig
+
+# ============================================
+# Security and Secrets (CRITICAL)
+# ============================================
+# Private keys
+*.pem
+*.key
+*.p12
+*.pfx
+*.cer
+*.crt
+
+# Secrets
+secrets.json
+secrets.*.json
+credentials.json
+service-account.json
+
+# ============================================
+# Database
+# ============================================
+*.sqlite
+*.sqlite3
+*.db
+
+# ============================================
+# Miscellaneous
+# ============================================
+# Optional npm cache directory
+.npm
+
+# Optional eslint cache
+.eslintcache
+
+# Optional stylelint cache
+.stylelintcache
+
+# Microbundle cache
+.rpt2_cache/
+.rts2_cache_cjs/
+.rts2_cache_es/
+.rts2_cache_umd/
+
+# Optional REPL history
+.node_repl_history
+
+# Output of 'npm pack'
+*.tgz
+
+# Yarn Integrity file
+.yarn-integrity
+
+# parcel-bundler cache
+.cache
+.parcel-cache
+
+# Serverless directories
+.serverless/
+
+# FuseBox cache
+.fusebox/
+
+# DynamoDB Local files
+.dynamodb/
+
+# TernJS port file
+.tern-port
+
+# Stores VSCode versions used for testing VSCode extensions
+.vscode-test
+
+# yarn v2
+.yarn/cache
+.yarn/unplugged
+.yarn/build-state.yml
+.yarn/install-state.gz
+.pnp.*
+
+# ============================================
+# Project Specific
+# ============================================
+# Frontend build artifacts
+frontend/dist/
+frontend/build/
+frontend/.vite/
+
+# Infrastructure build artifacts
+infrastructure/cdk.out/
+infrastructure/dist/
+
+# Lambda function build artifacts
+lambda-functions/*/dist/
+lambda-functions/*/build/
+lambda-functions/*/.aws-sam/
+
+# Deployment artifacts
+deployment-artifacts/
+*.deployment.json
+
+# Local development files
+.local/
+local-config.json
+
+# Debug files
+debug.log
+error.log

@@ -10,6 +10,9 @@ echo "=== Building Lambda Functions ==="
 cd lambda-functions/deployment-lambda && npm run build && cd ../..
 cd lambda-functions/websocket-lambda && npm install && npm run build && cd ../..
 
+echo "=== Installing Infrastructure Dependencies ==="
+cd infrastructure && npm install && cd ..
+
 echo "=== Deploying CDK Infrastructure ==="
 cd infrastructure
 cdk deploy --require-approval never --outputs-file cdk-outputs.json

@@ -105,16 +105,16 @@ npx cdk bootstrap
 ### 3. Deploy Infrastructure
 
 ```bash
-# Deploy the complete AWS infrastructure
-npm run deploy
+# Deploy the complete stack (infrastructure + frontend)
+./scripts/deploy-full-stack.sh
 ```
 
-This creates:
-- Cognito User Pool for authentication
-- API Gateway for REST endpoints
-- Lambda functions for workflow and deployment management
-- DynamoDB tables for data storage
-- IAM roles and policies
+This script:
+- Deploys CDK infrastructure
+- Extracts outputs (API URL, Cognito IDs, etc.)
+- Updates frontend `.env` with the outputs
+- Builds and deploys frontend to S3
+- Invalidates CloudFront cache
 
 ### 4. Start Development
 

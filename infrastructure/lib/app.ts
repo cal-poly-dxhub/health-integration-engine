@@ -9,8 +9,9 @@ const app = new cdk.App();
 new WorkflowBuilderStack(app, 'WorkflowBuilderStack', {
   env: {
     account: process.env.CDK_DEFAULT_ACCOUNT,
-    region: 'us-east-1', // Force us-east-1
+    region: process.env.CDK_DEFAULT_REGION || 'us-west-2',
   },
+  synthesizer: new cdk.CliCredentialsStackSynthesizer(),
   description: 'AWS Step Functions Workflow Builder Infrastructure',
   tags: {
     Project: 'WorkflowBuilder',

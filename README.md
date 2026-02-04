@@ -110,6 +110,8 @@ npx cdk bootstrap
 ```
 
 This script:
+- Installs all dependencies
+- Builds Lambda functions
 - Deploys CDK infrastructure
 - Extracts outputs (API URL, Cognito IDs, etc.)
 - Updates frontend `.env` with the outputs

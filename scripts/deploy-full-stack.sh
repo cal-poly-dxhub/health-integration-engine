@@ -24,9 +24,9 @@ USER_POOL_CLIENT_ID=$(jq -r '.WorkflowBuilderStack.UserPoolClientId' cdk-outputs
 IDENTITY_POOL_ID=$(jq -r '.WorkflowBuilderStack.IdentityPoolId' cdk-outputs.json)
 COGNITO_DOMAIN=$(jq -r '.WorkflowBuilderStack.CognitoDomain' cdk-outputs.json)
 WEBSOCKET_URL=$(jq -r '.WorkflowBuilderStack.WebSocketApiUrl' cdk-outputs.json)
-S3_BUCKET=$(jq -r '.WorkflowBuilderStack.FrontendHostingFrontendBucketName5F8AA9EC' cdk-outputs.json)
-CLOUDFRONT_ID=$(jq -r '.WorkflowBuilderStack.FrontendHostingCloudFrontDistributionId39D3E489' cdk-outputs.json)
-CLOUDFRONT_URL=$(jq -r '.WorkflowBuilderStack.FrontendHostingCloudFrontUrlAA25A79A' cdk-outputs.json)
+S3_BUCKET=$(jq -r '.WorkflowBuilderStack | to_entries[] | select(.key | startswith("FrontendHostingFrontendBucketName")) | .value' cdk-outputs.json)
+CLOUDFRONT_ID=$(jq -r '.WorkflowBuilderStack | to_entries[] | select(.key | startswith("FrontendHostingCloudFrontDistributionId")) | .value' cdk-outputs.json)
+CLOUDFRONT_URL=$(jq -r '.WorkflowBuilderStack | to_entries[] | select(.key | startswith("FrontendHostingCloudFrontUrl")) | .value' cdk-outputs.json)
 
 echo "=== Updating Frontend .env ==="
 cd ../frontend

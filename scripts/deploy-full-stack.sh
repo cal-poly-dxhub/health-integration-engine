@@ -3,6 +3,13 @@ set -e
 
 REGION="us-west-2"
 
+echo "=== Installing Dependencies ==="
+npm run install:all
+
+echo "=== Building Lambda Functions ==="
+cd lambda-functions/deployment-lambda && npm run build && cd ../..
+cd lambda-functions/websocket-lambda && npm install && npm run build && cd ../..
+
 echo "=== Deploying CDK Infrastructure ==="
 cd infrastructure
 cdk deploy --require-approval never --outputs-file cdk-outputs.json

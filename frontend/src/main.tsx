@@ -1,3 +1,18 @@
+// Polyfill for AWS SDK v3 - must be before any imports
+if (typeof global === 'undefined') {
+  (window as any).global = window;
+}
+if (typeof process === 'undefined') {
+  (window as any).process = { env: {} };
+}
+// Ensure fetch globals are available for AWS SDK v3
+if (typeof globalThis.Request === 'undefined') {
+  globalThis.Request = window.Request;
+  globalThis.Response = window.Response;
+  globalThis.Headers = window.Headers;
+  globalThis.fetch = window.fetch;
+}
+
 import React from 'react';
 import ReactDOM from 'react-dom/client';
 import ErrorBoundary from './components/ErrorBoundary';
@@ -26,9 +41,9 @@ const initializeAuth = async () => {
     
     authService.configure({
       region: import.meta.env.VITE_AWS_REGION || 'us-east-1',
-      userPoolId: import.meta.env.VITE_COGNITO_USER_POOL_ID || 'us-east-1_yVAz9QziX',
-      userPoolClientId: import.meta.env.VITE_COGNITO_USER_POOL_CLIENT_ID || 'cj5mu2gksbdjjftoap4qc7tpf',
-      identityPoolId: import.meta.env.VITE_COGNITO_IDENTITY_POOL_ID || 'us-east-1:174768ab-687d-4038-bd5e-d24bfbe86d8a',
+      userPoolId: import.meta.env.VITE_COGNITO_USER_POOL_ID,
+      userPoolClientId: import.meta.env.VITE_COGNITO_USER_POOL_CLIENT_ID,
+      identityPoolId: import.meta.env.VITE_COGNITO_IDENTITY_POOL_ID,
     });
     console.log('Auth service configured successfully');
     

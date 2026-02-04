@@ -1,5 +1,7 @@
 import { defineConfig } from 'vite'
 import react from '@vitejs/plugin-react'
+import { NodeGlobalsPolyfillPlugin } from '@esbuild-plugins/node-globals-polyfill'
+import { NodeModulesPolyfillPlugin } from '@esbuild-plugins/node-modules-polyfill'
 
 // https://vitejs.dev/config/
 export default defineConfig({
@@ -13,10 +15,12 @@ export default defineConfig({
     outDir: 'dist',
     sourcemap: false, // Disable sourcemaps for production to reduce bundle size
     assetsDir: 'assets',
-    // Optimize for Amplify deployment
-    target: 'es2015', // Ensure compatibility with older browsers
+    target: 'es2015',
     minify: 'terser',
     cssMinify: true,
+    commonjsOptions: {
+      transformMixedEsModules: true,
+    },
     rollupOptions: {
       output: {
         // Manual chunk splitting for better caching and performance
@@ -60,23 +64,35 @@ export default defineConfig({
   },
     resolve: {
       alias: {
-        '@': '/src'
+        '@': '/src',
+        buffer: 'buffer',
+        process: 'process/browser',
+        stream: 'stream-browserify',
+        util: 'util'
       }
     },
     define: {
       global: 'globalThis',
-      'process.env': {},
-      // Ensure Request is available globally for AWS SDK
-      'typeof Request': '"function"',
     },
   optimizeDeps: {
+    esbuildOptions: {
+      define: {
+        global: 'globalThis'
+      },
+      plugins: [
+        NodeGlobalsPolyfillPlugin({
+          buffer: true,
+          process: true
+        }),
+        NodeModulesPolyfillPlugin()
+      ]
+    },
     include: [
-      '@aws-sdk/client-cognito-identity-provider',
       'react',
       'react-dom',
-      'react-router-dom'
-    ],
-    exclude: ['whatwg-fetch']
+      'react-router-dom',
+      '@aws-sdk/client-cognito-identity-provider'
+    ]
   },
   // Ensure proper handling of environment variables for Amplify
   envPrefix: ['VITE_', 'REACT_APP_']

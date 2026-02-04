@@ -8,7 +8,11 @@ The infrastructure includes:
 
 - **Amazon Cognito User Pool**: User authentication and authorization
 - **API Gateway**: RESTful API with Lambda integration
-- **Lambda Functions**: Backend business logic (created in other tasks)
+- **Lambda Functions**: Backend business logic
+- **S3 + CloudFront**: Frontend hosting with global CDN
+- **DynamoDB**: Workflow and deployment data storage
+- **Step Functions**: Workflow orchestration
+- **WebSocket API**: Real-time deployment updates
 - **CloudWatch**: Logging and monitoring
 - **IAM Roles and Policies**: Security and permissions
 
@@ -55,7 +59,30 @@ scripts\deploy.bat --bootstrap
 ./scripts/deploy.sh --bootstrap
 ```
 
-### 2. Deploy the Infrastructure
+### 2. Deploy Full Stack (Infrastructure + Frontend)
+
+**Recommended: One-command deployment**
+
+**Bash (Linux/Mac):**
+```bash
+./scripts/deploy-full-stack.sh
+```
+
+**PowerShell (Windows):**
+```powershell
+.\scripts\deploy-full-stack.ps1
+```
+
+This will:
+1. Deploy CDK infrastructure (S3, CloudFront, API Gateway, etc.)
+2. Build the frontend
+3. Upload frontend to S3
+4. Invalidate CloudFront cache
+5. Display the CloudFront URL to access your app
+
+### 2b. Deploy Infrastructure Only
+
+If you only want to deploy infrastructure without the frontend:
 
 **PowerShell (Windows):**
 ```powershell

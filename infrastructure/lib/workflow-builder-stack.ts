@@ -14,6 +14,7 @@ import * as s3 from 'aws-cdk-lib/aws-s3';
 import * as fs from 'fs';
 import { Construct } from 'constructs';
 import { getConfig, StackConfig } from './config';
+import { FrontendHosting } from './constructs/frontend-hosting';
 
 export class WorkflowBuilderStack extends cdk.Stack {
   public readonly userPool: cognito.UserPool;
@@ -23,6 +24,7 @@ export class WorkflowBuilderStack extends cdk.Stack {
   private _cognitoAuthorizer?: apigateway.CognitoUserPoolsAuthorizer;
   private readonly config: StackConfig;
   private workflowsTable: dynamodb.Table;
+  public readonly frontendHosting: FrontendHosting;
 
   constructor(scope: Construct, id: string, props?: cdk.StackProps) {
     super(scope, id, props);
@@ -52,6 +54,11 @@ export class WorkflowBuilderStack extends cdk.Stack {
     
     // Create WebSocket API for real-time deployment updates
     this.createWebSocketApi();
+    
+    // Create Frontend Hosting (S3 + CloudFront)
+    this.frontendHosting = new FrontendHosting(this, 'FrontendHosting', {
+      environment: this.config.environment,
+    });
     
     // Output important values
     this.createOutputs();

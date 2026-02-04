@@ -284,3 +284,6 @@ local-config.json
 # Debug files
 debug.log
 error.log
+
+# CDK outputs
+cdk-outputs.json

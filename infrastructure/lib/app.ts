@@ -2,19 +2,20 @@
 import 'source-map-support/register';
 import * as cdk from 'aws-cdk-lib';
 import { WorkflowBuilderStack } from './workflow-builder-stack';
+import { PROJECT } from './config';
 
 const app = new cdk.App();
 
 // Create the main infrastructure stack
-new WorkflowBuilderStack(app, 'WorkflowBuilderStack', {
+new WorkflowBuilderStack(app, PROJECT.stack.name, {
   env: {
     account: process.env.CDK_DEFAULT_ACCOUNT,
     region: process.env.CDK_DEFAULT_REGION || 'us-west-2',
   },
   synthesizer: new cdk.CliCredentialsStackSynthesizer(),
-  description: 'AWS Step Functions Workflow Builder Infrastructure',
+  description: PROJECT.stack.description,
   tags: {
-    Project: 'WorkflowBuilder',
+    Project: PROJECT.stack.tags.Project,
     Environment: process.env.NODE_ENV || 'development',
   },
 });

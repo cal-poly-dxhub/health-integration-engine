@@ -4,7 +4,7 @@ import * as s3deploy from 'aws-cdk-lib/aws-s3-deployment';
 import * as cloudfront from 'aws-cdk-lib/aws-cloudfront';
 import * as origins from 'aws-cdk-lib/aws-cloudfront-origins';
 import { Construct } from 'constructs';
-import { getConfig, StackConfig } from './config';
+import { getConfig, StackConfig, PROJECT } from './config';
 import * as path from 'path';
 
 export class FrontendStack extends cdk.Stack {
@@ -34,7 +34,7 @@ export class FrontendStack extends cdk.Stack {
 
   private createS3Bucket(): s3.Bucket {
     const bucket = new s3.Bucket(this, 'FrontendBucket', {
-      bucketName: `workflow-builder-frontend-${this.config.environment}-${this.account}`,
+      bucketName: `${PROJECT.s3.frontendBucket}-${this.config.environment}-${this.account}`,
       // No website configuration needed - CloudFront will serve the files
       publicReadAccess: false, // Private bucket - CloudFront will access via OAI
       blockPublicAccess: s3.BlockPublicAccess.BLOCK_ALL, // Block all public access
@@ -52,14 +52,14 @@ export class FrontendStack extends cdk.Stack {
   private createCloudFrontDistribution(): cloudfront.Distribution {
     // Create Origin Access Identity for secure S3 access
     const originAccessIdentity = new cloudfront.OriginAccessIdentity(this, 'OAI', {
-      comment: `OAI for workflow-builder-frontend-${this.config.environment}`,
+      comment: `OAI for ${PROJECT.s3.frontendBucket}-${this.config.environment}`,
     });
 
     // Grant CloudFront access to S3 bucket
     this.bucket.grantRead(originAccessIdentity);
 
     const distribution = new cloudfront.Distribution(this, 'FrontendDistribution', {
-      comment: `CloudFront distribution for workflow-builder-frontend-${this.config.environment}`,
+      comment: `CloudFront distribution for ${PROJECT.s3.frontendBucket}-${this.config.environment}`,
       defaultBehavior: {
         origin: new origins.S3Origin(this.bucket, {
           originAccessIdentity,

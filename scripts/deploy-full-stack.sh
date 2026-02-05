@@ -1,20 +1,24 @@
 #!/bin/bash
 set -e
 
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+ROOT_DIR="$(dirname "$SCRIPT_DIR")"
+cd "$ROOT_DIR"
+
 REGION="us-west-2"
 
 echo "=== Installing Dependencies ==="
 npm run install:all
 
 echo "=== Building Lambda Functions ==="
-cd lambda-functions/deployment-lambda && npm run build && cd ../..
-cd lambda-functions/websocket-lambda && npm install && npm run build && cd ../..
+cd "$ROOT_DIR/lambda-functions/deployment-lambda" && npm run build && cd "$ROOT_DIR"
+cd "$ROOT_DIR/lambda-functions/websocket-lambda" && npm install && npm run build && cd "$ROOT_DIR"
 
 echo "=== Installing Infrastructure Dependencies ==="
-cd infrastructure && npm install && cd ..
+cd "$ROOT_DIR/infrastructure" && npm install && cd "$ROOT_DIR"
 
 echo "=== Deploying CDK Infrastructure ==="
-cd infrastructure
+cd "$ROOT_DIR/infrastructure"
 cdk deploy --require-approval never --outputs-file cdk-outputs.json
 
 echo "=== Extracting CDK Outputs ==="
@@ -29,7 +33,7 @@ CLOUDFRONT_ID=$(jq -r '.WorkflowBuilderStack | to_entries[] | select(.key | star
 CLOUDFRONT_URL=$(jq -r '.WorkflowBuilderStack | to_entries[] | select(.key | startswith("FrontendHostingCloudFrontUrl")) | .value' cdk-outputs.json)
 
 echo "=== Updating Frontend .env ==="
-cd ../frontend
+cd "$ROOT_DIR/frontend"
 cat > .env << EOF
 VITE_AWS_REGION=$REGION
 VITE_API_BASE_URL=$API_URL

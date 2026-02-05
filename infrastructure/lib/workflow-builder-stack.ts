@@ -13,7 +13,7 @@ import * as targets from 'aws-cdk-lib/aws-events-targets';
 import * as s3 from 'aws-cdk-lib/aws-s3';
 import * as fs from 'fs';
 import { Construct } from 'constructs';
-import { getConfig, StackConfig } from './config';
+import { getConfig, StackConfig, PROJECT } from './config';
 import { FrontendHosting } from './constructs/frontend-hosting';
 
 export class WorkflowBuilderStack extends cdk.Stack {
@@ -168,8 +168,8 @@ export class WorkflowBuilderStack extends cdk.Stack {
 
   private createIdentityPool(): cognito.CfnIdentityPool {
     // Create Identity Pool using CFN construct
-    const identityPool = new cognito.CfnIdentityPool(this, 'WorkflowBuilderIdentityPool', {
-      identityPoolName: 'workflow-builder-identity-pool',
+    const identityPool = new cognito.CfnIdentityPool(this, `${PROJECT.projectNamePascal}IdentityPool`, {
+      identityPoolName: PROJECT.cognito.identityPoolName,
       allowUnauthenticatedIdentities: false,
       cognitoIdentityProviders: [
         {
@@ -228,8 +228,8 @@ export class WorkflowBuilderStack extends cdk.Stack {
                 'states:GetExecutionHistory',
               ],
               resources: [
-                `arn:aws:states:${this.region}:${this.account}:stateMachine:workflow-builder-*`,
-                `arn:aws:states:${this.region}:${this.account}:execution:workflow-builder-*:*`,
+                `arn:aws:states:${this.region}:${this.account}:stateMachine:${PROJECT.projectName}-*`,
+                `arn:aws:states:${this.region}:${this.account}:execution:${PROJECT.projectName}-*:*`,
               ],
             }),
           ],
@@ -268,13 +268,13 @@ export class WorkflowBuilderStack extends cdk.Stack {
   private createApiGateway(): apigateway.RestApi {
     // Create CloudWatch log group for API Gateway
     const apiLogGroup = new logs.LogGroup(this, 'ApiGatewayLogGroup', {
-      logGroupName: '/aws/apigateway/workflow-builder',
+      logGroupName: PROJECT.apiGateway.logGroupName,
       retention: logs.RetentionDays.ONE_WEEK,
       removalPolicy: cdk.RemovalPolicy.DESTROY,
     });
 
-    const api = new apigateway.RestApi(this, 'WorkflowBuilderApi', {
-      restApiName: 'workflow-builder-api',
+    const api = new apigateway.RestApi(this, `${PROJECT.projectNamePascal}Api`, {
+      restApiName: PROJECT.apiGateway.name,
       description: 'API for AWS Step Functions Workflow Builder',
       deployOptions: {
         stageName: 'v1',
@@ -341,7 +341,7 @@ export class WorkflowBuilderStack extends cdk.Stack {
   private createDeploymentEndpoints(): void {
     // Create DynamoDB tables for deployments
     const deploymentsTable = new dynamodb.Table(this, 'DeploymentsTable', {
-      tableName: 'WorkflowBuilder-Deployments',
+      tableName: PROJECT.dynamodb.deploymentsTable,
       partitionKey: { name: 'PK', type: dynamodb.AttributeType.STRING },
       sortKey: { name: 'SK', type: dynamodb.AttributeType.STRING },
       billingMode: dynamodb.BillingMode.PAY_PER_REQUEST,
@@ -359,7 +359,7 @@ export class WorkflowBuilderStack extends cdk.Stack {
 
     // Create workflows table if it doesn't exist
     this.workflowsTable = new dynamodb.Table(this, 'WorkflowsTable', {
-      tableName: 'WorkflowBuilder-Workflows',
+      tableName: PROJECT.dynamodb.workflowsTable,
       partitionKey: { name: 'PK', type: dynamodb.AttributeType.STRING },
       sortKey: { name: 'SK', type: dynamodb.AttributeType.STRING },
       billingMode: dynamodb.BillingMode.PAY_PER_REQUEST,
@@ -370,7 +370,7 @@ export class WorkflowBuilderStack extends cdk.Stack {
 
     // Create S3 bucket for Lambda code storage
     const lambdaCodeBucket = new s3.Bucket(this, 'LambdaCodeBucket', {
-      bucketName: `workflow-builder-lambda-code-${this.account}-${this.region}`,
+      bucketName: `${PROJECT.s3.lambdaCodeBucket}-${this.account}-${this.region}`,
       versioned: true,
       encryption: s3.BucketEncryption.S3_MANAGED,
       blockPublicAccess: s3.BlockPublicAccess.BLOCK_ALL,
@@ -389,7 +389,7 @@ export class WorkflowBuilderStack extends cdk.Stack {
     // Create deployment Lambda function
     const deploymentLambda = this.createLambdaFunction(
       'DeploymentLambda',
-      'workflow-builder-deployment',
+      PROJECT.lambda.deployment,
       '../lambda-functions/deployment-lambda/dist',
       'index.deployWorkflow',
       {
@@ -403,7 +403,7 @@ export class WorkflowBuilderStack extends cdk.Stack {
     // Create deployment status Lambda function
     const deploymentStatusLambda = this.createLambdaFunction(
       'DeploymentStatusLambda',
-      'workflow-builder-deployment-status',
+      PROJECT.lambda.deploymentStatus,
       '../lambda-functions/deployment-lambda/dist',
       'index.getDeploymentStatus',
       {
@@ -415,7 +415,7 @@ export class WorkflowBuilderStack extends cdk.Stack {
     // Create deployment status update Lambda function (for Step Functions)
     const deploymentStatusUpdateLambda = this.createLambdaFunction(
       'DeploymentStatusUpdateLambda',
-      'workflow-builder-deployment-status-update',
+      PROJECT.lambda.deploymentStatusUpdate,
       '../lambda-functions/deployment-lambda/dist',
       'index.updateDeploymentStatus',
       {
@@ -428,7 +428,7 @@ export class WorkflowBuilderStack extends cdk.Stack {
     // Create workflow status update Lambda function (for Step Functions)
     const workflowStatusUpdateLambda = this.createLambdaFunction(
       'WorkflowStatusUpdateLambda',
-      'workflow-builder-workflow-status-update',
+      PROJECT.lambda.workflowStatusUpdate,
       '../lambda-functions/deployment-lambda/dist',
       'index.updateWorkflowStatus',
       {
@@ -558,9 +558,9 @@ export class WorkflowBuilderStack extends cdk.Stack {
           'states:UntagResource',
         ],
         resources: [
-          `arn:aws:states:${this.region}:${this.account}:stateMachine:workflow-builder-deployment`,
+          `arn:aws:states:${this.region}:${this.account}:stateMachine:${PROJECT.stepFunctions.deploymentStateMachine}`,
           `arn:aws:states:${this.region}:${this.account}:stateMachine:SF-*`, // For new direct deployment
-          `arn:aws:states:${this.region}:${this.account}:execution:workflow-builder-deployment:*`,
+          `arn:aws:states:${this.region}:${this.account}:execution:${PROJECT.stepFunctions.deploymentStateMachine}:*`,
           `arn:aws:states:${this.region}:${this.account}:execution:SF-*:*`, // For new direct deployment
         ],
       })
@@ -622,7 +622,7 @@ export class WorkflowBuilderStack extends cdk.Stack {
     );
 
     // Add Step Functions ARN to deployment Lambda environment (construct ARN to avoid circular dependency)
-    deploymentLambda.addEnvironment('DEPLOYMENT_STATE_MACHINE_ARN', `arn:aws:states:${this.region}:${this.account}:stateMachine:workflow-builder-deployment`);
+    deploymentLambda.addEnvironment('DEPLOYMENT_STATE_MACHINE_ARN', `arn:aws:states:${this.region}:${this.account}:stateMachine:${PROJECT.stepFunctions.deploymentStateMachine}`);
 
     // Create Step Functions state machine for deployment orchestration
     const deploymentStateMachine = this.createDeploymentStateMachine(
@@ -638,7 +638,7 @@ export class WorkflowBuilderStack extends cdk.Stack {
     // Create Step Functions API Lambda functions for each endpoint
     const listExecutionsLambda = this.createLambdaFunction(
       'ListExecutionsLambda',
-      'workflow-builder-list-executions',
+      PROJECT.lambda.listExecutions,
       '../lambda-functions/deployment-lambda/dist',
       'index.listExecutions',
       {
@@ -648,7 +648,7 @@ export class WorkflowBuilderStack extends cdk.Stack {
 
     const describeExecutionLambda = this.createLambdaFunction(
       'DescribeExecutionLambda',
-      'workflow-builder-describe-execution',
+      PROJECT.lambda.describeExecution,
       '../lambda-functions/deployment-lambda/dist',
       'index.describeExecution',
       {
@@ -658,7 +658,7 @@ export class WorkflowBuilderStack extends cdk.Stack {
 
     const executionHistoryLambda = this.createLambdaFunction(
       'ExecutionHistoryLambda',
-      'workflow-builder-execution-history',
+      PROJECT.lambda.executionHistory,
       '../lambda-functions/deployment-lambda/dist',
       'index.getExecutionHistory',
       {
@@ -668,7 +668,7 @@ export class WorkflowBuilderStack extends cdk.Stack {
 
     const startExecutionLambda = this.createLambdaFunction(
       'StartExecutionLambda',
-      'workflow-builder-start-execution',
+      PROJECT.lambda.startExecution,
       '../lambda-functions/deployment-lambda/dist',
       'index.startExecution',
       {
@@ -678,7 +678,7 @@ export class WorkflowBuilderStack extends cdk.Stack {
 
     const stopExecutionLambda = this.createLambdaFunction(
       'StopExecutionLambda',
-      'workflow-builder-stop-execution',
+      PROJECT.lambda.stopExecution,
       '../lambda-functions/deployment-lambda/dist',
       'index.stopExecution',
       {
@@ -688,7 +688,7 @@ export class WorkflowBuilderStack extends cdk.Stack {
 
     const describeStateMachineLambda = this.createLambdaFunction(
       'DescribeStateMachineLambda',
-      'workflow-builder-describe-state-machine',
+      PROJECT.lambda.describeStateMachine,
       '../lambda-functions/deployment-lambda/dist',
       'index.describeStateMachine',
       {
@@ -698,7 +698,7 @@ export class WorkflowBuilderStack extends cdk.Stack {
 
     const describeStateMachineForExecutionLambda = this.createLambdaFunction(
       'DescribeStateMachineForExecutionLambda',
-      'workflow-builder-describe-state-machine-for-execution',
+      PROJECT.lambda.describeStateMachineForExecution,
       '../lambda-functions/deployment-lambda/dist',
       'index.describeStateMachineForExecution',
       {
@@ -786,7 +786,7 @@ export class WorkflowBuilderStack extends cdk.Stack {
     // GET /workflows - List user's workflows
     const listWorkflowsLambda = this.createLambdaFunction(
       'ListWorkflowsLambda',
-      'workflow-builder-list-workflows',
+      PROJECT.lambda.listWorkflows,
       '../lambda-functions/deployment-lambda/dist',
       'index.listWorkflows',
       {
@@ -800,7 +800,7 @@ export class WorkflowBuilderStack extends cdk.Stack {
     // POST /workflows - Save/create workflow
     const saveWorkflowLambda = this.createLambdaFunction(
       'SaveWorkflowLambda',
-      'workflow-builder-save-workflow',
+      PROJECT.lambda.saveWorkflow,
       '../lambda-functions/deployment-lambda/dist',
       'index.saveWorkflow',
       {
@@ -817,7 +817,7 @@ export class WorkflowBuilderStack extends cdk.Stack {
     // Create workflow Lambda function
     const workflowLambda = this.createLambdaFunction(
       'WorkflowLambda',
-      'workflow-builder-workflow',
+      PROJECT.lambda.workflow,
       '../lambda-functions/deployment-lambda/dist',
       'index.getWorkflow',
       {
@@ -838,7 +838,7 @@ export class WorkflowBuilderStack extends cdk.Stack {
     // Create delete workflow Lambda function
     const deleteWorkflowLambda = this.createLambdaFunction(
       'DeleteWorkflowLambda',
-      'workflow-builder-delete-workflow',
+      PROJECT.lambda.deleteWorkflow,
       '../lambda-functions/deployment-lambda/dist',
       'index.deleteWorkflow',
       {
@@ -847,7 +847,7 @@ export class WorkflowBuilderStack extends cdk.Stack {
         AWS_ACCOUNT_ID: this.account,
         USER_POOL_ID: this.userPool.userPoolId,
         USER_POOL_CLIENT_ID: this.userPoolClient.userPoolClientId,
-        DELETION_STATE_MACHINE_ARN: `arn:aws:states:${this.region}:${this.account}:stateMachine:workflow-builder-deletion`,
+        DELETION_STATE_MACHINE_ARN: `arn:aws:states:${this.region}:${this.account}:stateMachine:${PROJECT.stepFunctions.deletionStateMachine}`,
       }
     );
 
@@ -920,8 +920,8 @@ export class WorkflowBuilderStack extends cdk.Stack {
           'states:ListExecutions',
         ],
         resources: [
-          `arn:aws:states:${this.region}:${this.account}:stateMachine:workflow-builder-deletion`,
-          `arn:aws:states:${this.region}:${this.account}:stateMachine:workflow-builder-deletion:*`,
+          `arn:aws:states:${this.region}:${this.account}:stateMachine:${PROJECT.stepFunctions.deletionStateMachine}`,
+          `arn:aws:states:${this.region}:${this.account}:stateMachine:${PROJECT.stepFunctions.deletionStateMachine}:*`,
         ],
       })
     );
@@ -938,7 +938,7 @@ export class WorkflowBuilderStack extends cdk.Stack {
     // Create deployment history Lambda function
     const deploymentHistoryLambda = this.createLambdaFunction(
       'DeploymentHistoryLambda',
-      'workflow-builder-deployment-history',
+      PROJECT.lambda.deploymentHistory,
       '../lambda-functions/deployment-lambda/dist',
       'getDeploymentHistory.handler',
       {
@@ -969,7 +969,7 @@ export class WorkflowBuilderStack extends cdk.Stack {
     if (!this._cognitoAuthorizer) {
       this._cognitoAuthorizer = new apigateway.CognitoUserPoolsAuthorizer(this, 'CognitoAuthorizer', {
         cognitoUserPools: [this.userPool],
-        authorizerName: 'workflow-builder-authorizer',
+        authorizerName: PROJECT.apiGateway.authorizerName,
         identitySource: 'method.request.header.Authorization',
       });
     }
@@ -1126,12 +1126,12 @@ export class WorkflowBuilderStack extends cdk.Stack {
 
     // Create the state machine
     const stateMachine = new stepfunctions.StateMachine(this, 'DeploymentStateMachine', {
-      stateMachineName: 'workflow-builder-deployment',
+      stateMachineName: PROJECT.stepFunctions.deploymentStateMachine,
       definitionBody: stepfunctions.DefinitionBody.fromString(processedDefinition),
       role: stepFunctionsRole,
       logs: {
         destination: new logs.LogGroup(this, 'DeploymentStateMachineLogGroup', {
-          logGroupName: '/aws/stepfunctions/workflow-builder-deployment',
+          logGroupName: PROJECT.stepFunctions.deploymentLogGroup,
           retention: logs.RetentionDays.ONE_WEEK,
           removalPolicy: cdk.RemovalPolicy.DESTROY,
         }),
@@ -1150,7 +1150,7 @@ export class WorkflowBuilderStack extends cdk.Stack {
     // Create separate Lambda functions for deletion steps (following deployment pattern)
     const deleteCloudFormationStackLambda = this.createLambdaFunction(
       'DeleteCloudFormationStackLambda',
-      'workflow-builder-delete-cloudformation-stack',
+      PROJECT.lambda.deleteCloudFormationStack,
       '../lambda-functions/deployment-lambda/dist',
       'handlers/deleteCloudFormationStack.handler',
       {
@@ -1162,7 +1162,7 @@ export class WorkflowBuilderStack extends cdk.Stack {
 
     const deleteDatabaseRecordsLambda = this.createLambdaFunction(
       'DeleteDatabaseRecordsLambda', 
-      'workflow-builder-delete-database-records',
+      PROJECT.lambda.deleteDatabaseRecords,
       '../lambda-functions/deployment-lambda/dist',
       'handlers/deleteDatabaseRecords.handler',
       {
@@ -1310,12 +1310,12 @@ export class WorkflowBuilderStack extends cdk.Stack {
 
     // Create the deletion state machine
     const deletionStateMachine = new stepfunctions.StateMachine(this, 'DeletionStateMachine', {
-      stateMachineName: 'workflow-builder-deletion',
+      stateMachineName: PROJECT.stepFunctions.deletionStateMachine,
       definitionBody: stepfunctions.DefinitionBody.fromString(processedDefinition),
       role: deletionStepFunctionsRole,
       logs: {
         destination: new logs.LogGroup(this, 'DeletionStateMachineLogGroup', {
-          logGroupName: '/aws/stepfunctions/workflow-builder-deletion',
+          logGroupName: PROJECT.stepFunctions.deletionLogGroup,
           retention: logs.RetentionDays.ONE_WEEK,
           removalPolicy: cdk.RemovalPolicy.DESTROY,
         }),
@@ -1450,14 +1450,14 @@ export class WorkflowBuilderStack extends cdk.Stack {
 
     // Create EventBridge rule to capture Step Functions state changes (following AWS sample pattern)
     const stepFunctionStateChangeRule = new events.Rule(this, 'StepFunctionStateChangeRule', {
-      ruleName: 'workflow-builder-stepfunction-state-changes',
+      ruleName: PROJECT.eventBridge.stepFunctionStateChanges,
       description: 'Capture Step Functions state changes for deployment progress tracking',
       eventPattern: {
         source: ['aws.states'],
         detailType: ['Step Functions Execution Status Change'],
         detail: {
           stateMachineArn: [{
-            prefix: `arn:aws:states:${this.region}:${this.account}:stateMachine:workflow-builder-deployment`
+            prefix: `arn:aws:states:${this.region}:${this.account}:stateMachine:${PROJECT.stepFunctions.deploymentStateMachine}`
           }]
         }
       },
@@ -1468,14 +1468,14 @@ export class WorkflowBuilderStack extends cdk.Stack {
 
     // Create EventBridge rule to capture Step Functions deletion state changes
     const stepFunctionDeletionStateChangeRule = new events.Rule(this, 'StepFunctionDeletionStateChangeRule', {
-      ruleName: 'workflow-builder-deletion-stepfunction-state-changes',
+      ruleName: PROJECT.eventBridge.deletionStateChanges,
       description: 'Capture Step Functions deletion state changes for deletion progress tracking',
       eventPattern: {
         source: ['aws.states'],
         detailType: ['Step Functions Execution Status Change'],
         detail: {
           stateMachineArn: [{
-            prefix: `arn:aws:states:${this.region}:${this.account}:stateMachine:workflow-builder-deletion`
+            prefix: `arn:aws:states:${this.region}:${this.account}:stateMachine:${PROJECT.stepFunctions.deletionStateMachine}`
           }]
         }
       },
@@ -1486,10 +1486,10 @@ export class WorkflowBuilderStack extends cdk.Stack {
 
     // Create EventBridge rule to capture custom workflow deployment events (from state machine)
     const workflowDeploymentEventRule = new events.Rule(this, 'WorkflowDeploymentEventRule', {
-      ruleName: 'workflow-builder-deployment-events',
+      ruleName: PROJECT.eventBridge.deploymentEvents,
       description: 'Capture custom workflow deployment events for real-time UI updates',
       eventPattern: {
-        source: ['workflow-builder.deployment'],
+        source: [`${PROJECT.projectName}.deployment`],
         detailType: ['Deployment Status Update'],
       },
     });
@@ -1499,10 +1499,10 @@ export class WorkflowBuilderStack extends cdk.Stack {
 
     // Create EventBridge rule to capture custom workflow deletion events (from state machine)
     const workflowDeletionEventRule = new events.Rule(this, 'WorkflowDeletionEventRule', {
-      ruleName: 'workflow-builder-deletion-events',
+      ruleName: PROJECT.eventBridge.deletionEvents,
       description: 'Capture custom workflow deletion events for real-time UI updates',
       eventPattern: {
-        source: ['workflow-builder.deletion'],
+        source: [`${PROJECT.projectName}.deletion`],
         detailType: ['Workflow Deletion Update'],
       },
     });
@@ -1541,7 +1541,7 @@ export class WorkflowBuilderStack extends cdk.Stack {
     new cdk.CfnOutput(this, 'WebSocketApiUrl', {
       value: webSocketStage.url,
       description: 'WebSocket API URL for deployment updates',
-      exportName: 'WorkflowBuilderWebSocketUrl',
+      exportName: `${PROJECT.projectNamePascal}WebSocketUrl`,
     });
   }
 
@@ -1549,37 +1549,37 @@ export class WorkflowBuilderStack extends cdk.Stack {
     new cdk.CfnOutput(this, 'UserPoolId', {
       value: this.userPool.userPoolId,
       description: 'Cognito User Pool ID',
-      exportName: 'WorkflowBuilderUserPoolId',
+      exportName: `${PROJECT.projectNamePascal}UserPoolId`,
     });
 
     new cdk.CfnOutput(this, 'UserPoolClientId', {
       value: this.userPoolClient.userPoolClientId,
       description: 'Cognito User Pool Client ID',
-      exportName: 'WorkflowBuilderUserPoolClientId',
+      exportName: `${PROJECT.projectNamePascal}UserPoolClientId`,
     });
 
     new cdk.CfnOutput(this, 'ApiGatewayUrl', {
       value: this.api.url,
       description: 'API Gateway URL',
-      exportName: 'WorkflowBuilderApiUrl',
+      exportName: `${PROJECT.projectNamePascal}ApiUrl`,
     });
 
     new cdk.CfnOutput(this, 'ApiGatewayId', {
       value: this.api.restApiId,
       description: 'API Gateway ID',
-      exportName: 'WorkflowBuilderApiId',
+      exportName: `${PROJECT.projectNamePascal}ApiId`,
     });
 
     new cdk.CfnOutput(this, 'IdentityPoolId', {
       value: this.identityPool.ref,
       description: 'Cognito Identity Pool ID',
-      exportName: 'WorkflowBuilderIdentityPoolId',
+      exportName: `${PROJECT.projectNamePascal}IdentityPoolId`,
     });
 
     new cdk.CfnOutput(this, 'CognitoDomain', {
       value: `${this.config.cognito.domainPrefix}.auth.${this.region}.amazoncognito.com`,
       description: 'Cognito Hosted UI Domain',
-      exportName: 'WorkflowBuilderCognitoDomain',
+      exportName: `${PROJECT.projectNamePascal}CognitoDomain`,
     });
   }
 
@@ -1598,11 +1598,57 @@ export class WorkflowBuilderStack extends cdk.Stack {
       removalPolicy: cdk.RemovalPolicy.DESTROY,
     });
 
+    // Check if this is a TypeScript Lambda (deployment-lambda)
+    const isDeploymentLambda = codePath.includes('deployment-lambda');
+    
+    let code: lambda.Code;
+    
+    if (isDeploymentLambda) {
+      // Use fromAsset with bundling to run build script before deployment
+      // This ensures all dependencies (including hoisted ones like zod) are included
+      const lambdaPath = codePath.replace('/dist', '');
+      code = lambda.Code.fromAsset(lambdaPath, {
+        bundling: {
+          image: lambda.Runtime.NODEJS_18_X.bundlingImage,
+          local: {
+            tryBundle(outputDir: string): boolean {
+              // Run the build script locally
+              const execSync = require('child_process').execSync;
+              try {
+                execSync('./build.sh', { 
+                  cwd: lambdaPath,
+                  stdio: 'inherit'
+                });
+                // Copy dist contents to output
+                execSync(`cp -R dist/* "${outputDir}/"`, {
+                  cwd: lambdaPath,
+                  stdio: 'inherit'
+                });
+                return true;
+              } catch (e) {
+                console.error('Local bundling failed:', e);
+                return false;
+              }
+            }
+          },
+          command: [
+            'bash', '-c', [
+              'npm ci',
+              './build.sh',
+              'cp -R dist/* /asset-output/'
+            ].join(' && ')
+          ],
+        },
+      });
+    } else {
+      code = lambda.Code.fromAsset(codePath);
+    }
+
     const lambdaFunction = new lambda.Function(this, id, {
       functionName,
       runtime: lambda.Runtime.NODEJS_18_X,
       handler,
-      code: lambda.Code.fromAsset(codePath),
+      code,
       timeout: cdk.Duration.minutes(5),
       memorySize: 256,
       environment: {

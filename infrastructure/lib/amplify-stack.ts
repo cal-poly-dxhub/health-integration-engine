@@ -3,7 +3,7 @@ import * as amplify from 'aws-cdk-lib/aws-amplify';
 import * as s3 from 'aws-cdk-lib/aws-s3';
 import * as s3deploy from 'aws-cdk-lib/aws-s3-deployment';
 import { Construct } from 'constructs';
-import { getConfig, StackConfig } from './config';
+import { getConfig, StackConfig, PROJECT } from './config';
 import * as path from 'path';
 
 export class AmplifyStack extends cdk.Stack {
@@ -33,7 +33,7 @@ export class AmplifyStack extends cdk.Stack {
 
   private createSourceBucket(): s3.Bucket {
     const bucket = new s3.Bucket(this, 'AmplifySourceBucket', {
-      bucketName: `workflow-builder-amplify-source-${this.config.environment}-${this.account}`,
+      bucketName: `${PROJECT.s3.amplifySourceBucket}-${this.config.environment}-${this.account}`,
       publicReadAccess: false,
       blockPublicAccess: s3.BlockPublicAccess.BLOCK_ALL,
       removalPolicy: this.config.environment === 'production' 
@@ -66,8 +66,8 @@ export class AmplifyStack extends cdk.Stack {
   }
 
   private createAmplifyApp(): amplify.CfnApp {
-    const app = new amplify.CfnApp(this, 'WorkflowBuilderAmplifyApp', {
-      name: `workflow-builder-${this.config.environment}`,
+    const app = new amplify.CfnApp(this, `${PROJECT.projectNamePascal}AmplifyApp`, {
+      name: `${PROJECT.amplify.appName}-${this.config.environment}`,
       description: `AWS Step Functions Workflow Builder - ${this.config.environment}`,
       
       // Build settings for React/Vite app

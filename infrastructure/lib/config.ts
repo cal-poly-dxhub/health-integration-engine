@@ -1,3 +1,14 @@
+import * as fs from 'fs';
+import * as path from 'path';
+import * as yaml from 'yaml';
+
+// Load project configuration from config.yaml
+const configPath = path.join(__dirname, '..', 'config.yaml');
+const configFile = fs.readFileSync(configPath, 'utf8');
+const projectConfig = yaml.parse(configFile);
+
+export const PROJECT = projectConfig;
+
 export interface StackConfig {
   environment: 'development' | 'staging' | 'production';
   region: string;
@@ -48,9 +59,9 @@ export const getConfig = (environment: string = 'development'): StackConfig => {
     account: process.env.CDK_DEFAULT_ACCOUNT,
     
     cognito: {
-      userPoolName: 'workflow-builder-user-pool',
-      userPoolClientName: 'workflow-builder-client',
-      domainPrefix: `workflow-builder-${environment}-${process.env.CDK_DEFAULT_ACCOUNT?.slice(-4) || 'dev'}`,
+      userPoolName: PROJECT.cognito.userPoolName,
+      userPoolClientName: PROJECT.cognito.userPoolClientName,
+      domainPrefix: `${PROJECT.cognito.domainPrefix}-${environment}-${process.env.CDK_DEFAULT_ACCOUNT?.slice(-4) || 'dev'}`,
       callbackUrls: ['http://localhost:3000'],
       logoutUrls: ['http://localhost:3000'],
       passwordPolicy: {
@@ -63,14 +74,14 @@ export const getConfig = (environment: string = 'development'): StackConfig => {
     },
     
     apiGateway: {
-      name: 'workflow-builder-api',
-      stageName: 'v1',
+      name: PROJECT.apiGateway.name,
+      stageName: PROJECT.apiGateway.stageName,
       throttling: {
         rateLimit: 1000,
         burstLimit: 2000,
       },
       cors: {
-        allowOrigins: ['*'], // Restrict in production
+        allowOrigins: ['*'],
         allowMethods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
         allowHeaders: [
           'Content-Type',
@@ -84,39 +95,31 @@ export const getConfig = (environment: string = 'development'): StackConfig => {
     },
     
     cloudWatch: {
-      logRetentionDays: 7, // 1 week for development
+      logRetentionDays: 7,
       enableDetailedMonitoring: true,
     },
   };
 
-  // Environment-specific overrides
   switch (environment) {
     case 'production':
       return {
         ...baseConfig,
         cognito: {
           ...baseConfig.cognito,
-          domainPrefix: `workflow-builder-prod-${Date.now().toString().slice(-6)}`,
-          callbackUrls: [
-            // Production URLs will be added when domain is available
-            'https://your-production-domain.com',
-          ],
-          logoutUrls: [
-            'https://your-production-domain.com',
-          ],
+          domainPrefix: `${PROJECT.cognito.domainPrefix}-prod-${Date.now().toString().slice(-6)}`,
+          callbackUrls: ['https://your-production-domain.com'],
+          logoutUrls: ['https://your-production-domain.com'],
         },
         apiGateway: {
           ...baseConfig.apiGateway,
           cors: {
             ...baseConfig.apiGateway.cors,
-            allowOrigins: [
-              'https://your-production-domain.com',
-            ],
+            allowOrigins: ['https://your-production-domain.com'],
           },
         },
         cloudWatch: {
           ...baseConfig.cloudWatch,
-          logRetentionDays: 30, // 1 month for production
+          logRetentionDays: 30,
         },
       };
       
@@ -125,26 +128,20 @@ export const getConfig = (environment: string = 'development'): StackConfig => {
         ...baseConfig,
         cognito: {
           ...baseConfig.cognito,
-          domainPrefix: `workflow-builder-staging-${process.env.CDK_DEFAULT_ACCOUNT?.slice(-4) || 'stg'}`,
-          callbackUrls: [
-            'https://your-staging-domain.com',
-          ],
-          logoutUrls: [
-            'https://your-staging-domain.com',
-          ],
+          domainPrefix: `${PROJECT.cognito.domainPrefix}-staging-${process.env.CDK_DEFAULT_ACCOUNT?.slice(-4) || 'stg'}`,
+          callbackUrls: ['https://your-staging-domain.com'],
+          logoutUrls: ['https://your-staging-domain.com'],
         },
         apiGateway: {
           ...baseConfig.apiGateway,
           cors: {
             ...baseConfig.apiGateway.cors,
-            allowOrigins: [
-              'https://your-staging-domain.com',
-            ],
+            allowOrigins: ['https://your-staging-domain.com'],
           },
         },
         cloudWatch: {
           ...baseConfig.cloudWatch,
-          logRetentionDays: 14, // 2 weeks for staging
+          logRetentionDays: 14,
         },
       };
       

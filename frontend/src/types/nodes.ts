@@ -7,6 +7,8 @@ export interface S3NodeConfig {
   bucketName: string;
   objectKey?: string;
   prefix?: string;
+  folderPrefix?: string;  // Folder to watch for new files (used with triggerOnUpload)
+  triggerOnUpload?: boolean;  // Auto-trigger workflow when file is uploaded
   region?: string;
   encryption?: {
     enabled: boolean;

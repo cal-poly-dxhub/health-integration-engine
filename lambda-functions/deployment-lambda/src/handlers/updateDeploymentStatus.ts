@@ -1,6 +1,7 @@
 import { DynamoDBClient } from '@aws-sdk/client-dynamodb';
 import { DynamoDBDocumentClient, UpdateCommand, ScanCommand, GetCommand } from '@aws-sdk/lib-dynamodb';
-import { CloudFormationClient, DescribeStacksCommand } from '@aws-sdk/client-cloudformation';
+import { CloudFormationClient, DescribeStacksCommand, GetTemplateCommand } from '@aws-sdk/client-cloudformation';
+import { S3EventBridgeService } from '../services/s3EventBridgeService';
 
 const dynamoClient = new DynamoDBClient({ region: process.env.AWS_REGION });
 const docClient = DynamoDBDocumentClient.from(dynamoClient);
@@ -124,6 +125,9 @@ export const handler = async (event: any): Promise<any> => {
 
         console.log('✅ Workflow status updated successfully');
         console.log('🎯 WORKFLOW UPDATE COMPLETE - UI should now show deployed status');
+        
+        // Enable S3 EventBridge notifications if the stack has an S3 trigger
+        await enableS3EventBridgeIfNeeded(stackName);
         
         return {
           statusCode: 200,
@@ -359,4 +363,40 @@ async function getCloudFormationStackOutputs(stackName: string): Promise<Record<
   });
 
   return outputs;
+}
+
+/**
+ * Enable S3 EventBridge notifications if the deployed stack has an S3 trigger
+ */
+async function enableS3EventBridgeIfNeeded(stackName: string): Promise<void> {
+  try {
+    console.log('🔔 Checking if stack has S3 EventBridge trigger...');
+    
+    const templateResponse = await cfnClient.send(new GetTemplateCommand({
+      StackName: stackName,
+    }));
+    
+    if (!templateResponse.TemplateBody) return;
+    
+    const template = JSON.parse(templateResponse.TemplateBody);
+    
+    if (!template.Resources?.S3TriggerEventRule) {
+      console.log('ℹ️ No S3 trigger configured, skipping EventBridge setup');
+      return;
+    }
+    
+    const bucketName = template.Resources.S3TriggerEventRule.Properties?.EventPattern?.detail?.bucket?.name?.[0];
+    if (!bucketName) {
+      console.log('⚠️ S3 trigger found but no bucket name specified');
+      return;
+    }
+    
+    console.log(`🔔 Enabling EventBridge notifications on bucket: ${bucketName}`);
+    const s3EventBridgeService = new S3EventBridgeService();
+    await s3EventBridgeService.enableEventBridgeNotifications(bucketName);
+    console.log(`✅ EventBridge notifications enabled on bucket: ${bucketName}`);
+  } catch (error) {
+    console.error('⚠️ Failed to enable S3 EventBridge notifications (non-fatal):', error);
+    // Non-fatal: the deployment itself succeeded, this is a post-deployment enhancement
+  }
 }

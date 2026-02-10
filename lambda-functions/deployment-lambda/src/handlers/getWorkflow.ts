@@ -139,17 +139,22 @@ async function refreshWorkflowDeploymentStatus(workflow: any, userId: string): P
     let actualStatus = workflow.deploymentStatus;
     let isDeployed = workflow.isDeployed;
 
-    if (stepFunctionStatus === 'ACTIVE' && cloudFormationStatus === 'CREATE_COMPLETE') {
+    const stackIsComplete = cloudFormationStatus === 'CREATE_COMPLETE' || cloudFormationStatus === 'UPDATE_COMPLETE';
+    
+    if (stepFunctionStatus === 'ACTIVE' && stackIsComplete) {
       actualStatus = 'deployed';
       isDeployed = true;
     } else if (stepFunctionStatus === 'DELETING' || cloudFormationStatus === 'DELETE_IN_PROGRESS') {
       actualStatus = 'deleting';
       isDeployed = false;
-    } else if (stepFunctionStatus === null || cloudFormationStatus === 'DELETE_COMPLETE') {
+    } else if (stepFunctionStatus === null && (cloudFormationStatus === 'DELETE_COMPLETE' || cloudFormationStatus === null)) {
       actualStatus = 'draft';
       isDeployed = false;
-    } else if (cloudFormationStatus === 'CREATE_FAILED' || cloudFormationStatus === 'UPDATE_FAILED') {
+    } else if (cloudFormationStatus === 'CREATE_FAILED' || cloudFormationStatus === 'UPDATE_FAILED' || cloudFormationStatus === 'ROLLBACK_COMPLETE') {
       actualStatus = 'failed';
+      isDeployed = false;
+    } else if (cloudFormationStatus === 'CREATE_IN_PROGRESS' || cloudFormationStatus === 'UPDATE_IN_PROGRESS') {
+      actualStatus = 'deploying';
       isDeployed = false;
     }
 

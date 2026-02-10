@@ -29,8 +29,8 @@ const NodeConfigModal: React.FC<NodeConfigModalProps> = ({
           setConfig({
             bucketName: (node.config as any)?.bucketName || '',
             operation: (node.config as any)?.operation || 'read',
-            objectKey: (node.config as any)?.objectKey || '',
-            prefix: (node.config as any)?.prefix || '',
+            folderPrefix: (node.config as any)?.folderPrefix || '',
+            triggerOnUpload: (node.config as any)?.triggerOnUpload ?? true,
           });
           break;
         case 'database':
@@ -66,9 +66,6 @@ const NodeConfigModal: React.FC<NodeConfigModalProps> = ({
     switch (node.type) {
       case 's3':
         if (!config.bucketName) newErrors.bucketName = 'Bucket name is required';
-        if (!config.objectKey && !config.prefix) {
-          newErrors.objectKey = 'Either object key or prefix is required';
-        }
         break;
       case 'database':
         if (!config.host) newErrors.host = 'Host is required';
@@ -116,6 +113,7 @@ const NodeConfigModal: React.FC<NodeConfigModalProps> = ({
           className={errors.bucketName ? 'error' : ''}
         />
         {errors.bucketName && <span className="error-text">{errors.bucketName}</span>}
+        <small className="help-text">Bucket names must be lowercase, contain only letters, numbers, dots, and hyphens</small>
       </div>
 
       <div className="form-group">
@@ -133,27 +131,26 @@ const NodeConfigModal: React.FC<NodeConfigModalProps> = ({
       </div>
 
       <div className="form-group">
-        <label htmlFor="objectKey">Object Key</label>
+        <label htmlFor="folderPrefix">Folder Path (Optional)</label>
         <input
-          id="objectKey"
+          id="folderPrefix"
           type="text"
-          value={config.objectKey || ''}
-          onChange={(e) => handleInputChange('objectKey', e.target.value)}
-          placeholder="path/to/file.json"
-          className={errors.objectKey ? 'error' : ''}
+          value={config.folderPrefix || ''}
+          onChange={(e) => handleInputChange('folderPrefix', e.target.value)}
+          placeholder="uploads/documents/"
         />
-        {errors.objectKey && <span className="error-text">{errors.objectKey}</span>}
+        <small className="help-text">Optional folder prefix to watch. Leave empty to watch entire bucket. Include trailing slash.</small>
       </div>
 
-      <div className="form-group">
-        <label htmlFor="prefix">Prefix (for list operations)</label>
-        <input
-          id="prefix"
-          type="text"
-          value={config.prefix || ''}
-          onChange={(e) => handleInputChange('prefix', e.target.value)}
-          placeholder="folder/"
-        />
+      <div className="trigger-info">
+        <h4>🔄 Auto-Trigger Enabled</h4>
+        <p>
+          This workflow will automatically execute whenever a new file is uploaded to the specified bucket
+          {config.folderPrefix ? ` in the "${config.folderPrefix}" folder` : ''}.
+        </p>
+        <p className="info-note">
+          <strong>Note:</strong> EventBridge notifications will be enabled on the S3 bucket during deployment.
+        </p>
       </div>
     </div>
   );

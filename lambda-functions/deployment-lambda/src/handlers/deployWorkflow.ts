@@ -341,6 +341,19 @@ function validateWorkflowForDeployment(workflow: Workflow): { isValid: boolean; 
     }
   }
 
+  // Check S3 trigger loop: output bucket must differ from input trigger bucket
+  const s3Nodes = workflow.nodes.filter(node => node.type === 's3');
+  const triggerNode = s3Nodes.find(n => n.config?.triggerOnUpload !== false && n.config?.operation === 'read');
+  if (triggerNode) {
+    const triggerBucket = triggerNode.config?.bucketName;
+    const writeNodes = s3Nodes.filter(n => n.config?.operation === 'write');
+    for (const w of writeNodes) {
+      if (w.config?.bucketName && w.config.bucketName === triggerBucket) {
+        errors.push(`S3 output node "${w.name}" cannot write to the same bucket ("${triggerBucket}") that triggers the workflow — this would cause an infinite loop`);
+      }
+    }
+  }
+
   return {
     isValid: errors.length === 0,
     errors,

@@ -451,10 +451,23 @@ export class WorkflowBuilderStack extends cdk.Stack {
         effect: iam.Effect.ALLOW,
         actions: [
           'cloudformation:DescribeStacks',
+          'cloudformation:GetTemplate',
         ],
         resources: [
           `arn:aws:cloudformation:${this.region}:${this.account}:stack/workflow-*/*`,
         ],
+      })
+    );
+
+    // Grant S3 notification permissions to status update Lambda (for enabling EventBridge on S3 buckets)
+    deploymentStatusUpdateLambda.addToRolePolicy(
+      new iam.PolicyStatement({
+        effect: iam.Effect.ALLOW,
+        actions: [
+          's3:GetBucketNotification',
+          's3:PutBucketNotification',
+        ],
+        resources: ['*'],
       })
     );
 
@@ -1097,7 +1110,14 @@ export class WorkflowBuilderStack extends cdk.Stack {
             // EventBridge permissions
             new iam.PolicyStatement({
               effect: iam.Effect.ALLOW,
-              actions: ['events:PutEvents'],
+              actions: [
+                'events:PutEvents',
+                'events:PutRule',
+                'events:DeleteRule',
+                'events:DescribeRule',
+                'events:PutTargets',
+                'events:RemoveTargets',
+              ],
               resources: ['*'],
             }),
             // CloudWatch Logs permissions

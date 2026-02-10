@@ -16,6 +16,7 @@ import {
 } from '@aws-sdk/client-cloudformation';
 import { DynamoDBClient } from '@aws-sdk/client-dynamodb';
 import { DynamoDBDocumentClient, UpdateCommand, GetCommand } from '@aws-sdk/lib-dynamodb';
+import { S3EventBridgeService } from './s3EventBridgeService';
 
 import { 
   DeploymentContext,
@@ -62,6 +63,7 @@ export class CloudFormationDeployer {
     
     const steps: DeploymentStep[] = [
       { id: 'template-validation', name: 'Validate CloudFormation Template', status: 'pending' },
+      { id: 's3-eventbridge-setup', name: 'Enable S3 EventBridge Notifications', status: 'pending' },
       { id: 'change-detection', name: 'Detect Changes and Stack Drift', status: 'pending' },
       { id: 'deployment-history', name: 'Record Deployment History', status: 'pending' },
       { id: 'stack-deployment', name: 'Deploy CloudFormation Stack', status: 'pending' },
@@ -89,33 +91,41 @@ export class CloudFormationDeployer {
         deploymentStatus
       );
 
-      // Step 2: Detect changes and stack drift
-      const changeAnalysis = await this.executeStep(
+      // Step 2: Enable S3 EventBridge notifications (if S3 trigger is configured)
+      await this.executeStep(
         steps[1],
+        () => this.enableS3EventBridgeIfNeeded(cloudFormationTemplate),
+        updateStatus,
+        deploymentStatus
+      );
+
+      // Step 3: Detect changes and stack drift
+      const changeAnalysis = await this.executeStep(
+        steps[2],
         () => this.detectChangesAndDrift(stackName, cloudFormationTemplate, deploymentContext),
         updateStatus,
         deploymentStatus
       );
 
-      // Step 3: Record deployment history
+      // Step 4: Record deployment history
       await this.executeStep(
-        steps[2],
+        steps[3],
         () => this.recordDeploymentHistory(deploymentContext, changeAnalysis),
         updateStatus,
         deploymentStatus
       );
 
-      // Step 4: Deploy stack with change-aware logic
+      // Step 5: Deploy stack with change-aware logic
       const stackArn = await this.executeStep(
-        steps[3],
+        steps[4],
         () => this.deployStackWithChangeDetection(stackName, cloudFormationTemplate, deploymentContext, changeAnalysis),
         updateStatus,
         deploymentStatus
       );
 
-      // Step 5: Verify resources
+      // Step 6: Verify resources
       const stackOutputs = await this.executeStep(
-        steps[4],
+        steps[5],
         () => this.verifyStack(stackName),
         updateStatus,
         deploymentStatus
@@ -323,6 +333,46 @@ export class CloudFormationDeployer {
     console.log('✅ CloudFormation: Template validation - skipped (will be validated during deployment)');
     // CloudFormation validates templates automatically during deployment
     // We could add client-side validation here if needed
+  }
+
+  /**
+   * Enable S3 EventBridge notifications if the template contains S3 trigger resources
+   */
+  private async enableS3EventBridgeIfNeeded(template: string): Promise<void> {
+    console.log('🔔 CloudFormation: Checking for S3 EventBridge trigger configuration...');
+    
+    try {
+      const templateObj = JSON.parse(template);
+      
+      // Check if template has S3TriggerEventRule resource
+      if (!templateObj.Resources?.S3TriggerEventRule) {
+        console.log('ℹ️ CloudFormation: No S3 trigger configured, skipping EventBridge setup');
+        return;
+      }
+
+      // Extract bucket name from the EventBridge rule's event pattern
+      const eventPattern = templateObj.Resources.S3TriggerEventRule.Properties?.EventPattern;
+      const bucketName = eventPattern?.detail?.bucket?.name?.[0];
+
+      if (!bucketName) {
+        console.log('⚠️ CloudFormation: S3 trigger found but no bucket name specified');
+        return;
+      }
+
+      console.log(`🔔 CloudFormation: Enabling EventBridge notifications on bucket: ${bucketName}`);
+      
+      const s3EventBridgeService = new S3EventBridgeService();
+      await s3EventBridgeService.enableEventBridgeNotifications(bucketName);
+      
+      console.log(`✅ CloudFormation: EventBridge notifications enabled on bucket: ${bucketName}`);
+    } catch (error) {
+      if (error instanceof SyntaxError) {
+        console.error('❌ CloudFormation: Failed to parse template as JSON');
+        throw error;
+      }
+      console.error('❌ CloudFormation: Failed to enable S3 EventBridge notifications:', error);
+      throw new Error(`Failed to enable S3 EventBridge notifications: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    }
   }
 
   /**

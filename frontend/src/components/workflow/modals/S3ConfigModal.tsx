@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { S3NodeConfig } from '../../../types/nodes';
-import './ConfigModal.css';
+import '../NodeConfigModal.css';
 
 interface S3ConfigModalProps {
   isOpen: boolean;
@@ -22,7 +22,9 @@ const S3ConfigModal: React.FC<S3ConfigModalProps> = ({
     bucketName: '',
     objectKey: '',
     operation: 'read',
-    region: 'us-east-1',
+    region: 'us-west-2',
+    triggerOnUpload: true,
+    folderPrefix: '',
     ...initialConfig,
   });
 
@@ -30,7 +32,7 @@ const S3ConfigModal: React.FC<S3ConfigModalProps> = ({
 
   useEffect(() => {
     if (initialConfig) {
-      setConfig({ ...initialConfig });
+      setConfig({ ...initialConfig, triggerOnUpload: initialConfig.triggerOnUpload ?? true });
     }
   }, [initialConfig]);
 
@@ -41,10 +43,6 @@ const S3ConfigModal: React.FC<S3ConfigModalProps> = ({
       newErrors.bucketName = 'Bucket name is required';
     } else if (!/^[a-z0-9.-]+$/.test(config.bucketName)) {
       newErrors.bucketName = 'Invalid bucket name format';
-    }
-
-    if (!config.objectKey?.trim()) {
-      newErrors.objectKey = 'Object key is required';
     }
 
     setErrors(newErrors);
@@ -58,10 +56,9 @@ const S3ConfigModal: React.FC<S3ConfigModalProps> = ({
     }
   };
 
-  const handleInputChange = (field: keyof S3NodeConfig, value: string) => {
+  const handleInputChange = (field: keyof S3NodeConfig, value: string | boolean) => {
     setConfig(prev => ({ ...prev, [field]: value }));
-    // Clear error when user starts typing
-    if (errors[field]) {
+    if (errors[field as string]) {
       setErrors(prev => ({ ...prev, [field]: '' }));
     }
   };
@@ -113,18 +110,17 @@ const S3ConfigModal: React.FC<S3ConfigModalProps> = ({
             </div>
 
             <div className="form-group">
-              <label htmlFor="objectKey">Object Key *</label>
+              <label htmlFor="folderPrefix">Folder Path (Optional)</label>
               <input
                 type="text"
-                id="objectKey"
-                value={config.objectKey}
-                onChange={(e) => handleInputChange('objectKey', e.target.value)}
-                className={`form-control ${errors.objectKey ? 'error' : ''}`}
-                placeholder="path/to/file.json"
+                id="folderPrefix"
+                value={config.folderPrefix || ''}
+                onChange={(e) => handleInputChange('folderPrefix', e.target.value)}
+                className="form-control"
+                placeholder="uploads/documents/"
               />
-              {errors.objectKey && <span className="error-text">{errors.objectKey}</span>}
               <small className="help-text">
-                The key (path) of the object in the S3 bucket
+                Optional folder prefix to watch. Leave empty to watch entire bucket. Include trailing slash.
               </small>
             </div>
 
@@ -148,13 +144,25 @@ const S3ConfigModal: React.FC<S3ConfigModalProps> = ({
             </div>
           </div>
 
+          <div className="config-section trigger-info">
+            <h4>🔄 Auto-Trigger Enabled</h4>
+            <p>
+              This workflow will automatically execute whenever a new file is uploaded to the specified bucket
+              {config.folderPrefix ? ` in the "${config.folderPrefix}" folder` : ''}.
+            </p>
+            <p className="info-note">
+              <strong>Note:</strong> EventBridge notifications will be enabled on the S3 bucket during deployment.
+            </p>
+          </div>
+
           <div className="config-preview">
             <h4>Configuration Preview</h4>
             <div className="preview-content">
               <p><strong>Operation:</strong> {config.operation}</p>
               <p><strong>Bucket:</strong> {config.bucketName || 'Not specified'}</p>
-              <p><strong>Object Key:</strong> {config.objectKey || 'Not specified'}</p>
+              <p><strong>Folder:</strong> {config.folderPrefix || '(entire bucket)'}</p>
               <p><strong>Region:</strong> {config.region}</p>
+              <p><strong>Trigger:</strong> Auto-execute on file upload</p>
             </div>
           </div>
         </div>

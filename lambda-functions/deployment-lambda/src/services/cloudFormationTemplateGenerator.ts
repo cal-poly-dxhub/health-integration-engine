@@ -5,6 +5,122 @@ import { IAMPermissionAnalyzer } from './iamPermissionAnalyzer';
 
 export class CloudFormationTemplateGenerator {
   /**
+   * Extract S3 trigger configuration from workflow nodes
+   */
+  private static getS3TriggerConfig(workflow: Workflow): { bucketName: string; folderPrefix?: string; region?: string } | null {
+    const s3Node = workflow.nodes.find(node => node.type === 's3' && node.config?.triggerOnUpload !== false);
+    if (!s3Node || !s3Node.config?.bucketName) return null;
+    
+    return {
+      bucketName: s3Node.config.bucketName,
+      folderPrefix: s3Node.config.folderPrefix,
+      region: s3Node.config.region || 'us-west-2',
+    };
+  }
+
+  /**
+   * Generate S3 EventBridge trigger resources
+   */
+  private static generateS3TriggerResources(workflow: Workflow): any {
+    const s3Config = this.getS3TriggerConfig(workflow);
+    if (!s3Config) return {};
+
+    const resources: any = {};
+    
+    // EventBridge Rule to capture S3 ObjectCreated events
+    resources.S3TriggerEventRule = {
+      Type: 'AWS::Events::Rule',
+      DependsOn: 'StepFunctionsStateMachine',
+      Properties: {
+        Name: { 'Fn::Sub': `S3Trigger-\${WorkflowId}` },
+        Description: { 'Fn::Sub': `Trigger Step Function when objects are created in S3 bucket ${s3Config.bucketName}` },
+        State: 'ENABLED',
+        EventPattern: {
+          source: ['aws.s3'],
+          'detail-type': ['Object Created'],
+          detail: {
+            bucket: {
+              name: [s3Config.bucketName],
+            },
+            ...(s3Config.folderPrefix && {
+              object: {
+                key: [{ prefix: s3Config.folderPrefix }],
+              },
+            }),
+          },
+        },
+        Targets: [
+          {
+            Id: 'StepFunctionTarget',
+            Arn: { Ref: 'StepFunctionsStateMachine' },
+            RoleArn: { 'Fn::GetAtt': ['EventBridgeInvokeRole', 'Arn'] },
+          },
+        ],
+      },
+    };
+
+    // IAM Role for EventBridge to invoke Step Functions
+    resources.EventBridgeInvokeRole = {
+      Type: 'AWS::IAM::Role',
+      Properties: {
+        RoleName: { 'Fn::Sub': `EventBridge-SF-Role-\${WorkflowId}` },
+        AssumeRolePolicyDocument: {
+          Version: '2012-10-17',
+          Statement: [
+            {
+              Effect: 'Allow',
+              Principal: {
+                Service: 'events.amazonaws.com',
+              },
+              Action: 'sts:AssumeRole',
+            },
+          ],
+        },
+        Policies: [
+          {
+            PolicyName: 'InvokeStepFunction',
+            PolicyDocument: {
+              Version: '2012-10-17',
+              Statement: [
+                {
+                  Effect: 'Allow',
+                  Action: 'states:StartExecution',
+                  Resource: { Ref: 'StepFunctionsStateMachine' },
+                },
+              ],
+            },
+          },
+        ],
+      },
+    };
+
+    return resources;
+  }
+
+  /**
+   * Generate S3 trigger outputs
+   */
+  private static generateS3TriggerOutputs(workflow: Workflow): any {
+    const s3Config = this.getS3TriggerConfig(workflow);
+    if (!s3Config) return {};
+
+    return {
+      S3TriggerBucket: {
+        Description: 'S3 bucket that triggers the workflow',
+        Value: s3Config.bucketName,
+      },
+      S3TriggerPrefix: {
+        Description: 'S3 prefix filter for trigger',
+        Value: s3Config.folderPrefix || '(entire bucket)',
+      },
+      EventBridgeRuleArn: {
+        Description: 'ARN of the EventBridge rule',
+        Value: { 'Fn::GetAtt': ['S3TriggerEventRule', 'Arn'] },
+      },
+    };
+  }
+
+  /**
    * Generate CloudFormation template for a workflow
    */
   static async generateTemplate(workflow: Workflow, deploymentContext: DeploymentContext, lambdaCodeUploads?: any[]): Promise<string> {
@@ -23,9 +139,15 @@ export class CloudFormationTemplateGenerator {
       environment: deploymentContext.environment,
     });
 
+    // Check for S3 trigger configuration
+    const s3TriggerConfig = this.getS3TriggerConfig(workflow);
+    if (s3TriggerConfig) {
+      console.log('🔔 CFT GENERATOR: S3 trigger detected:', s3TriggerConfig);
+    }
+
     const template = {
       AWSTemplateFormatVersion: '2010-09-09',
-      Description: `Step Functions workflow: ${workflow.name}`,
+      Description: `Step Functions workflow: ${workflow.name}${s3TriggerConfig ? ' (S3 event-triggered)' : ''}`,
       
       Parameters: {
         WorkflowId: {
@@ -130,8 +252,8 @@ export class CloudFormationTemplateGenerator {
           },
         },
 
-        // Note: Removed versioning and alias for now to simplify deployment
-        // Can be added back later once basic deployment is working
+        // S3 EventBridge trigger resources (if S3 trigger is configured)
+        ...this.generateS3TriggerResources(workflow),
       },
 
       Outputs: {
@@ -161,6 +283,8 @@ export class CloudFormationTemplateGenerator {
         },
         // Add Lambda function outputs
         ...this.generateLambdaOutputs(workflow),
+        // Add S3 trigger outputs (if configured)
+        ...this.generateS3TriggerOutputs(workflow),
       },
     };
 

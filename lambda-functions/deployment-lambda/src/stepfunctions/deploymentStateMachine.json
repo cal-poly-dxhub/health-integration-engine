@@ -309,6 +309,10 @@
             {
               "Variable": "$.stackStatus.Stacks[0].StackStatus",
               "StringEquals": "UPDATE_IN_PROGRESS"
+            },
+            {
+              "Variable": "$.stackStatus.Stacks[0].StackStatus",
+              "StringEquals": "UPDATE_COMPLETE_CLEANUP_IN_PROGRESS"
             }
           ],
           "Next": "WaitForStackCompletion"
@@ -317,7 +321,15 @@
           "Or": [
             {
               "Variable": "$.stackStatus.Stacks[0].StackStatus",
+              "StringEquals": "ROLLBACK_COMPLETE"
+            },
+            {
+              "Variable": "$.stackStatus.Stacks[0].StackStatus",
               "StringEquals": "ROLLBACK_FAILED"
+            },
+            {
+              "Variable": "$.stackStatus.Stacks[0].StackStatus",
+              "StringEquals": "ROLLBACK_IN_PROGRESS"
             },
             {
               "Variable": "$.stackStatus.Stacks[0].StackStatus",
@@ -326,12 +338,20 @@
             {
               "Variable": "$.stackStatus.Stacks[0].StackStatus",
               "StringEquals": "UPDATE_FAILED"
+            },
+            {
+              "Variable": "$.stackStatus.Stacks[0].StackStatus",
+              "StringEquals": "UPDATE_ROLLBACK_COMPLETE"
+            },
+            {
+              "Variable": "$.stackStatus.Stacks[0].StackStatus",
+              "StringEquals": "UPDATE_ROLLBACK_FAILED"
             }
           ],
           "Next": "HandleDeploymentFailure"
         }
       ],
-      "Default": "HandleDeploymentFailure"
+      "Default": "WaitForStackCompletion"
     },
     
     "PublishDeploymentSuccessEvent": {

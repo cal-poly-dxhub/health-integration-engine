@@ -287,3 +287,6 @@ error.log
 
 # CDK outputs
 cdk-outputs.json
+
+# Kiro
+.kiro/

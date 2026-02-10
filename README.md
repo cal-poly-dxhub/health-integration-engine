@@ -71,9 +71,31 @@ Currently supported workflow nodes:
 - **Start/End**: Workflow entry and exit points
 - **Lambda**: AWS Lambda function invocation
 - **Database**: DynamoDB and RDS Data API operations
-- **S3**: S3 operations (get, put, list, delete)
+- **S3**: S3 operations (get, put, list, delete) with event-driven triggers
 
 **Easy to add**: Wait, Choice, Parallel, SNS, SQS, and more!
+
+### S3 Event-Triggered Workflows
+
+Workflows can be automatically triggered when files are uploaded to an S3 bucket. The system uses EventBridge to detect `Object Created` events and start the Step Function execution.
+
+**How it works:**
+1. Add an S3 node (read operation) as the input — configure the bucket name and optional folder prefix
+2. Add an S3 node (write operation) as the output — configure a **different** output bucket
+3. Add Lambda nodes in between to process the file
+4. Deploy the workflow — EventBridge notifications are automatically enabled on the input bucket
+
+**Data flow through the workflow:**
+- The **Start** node preserves the original EventBridge event in `$.originalEvent`
+- The **S3 read** node fetches the uploaded file and stores its content in `$.s3Result.Body`
+- **Lambda** nodes receive the full state as `event.input` — access the file content at `event['input']['s3Result']['Body']`
+- The **S3 write** node writes the Lambda output (as JSON) to the output bucket with a `.json` extension
+
+**Important notes for Lambda functions:**
+- File content from the S3 trigger is at `event['input']['s3Result']['Body']`, not `event['Body']`
+- The original S3 event metadata (bucket, key, size) is at `event['input']['originalEvent']['detail']`
+- The output S3 bucket **must** be different from the input trigger bucket to prevent infinite loops
+- The output file name matches the input file name with a `.json` extension (e.g. `HL7Message.txt` → `HL7Message.json`)
 
 ## 🛠️ Prerequisites
 

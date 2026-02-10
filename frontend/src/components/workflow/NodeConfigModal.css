@@ -395,3 +395,34 @@
     justify-content: space-between;
   }
 }
+
+
+/* S3 Trigger Info Section */
+.trigger-info {
+  background: linear-gradient(135deg, #e0f2fe 0%, #dbeafe 100%);
+  border: 1px solid #7dd3fc;
+  border-radius: 8px;
+  padding: 1rem 1.25rem;
+  margin-top: 1rem;
+}
+
+.trigger-info h4 {
+  margin: 0 0 0.5rem 0;
+  color: #0369a1;
+  font-size: 1rem;
+}
+
+.trigger-info p {
+  margin: 0.5rem 0;
+  color: #0c4a6e;
+  font-size: 0.9rem;
+  line-height: 1.5;
+}
+
+.trigger-info .info-note {
+  font-size: 0.85rem;
+  color: #075985;
+  margin-top: 0.75rem;
+  padding-top: 0.75rem;
+  border-top: 1px solid #7dd3fc;
+}

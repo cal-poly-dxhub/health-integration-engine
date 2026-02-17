@@ -26,6 +26,13 @@ const WorkflowDetails: React.FC<WorkflowDetailsProps> = ({ workflow: propWorkflo
   const [selectedExecution, setSelectedExecution] = useState<StepFunctionExecution | null>(null);
   const [loading, setLoading] = useState(false);
   const [executionsLoading, setExecutionsLoading] = useState(false);
+  const [filters, setFilters] = useState({
+    name: '',
+    status: '',
+    startDate: '',
+    endDate: '',
+    error: ''
+  });
   // Polling disabled - removed auto-refresh functionality
   // const [pollingInterval, setPollingInterval] = useState<NodeJS.Timeout | null>(null);
   const [showDeleteModal, setShowDeleteModal] = useState(false);
@@ -118,7 +125,19 @@ const WorkflowDetails: React.FC<WorkflowDetailsProps> = ({ workflow: propWorkflo
     try {
       const executionsList = await stepFunctionsService.listExecutions(stateMachineArn, 100);
       console.log('✅ WorkflowDetails: Received', executionsList.length, 'executions');
-      setExecutions(executionsList);
+      
+      // Fetch error details for failed executions
+      const executionsWithErrors = await Promise.all(
+        executionsList.map(async (exec) => {
+          if (exec.status === 'FAILED' && !exec.error) {
+            const details = await stepFunctionsService.describeExecution(exec.executionArn);
+            return details ? { ...exec, error: details.error, cause: details.cause } : exec;
+          }
+          return exec;
+        })
+      );
+      
+      setExecutions(executionsWithErrors);
       
       // Auto-refresh disabled - no polling for running executions
       // const hasRunningExecutions = executionsList.some(exec => exec.status === 'RUNNING');
@@ -320,6 +339,18 @@ const WorkflowDetails: React.FC<WorkflowDetailsProps> = ({ workflow: propWorkflo
     }
   };
 
+  const filteredExecutions = executions.filter(exec => {
+    if (filters.name && !exec.name.toLowerCase().includes(filters.name.toLowerCase())) return false;
+    if (filters.status && exec.status !== filters.status) return false;
+    if (filters.startDate && new Date(exec.startDate).toISOString().split('T')[0] !== filters.startDate) return false;
+    if (filters.endDate && exec.stopDate && new Date(exec.stopDate).toISOString().split('T')[0] !== filters.endDate) return false;
+    if (filters.error && exec.status === 'FAILED') {
+      const errorText = `${exec.error || ''} ${exec.cause || ''}`.toLowerCase();
+      if (!errorText.includes(filters.error.toLowerCase())) return false;
+    }
+    return true;
+  });
+
   if (loading) {
     return (
       <div className="workflow-details-loading">
@@ -445,7 +476,7 @@ const WorkflowDetails: React.FC<WorkflowDetailsProps> = ({ workflow: propWorkflo
         {activeTab === 'executions' && (
           <div className="executions-tab">
             <div className="executions-header">
-              <h3>Executions ({executions.length})</h3>
+              <h3>Executions ({filteredExecutions.length}{filteredExecutions.length !== executions.length ? ` of ${executions.length}` : ''})</h3>
               {workflow?.stepFunctionArn && (
                 <button 
                   onClick={handleRefreshExecutions}
@@ -487,10 +518,62 @@ const WorkflowDetails: React.FC<WorkflowDetailsProps> = ({ workflow: propWorkflo
                       <th>Start Time</th>
                       <th>End Time</th>
                       <th>Duration</th>
+                      <th>Error</th>
+                    </tr>
+                    <tr className="filter-row">
+                      <th>
+                        <input
+                          type="text"
+                          placeholder="Filter name..."
+                          value={filters.name}
+                          onChange={(e) => setFilters(f => ({ ...f, name: e.target.value }))}
+                          className="filter-input"
+                        />
+                      </th>
+                      <th>
+                        <select
+                          value={filters.status}
+                          onChange={(e) => setFilters(f => ({ ...f, status: e.target.value }))}
+                          className="filter-select"
+                        >
+                          <option value="">All</option>
+                          <option value="RUNNING">Running</option>
+                          <option value="SUCCEEDED">Succeeded</option>
+                          <option value="FAILED">Failed</option>
+                          <option value="TIMED_OUT">Timed Out</option>
+                          <option value="ABORTED">Aborted</option>
+                        </select>
+                      </th>
+                      <th>
+                        <input
+                          type="date"
+                          value={filters.startDate}
+                          onChange={(e) => setFilters(f => ({ ...f, startDate: e.target.value }))}
+                          className="filter-input"
+                        />
+                      </th>
+                      <th>
+                        <input
+                          type="date"
+                          value={filters.endDate}
+                          onChange={(e) => setFilters(f => ({ ...f, endDate: e.target.value }))}
+                          className="filter-input"
+                        />
+                      </th>
+                      <th></th>
+                      <th>
+                        <input
+                          type="text"
+                          placeholder="Filter error..."
+                          value={filters.error}
+                          onChange={(e) => setFilters(f => ({ ...f, error: e.target.value }))}
+                          className="filter-input"
+                        />
+                      </th>
                     </tr>
                   </thead>
                   <tbody>
-                    {executions.map((execution, index) => {
+                    {filteredExecutions.map((execution, index) => {
                       // Debug logging for execution object
                       if (index === 0) {
                         console.log('🔍 First execution object:', execution);
@@ -532,6 +615,22 @@ const WorkflowDetails: React.FC<WorkflowDetailsProps> = ({ workflow: propWorkflo
                               ? formatDuration(execution.startDate, execution.stopDate)
                               : '-'
                             }
+                          </td>
+                          <td className="error-cell">
+                            {execution.status === 'FAILED' && (execution.error || execution.cause) ? (
+                              <div className="error-content" title={execution.cause || execution.error}>
+                                <span className="error-type">{execution.error || 'Error'}</span>
+                                {execution.cause && (
+                                  <span className="error-cause">
+                                    {execution.cause.length > 50 
+                                      ? `${execution.cause.substring(0, 50)}...` 
+                                      : execution.cause}
+                                  </span>
+                                )}
+                              </div>
+                            ) : execution.status === 'FAILED' ? (
+                              <span className="error-unknown">View details</span>
+                            ) : '-'}
                           </td>
                         </tr>
                       );

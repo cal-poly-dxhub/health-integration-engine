@@ -9,6 +9,8 @@ export interface StepFunctionExecution {
   stopDate?: string;
   input?: string;
   output?: string;
+  error?: string;
+  cause?: string;
   stateMachineArn?: string;
   inputDetails?: {
     included: boolean;

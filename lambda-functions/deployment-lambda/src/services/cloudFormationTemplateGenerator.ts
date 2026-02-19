@@ -478,10 +478,20 @@ export class CloudFormationTemplateGenerator {
         ];
       }
 
-      resources[lambdaRoleName] = {
-        Type: 'AWS::IAM::Role',
-        Properties: roleProperties,
-      };
+      // Check if user wants to use an existing IAM role
+      let lambdaRoleArn;
+      if (lambdaNode.config?.iamRole?.useExisting && lambdaNode.config?.iamRole?.existingRoleArn) {
+        // Use existing role ARN
+        lambdaRoleArn = lambdaNode.config.iamRole.existingRoleArn;
+        console.log(`🔧 CFT GENERATOR: Using existing IAM role for ${nodeName}: ${lambdaRoleArn}`);
+      } else {
+        // Create new role
+        resources[lambdaRoleName] = {
+          Type: 'AWS::IAM::Role',
+          Properties: roleProperties,
+        };
+        lambdaRoleArn = { 'Fn::GetAtt': [lambdaRoleName, 'Arn'] };
+      }
 
       // Lambda log group
       resources[lambdaLogGroupName] = {
@@ -509,9 +519,7 @@ export class CloudFormationTemplateGenerator {
           },
           Runtime: lambdaNode.config?.runtime || 'python3.12',
           Handler: lambdaNode.config?.handler || this.getDefaultHandler(lambdaNode.config?.runtime || 'python3.12'),
-          Role: {
-            'Fn::GetAtt': [lambdaRoleName, 'Arn'],
-          },
+          Role: lambdaRoleArn,
           Code: await this.generateLambdaCodeConfig(lambdaNode, deploymentContext, lambdaCodeUploads || []),
           Description: `Lambda function for workflow node: ${nodeName}`,
           Timeout: lambdaNode.config?.timeout || 30,

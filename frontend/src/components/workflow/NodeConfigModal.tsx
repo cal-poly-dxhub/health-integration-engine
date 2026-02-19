@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { WorkflowNode } from '../../types/workflow';
+import apiService from '../../services/api';
 import './NodeConfigModal.css';
 
 interface NodeConfigModalProps {
@@ -7,6 +8,12 @@ interface NodeConfigModalProps {
   isOpen: boolean;
   onClose: () => void;
   onSave: (nodeId: string, config: any) => void;
+}
+
+interface IAMRole {
+  arn: string;
+  name: string;
+  description: string;
 }
 
 const NodeConfigModal: React.FC<NodeConfigModalProps> = ({
@@ -20,6 +27,29 @@ const NodeConfigModal: React.FC<NodeConfigModalProps> = ({
   const [isCodeExpanded, setIsCodeExpanded] = useState(false);
   const [codeEditorHeight, setCodeEditorHeight] = useState(200);
   const [isFullScreenEditor, setIsFullScreenEditor] = useState(false);
+  const [iamRoles, setIamRoles] = useState<IAMRole[]>([]);
+  const [loadingRoles, setLoadingRoles] = useState(false);
+
+  // Fetch IAM roles when modal opens
+  useEffect(() => {
+    if (isOpen && (node.type === 'lambda' || node.type === 's3' || node.type === 'database')) {
+      fetchIAMRoles(node.type);
+    }
+  }, [isOpen, node.type]);
+
+  const fetchIAMRoles = async (serviceType: string) => {
+    setLoadingRoles(true);
+    try {
+      const response = await apiService.get(`/iam/roles?serviceType=${serviceType}`);
+      const roles = response.data?.roles || response.roles || [];
+      setIamRoles(roles);
+    } catch (error) {
+      console.error('Failed to fetch IAM roles:', error);
+      setIamRoles([]);
+    } finally {
+      setLoadingRoles(false);
+    }
+  };
 
   useEffect(() => {
     if (isOpen && node) {
@@ -31,6 +61,7 @@ const NodeConfigModal: React.FC<NodeConfigModalProps> = ({
             operation: (node.config as any)?.operation || 'read',
             folderPrefix: (node.config as any)?.folderPrefix || '',
             triggerOnUpload: (node.config as any)?.triggerOnUpload ?? true,
+            iamRole: (node.config as any)?.iamRole || { useExisting: false, existingRoleArn: '' },
           });
           break;
         case 'database':
@@ -42,6 +73,7 @@ const NodeConfigModal: React.FC<NodeConfigModalProps> = ({
             query: (node.config as any)?.query || '',
             username: (node.config as any)?.username || '',
             password: (node.config as any)?.password || '',
+            iamRole: (node.config as any)?.iamRole || { useExisting: false, existingRoleArn: '' },
           });
           break;
         case 'lambda':
@@ -51,6 +83,7 @@ const NodeConfigModal: React.FC<NodeConfigModalProps> = ({
             code: (node.config as any)?.code || '// Your Lambda function code here\nexports.handler = async (event) => {\n    // TODO: implement\n    return {\n        statusCode: 200,\n        body: JSON.stringify("Hello from Lambda!")\n    };\n};',
             timeout: (node.config as any)?.timeout || 30,
             memory: (node.config as any)?.memory || 128,
+            iamRole: (node.config as any)?.iamRole || { useExisting: false, existingRoleArn: '' },
           });
           break;
         default:
@@ -100,6 +133,61 @@ const NodeConfigModal: React.FC<NodeConfigModalProps> = ({
 
   if (!isOpen) return null;
 
+  // Reusable IAM Role selector component
+  const renderIAMRoleSelector = (serviceType: string, trustPolicyService: string) => (
+    <>
+      <div className="form-group" style={{ marginTop: '20px', paddingTop: '20px', borderTop: '1px solid #e0e0e0' }}>
+        <label style={{ display: 'flex', alignItems: 'center', cursor: 'pointer', width: 'fit-content' }}>
+          <input
+            type="checkbox"
+            checked={config.iamRole?.useExisting || false}
+            onChange={(e) => {
+              console.log('IAM checkbox changed:', e.target.checked, 'serviceType:', serviceType);
+              handleInputChange('iamRole', { 
+                useExisting: e.target.checked,
+                existingRoleArn: config.iamRole?.existingRoleArn || ''
+              });
+            }}
+            style={{ marginRight: '8px', width: 'auto' }}
+          />
+          Use Existing IAM Role
+        </label>
+      </div>
+
+      {config.iamRole?.useExisting && (
+        <div className="form-group">
+          <label htmlFor="existingRoleArn">
+            IAM Role {loadingRoles && <span style={{ color: '#666' }}>(Loading...)</span>}
+          </label>
+          <select
+            id="existingRoleArn"
+            value={config.iamRole?.existingRoleArn || ''}
+            onChange={(e) => handleInputChange('iamRole', {
+              useExisting: true,
+              existingRoleArn: e.target.value
+            })}
+            className={errors.existingRoleArn ? 'error' : ''}
+            disabled={loadingRoles}
+          >
+            <option value="">Select an IAM role...</option>
+            {iamRoles.length === 0 && !loadingRoles && (
+              <option value="" disabled>No roles found with {trustPolicyService} trust policy</option>
+            )}
+            {iamRoles.map((role) => (
+              <option key={role.arn} value={role.arn}>
+                {role.name} {role.description && `- ${role.description}`}
+              </option>
+            ))}
+          </select>
+          {errors.existingRoleArn && <span className="error-text">{errors.existingRoleArn}</span>}
+          <small style={{ display: 'block', marginTop: '4px', color: '#666', fontSize: '0.85em' }}>
+            Role must have trust policy for {trustPolicyService}. Found {iamRoles.length} role(s).
+          </small>
+        </div>
+      )}
+    </>
+  );
+
   const renderS3Config = () => (
     <div className="config-form">
       <div className="form-group">
@@ -141,6 +229,8 @@ const NodeConfigModal: React.FC<NodeConfigModalProps> = ({
         />
         <small className="help-text">Optional folder prefix to watch. Leave empty to watch entire bucket. Include trailing slash.</small>
       </div>
+
+      {renderIAMRoleSelector('s3', 'states.amazonaws.com')}
 
       <div className="trigger-info">
         <h4>🔄 Auto-Trigger Enabled</h4>
@@ -244,6 +334,8 @@ const NodeConfigModal: React.FC<NodeConfigModalProps> = ({
         />
         {errors.query && <span className="error-text">{errors.query}</span>}
       </div>
+
+      {renderIAMRoleSelector('database', 'states.amazonaws.com')}
     </div>
   );
 
@@ -438,6 +530,8 @@ const NodeConfigModal: React.FC<NodeConfigModalProps> = ({
         </div>
         {errors.code && <span className="error-text">{errors.code}</span>}
       </div>
+
+      {renderIAMRoleSelector('lambda', 'lambda.amazonaws.com')}
     </div>
   );
 

@@ -1,0 +1,15 @@
+{
+  "WorkflowBuilderStack": {
+    "WorkflowBuilderApiEndpointD8166690": "https://8cbnwf4d7l.execute-api.us-west-2.amazonaws.com/v1/",
+    "WebSocketApiUrl": "wss://0mc57xs5u4.execute-api.us-west-2.amazonaws.com/prod",
+    "UserPoolClientId": "6jncoeliv40gpv7ipchupdsn5i",
+    "ApiGatewayUrl": "https://8cbnwf4d7l.execute-api.us-west-2.amazonaws.com/v1/",
+    "UserPoolId": "us-west-2_m4mqRNfI3",
+    "ApiGatewayId": "8cbnwf4d7l",
+    "IdentityPoolId": "us-west-2:25c5f11d-142b-4c4a-a1b3-00a48586e73e",
+    "FrontendHostingFrontendBucketName5F8AA9EC": "workflow-builder-frontend-development-446748170241",
+    "FrontendHostingCloudFrontDistributionId39D3E489": "E1GG5USTLMKNPK",
+    "FrontendHostingCloudFrontUrlAA25A79A": "https://d1sbavgn49s9lc.cloudfront.net",
+    "CognitoDomain": "workflow-builder-development-0241.auth.us-west-2.amazoncognito.com"
+  }
+}

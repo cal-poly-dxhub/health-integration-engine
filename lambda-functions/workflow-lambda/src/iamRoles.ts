@@ -23,18 +23,18 @@ export const handler = async (
         if (!role.AssumeRolePolicyDocument) return false;
         
         // Skip AWS service roles and internal roles
-        const roleName = role.RoleName || '';
+        // const roleName = role.RoleName || '';
         
-        if (roleName.startsWith('AWS') || 
-            roleName.includes('BuilderStack') ||
-            roleName.includes('AWSServiceRole') ||
-            roleName.includes('OrganizationAccountAccessRole') ||
-            roleName.includes('StackSet') ||
-            roleName.includes('CloudFormation') ||
-            role.Path?.includes('/aws-service-role/') ||
-            role.Path?.includes('/service-role/')) {
-          return false;
-        }
+        // if (roleName.startsWith('AWS') || 
+        //     roleName.includes('BuilderStack') ||
+        //     roleName.includes('AWSServiceRole') ||
+        //     roleName.includes('OrganizationAccountAccessRole') ||
+        //     roleName.includes('StackSet') ||
+        //     roleName.includes('CloudFormation') ||
+        //     role.Path?.includes('/aws-service-role/') ||
+        //     role.Path?.includes('/service-role/')) {
+        //   return false;
+        // }
         
         const trustPolicy = JSON.parse(decodeURIComponent(role.AssumeRolePolicyDocument));
         

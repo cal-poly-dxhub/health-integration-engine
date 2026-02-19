@@ -796,6 +796,31 @@ export class WorkflowBuilderStack extends cdk.Stack {
 
     // Add workflow API endpoints
     
+    // GET /iam/roles - List IAM roles
+    const iamResource = this.api.root.addResource('iam');
+    const rolesResource = iamResource.addResource('roles');
+    
+    const iamRolesLambda = this.createLambdaFunction(
+      'IAMRolesLambda',
+      'iam-roles-handler',
+      '../lambda-functions/workflow-lambda/dist',
+      'iamRoles.handler',
+      {
+        AWS_ACCOUNT_ID: this.account,
+      }
+    );
+    
+    // Grant IAM list permissions
+    iamRolesLambda.addToRolePolicy(
+      new iam.PolicyStatement({
+        effect: iam.Effect.ALLOW,
+        actions: ['iam:ListRoles', 'iam:GetRole'],
+        resources: ['*'],
+      })
+    );
+    
+    this.addLambdaIntegration(rolesResource, 'GET', iamRolesLambda, true);
+    
     // GET /workflows - List user's workflows
     const listWorkflowsLambda = this.createLambdaFunction(
       'ListWorkflowsLambda',

@@ -16,6 +16,10 @@ export interface S3NodeConfig {
   };
   versioning?: boolean;
   metadata?: Record<string, string>;
+  iamRole?: {
+    useExisting: boolean;
+    existingRoleArn?: string; // ARN of existing IAM role for S3 access
+  };
 }
 
 // Database Node Configuration
@@ -39,6 +43,10 @@ export interface DatabaseNodeConfig {
     maxRetries: number;
     backoffMultiplier: number;
   };
+  iamRole?: {
+    useExisting: boolean;
+    existingRoleArn?: string; // ARN of existing IAM role for database access
+  };
 }
 
 // Lambda Function Configuration
@@ -54,6 +62,10 @@ export interface LambdaNodeConfig {
     s3Bucket?: string;
     s3Key?: string;
     s3ObjectVersion?: string;
+  };
+  iamRole?: {
+    useExisting: boolean;
+    existingRoleArn?: string; // ARN of existing IAM role
   };
   environment?: Record<string, string>;
   timeout?: number; // In seconds (1-900)

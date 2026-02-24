@@ -255,10 +255,38 @@
   border-bottom: 1px solid #e5e7eb;
   display: flex;
   flex-direction: column;
-  height: auto;
-  min-height: 180px;
-  max-height: 280px;
+  min-height: 150px;
   flex-shrink: 0;
+  overflow: hidden;
+}
+
+/* Resize Handle */
+.resize-handle {
+  height: 8px;
+  background: #e5e7eb;
+  cursor: ns-resize;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  transition: background 0.2s;
+}
+
+.resize-handle:hover,
+.resize-handle.resizing {
+  background: #d1d5db;
+}
+
+.resize-handle-bar {
+  width: 40px;
+  height: 4px;
+  background: #9ca3af;
+  border-radius: 2px;
+}
+
+.resize-handle:hover .resize-handle-bar,
+.resize-handle.resizing .resize-handle-bar {
+  background: #6b7280;
 }
 
 .execution-detail-tabs {
@@ -305,8 +333,7 @@
   flex: 1;
   overflow: auto;
   background: white;
-  min-height: 120px;
-  max-height: 230px;
+  min-height: 0;
 }
 
 /* Execution Info Grid */

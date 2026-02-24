@@ -803,6 +803,8 @@ const ExecutionDetails: React.FC<ExecutionDetailsProps> = ({ execution: propExec
   const [newExecutionInput, setNewExecutionInput] = useState('{}');
   const [isStartingExecution, setIsStartingExecution] = useState(false);
   const [isRedriving, setIsRedriving] = useState(false);
+  const [topPanelHeight, setTopPanelHeight] = useState(280);
+  const [isResizing, setIsResizing] = useState(false);
 
   // Debug logging for state changes
   useEffect(() => {
@@ -838,6 +840,29 @@ const ExecutionDetails: React.FC<ExecutionDetailsProps> = ({ execution: propExec
       }
     };
   }, [pollingInterval]);
+
+  // Handle resize drag
+  const handleResizeMouseDown = (e: React.MouseEvent) => {
+    e.preventDefault();
+    setIsResizing(true);
+    const startY = e.clientY;
+    const startHeight = topPanelHeight;
+
+    const handleMouseMove = (moveEvent: MouseEvent) => {
+      const delta = moveEvent.clientY - startY;
+      const newHeight = Math.min(Math.max(startHeight + delta, 150), window.innerHeight * 0.6);
+      setTopPanelHeight(newHeight);
+    };
+
+    const handleMouseUp = () => {
+      setIsResizing(false);
+      document.removeEventListener('mousemove', handleMouseMove);
+      document.removeEventListener('mouseup', handleMouseUp);
+    };
+
+    document.addEventListener('mousemove', handleMouseMove);
+    document.addEventListener('mouseup', handleMouseUp);
+  };
 
   // Removed unused getExecutionDuration function
   // Removed unused showToast function
@@ -1738,7 +1763,7 @@ const ExecutionDetails: React.FC<ExecutionDetailsProps> = ({ execution: propExec
       </div>
 
       {/* Top Panel - Execution Details Tabs */}
-      <div className="execution-top-panel">
+      <div className="execution-top-panel" style={{ height: topPanelHeight, maxHeight: topPanelHeight }}>
         <div className="execution-detail-tabs">
           <button
             className={`execution-tab ${activeViewTab === 'overview' ? 'active' : ''}`}
@@ -2060,6 +2085,14 @@ const ExecutionDetails: React.FC<ExecutionDetailsProps> = ({ execution: propExec
             </div>
           )}
         </div>
+      </div>
+
+      {/* Resize Handle */}
+      <div 
+        className={`resize-handle ${isResizing ? 'resizing' : ''}`}
+        onMouseDown={handleResizeMouseDown}
+      >
+        <div className="resize-handle-bar" />
       </div>
 
       {/* Main Content Area - Standardized Layout for All Tabs */}

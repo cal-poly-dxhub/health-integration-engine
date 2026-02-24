@@ -127,6 +127,20 @@ export class CloudFormationTemplateGenerator {
     console.log('📝 CFT GENERATOR: Starting template generation...');
     
     try {
+    // Validate IAM roles for S3 and database nodes
+    const { validateIAMRoleArn } = await import('./iamRoleValidator');
+    for (const node of workflow.nodes) {
+      if ((node.type === 's3' || node.type === 'database') && 
+          node.config?.iamRole?.useExisting && 
+          node.config?.iamRole?.existingRoleArn) {
+        const validation = await validateIAMRoleArn(node.config.iamRole.existingRoleArn, 'stepfunctions');
+        if (!validation.valid) {
+          throw new Error(`Invalid IAM role for ${node.type} node ${node.name}: ${validation.error}`);
+        }
+        console.log(`✓ Validated existing role for ${node.type} node ${node.name}`);
+      }
+    }
+    
     console.log('📋 CFT GENERATOR: Workflow details:', {
       name: workflow.name,
       id: workflow.id,
@@ -481,6 +495,14 @@ export class CloudFormationTemplateGenerator {
       // Check if user wants to use an existing IAM role
       let lambdaRoleArn;
       if (lambdaNode.config?.iamRole?.useExisting && lambdaNode.config?.iamRole?.existingRoleArn) {
+        // Validate the role ARN
+        const { validateIAMRoleArn } = await import('./iamRoleValidator');
+        const validation = await validateIAMRoleArn(lambdaNode.config.iamRole.existingRoleArn, 'lambda');
+        
+        if (!validation.valid) {
+          throw new Error(`Invalid IAM role for Lambda node ${nodeName}: ${validation.error}`);
+        }
+        
         // Use existing role ARN
         lambdaRoleArn = lambdaNode.config.iamRole.existingRoleArn;
         console.log(`🔧 CFT GENERATOR: Using existing IAM role for ${nodeName}: ${lambdaRoleArn}`);

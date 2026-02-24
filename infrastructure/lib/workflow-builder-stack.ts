@@ -814,7 +814,7 @@ export class WorkflowBuilderStack extends cdk.Stack {
     iamRolesLambda.addToRolePolicy(
       new iam.PolicyStatement({
         effect: iam.Effect.ALLOW,
-        actions: ['iam:ListRoles', 'iam:GetRole'],
+        actions: ['iam:ListRoles', 'tag:GetResources'],
         resources: ['*'],
       })
     );

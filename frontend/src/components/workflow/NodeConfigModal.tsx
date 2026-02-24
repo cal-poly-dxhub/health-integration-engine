@@ -61,7 +61,9 @@ const NodeConfigModal: React.FC<NodeConfigModalProps> = ({
             operation: (node.config as any)?.operation || 'read',
             folderPrefix: (node.config as any)?.folderPrefix || '',
             triggerOnUpload: (node.config as any)?.triggerOnUpload ?? true,
-            iamRole: (node.config as any)?.iamRole || { useExisting: false, existingRoleArn: '' },
+            iamRole: (node.config as any)?.iamRole?.useExisting && (node.config as any)?.iamRole?.existingRoleArn
+              ? (node.config as any).iamRole 
+              : { useExisting: false, existingRoleArn: '' },
           });
           break;
         case 'database':
@@ -73,7 +75,9 @@ const NodeConfigModal: React.FC<NodeConfigModalProps> = ({
             query: (node.config as any)?.query || '',
             username: (node.config as any)?.username || '',
             password: (node.config as any)?.password || '',
-            iamRole: (node.config as any)?.iamRole || { useExisting: false, existingRoleArn: '' },
+            iamRole: (node.config as any)?.iamRole?.useExisting && (node.config as any)?.iamRole?.existingRoleArn
+              ? (node.config as any).iamRole 
+              : { useExisting: false, existingRoleArn: '' },
           });
           break;
         case 'lambda':
@@ -83,7 +87,9 @@ const NodeConfigModal: React.FC<NodeConfigModalProps> = ({
             code: (node.config as any)?.code || '// Your Lambda function code here\nexports.handler = async (event) => {\n    // TODO: implement\n    return {\n        statusCode: 200,\n        body: JSON.stringify("Hello from Lambda!")\n    };\n};',
             timeout: (node.config as any)?.timeout || 30,
             memory: (node.config as any)?.memory || 128,
-            iamRole: (node.config as any)?.iamRole || { useExisting: false, existingRoleArn: '' },
+            iamRole: (node.config as any)?.iamRole?.useExisting && (node.config as any)?.iamRole?.existingRoleArn
+              ? (node.config as any).iamRole 
+              : { useExisting: false, existingRoleArn: '' },
           });
           break;
         default:
@@ -170,7 +176,10 @@ const NodeConfigModal: React.FC<NodeConfigModalProps> = ({
             disabled={loadingRoles}
           >
             <option value="">Select an IAM role...</option>
-            {iamRoles.length === 0 && !loadingRoles && (
+            {iamRoles.length === 0 && !loadingRoles && config.iamRole?.existingRoleArn && (
+              <option value={config.iamRole.existingRoleArn}>{config.iamRole.existingRoleArn}</option>
+            )}
+            {iamRoles.length === 0 && !loadingRoles && !config.iamRole?.existingRoleArn && (
               <option value="" disabled>No roles found with {trustPolicyService} trust policy</option>
             )}
             {iamRoles.map((role) => (

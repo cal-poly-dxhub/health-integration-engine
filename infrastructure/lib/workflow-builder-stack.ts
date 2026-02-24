@@ -719,6 +719,16 @@ export class WorkflowBuilderStack extends cdk.Stack {
       }
     );
 
+    const redriveExecutionLambda = this.createLambdaFunction(
+      'RedriveExecutionLambda',
+      PROJECT.lambda.redriveExecution,
+      '../lambda-functions/deployment-lambda/dist',
+      'index.redriveExecution',
+      {
+        AWS_ACCOUNT_ID: this.account,
+      }
+    );
+
     // Grant Step Functions permissions to all API Lambdas
     const stepFunctionsLambdas = [
       listExecutionsLambda,
@@ -727,7 +737,8 @@ export class WorkflowBuilderStack extends cdk.Stack {
       startExecutionLambda,
       stopExecutionLambda,
       describeStateMachineLambda,
-      describeStateMachineForExecutionLambda
+      describeStateMachineForExecutionLambda,
+      redriveExecutionLambda
     ];
 
     stepFunctionsLambdas.forEach(lambdaFunction => {
@@ -742,6 +753,7 @@ export class WorkflowBuilderStack extends cdk.Stack {
             'states:StopExecution',
             'states:DescribeStateMachine',
             'states:DescribeStateMachineForExecution',
+            'states:RedriveExecution',
           ],
           resources: [
             `arn:aws:states:${this.region}:${this.account}:stateMachine:*`,
@@ -793,6 +805,10 @@ export class WorkflowBuilderStack extends cdk.Stack {
     // POST /deployments/step-functions/describe-state-machine-for-execution
     const describeStateMachineForExecutionResource = stepFunctionsResource.addResource('describe-state-machine-for-execution');
     this.addLambdaIntegration(describeStateMachineForExecutionResource, 'POST', describeStateMachineForExecutionLambda, true);
+
+    // POST /deployments/step-functions/redrive-execution
+    const redriveExecutionResource = stepFunctionsResource.addResource('redrive-execution');
+    this.addLambdaIntegration(redriveExecutionResource, 'POST', redriveExecutionLambda, true);
 
     // Add workflow API endpoints
     

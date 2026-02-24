@@ -241,6 +241,20 @@ class StepFunctionsService {
       return null;
     }
   }
+
+  async redriveExecution(executionArn: string): Promise<{ redriveDate?: string } | null> {
+    console.log('🔄 StepFunctionsService: Redriving execution:', executionArn);
+    try {
+      const result = await apiService.post<{ redriveDate?: string }>('/deployments/step-functions/redrive-execution', {
+        executionArn
+      });
+      console.log('✅ StepFunctionsService: Redrive execution response:', result);
+      return result;
+    } catch (error) {
+      console.error('❌ StepFunctionsService: Error redriving execution:', error);
+      return null;
+    }
+  }
 }
 
 export const stepFunctionsService = new StepFunctionsService();

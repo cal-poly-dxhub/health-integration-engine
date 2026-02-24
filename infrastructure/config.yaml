@@ -68,6 +68,7 @@ lambda:
   stopExecution: "workflow-builder-stop-execution"
   describeStateMachine: "workflow-builder-describe-state-machine"
   describeStateMachineForExecution: "workflow-builder-describe-state-machine-for-execution"
+  redriveExecution: "workflow-builder-redrive-execution"
   
   # Workflow functions
   listWorkflows: "workflow-builder-list-workflows"

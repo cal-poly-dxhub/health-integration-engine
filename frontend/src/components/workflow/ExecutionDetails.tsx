@@ -799,6 +799,10 @@ const ExecutionDetails: React.FC<ExecutionDetailsProps> = ({ execution: propExec
   const [stateMachineDefinition, setStateMachineDefinition] = useState<any>(null);
   const [definitionLoading, setDefinitionLoading] = useState(false);
   const [definitionError, setDefinitionError] = useState<string | null>(null);
+  const [showNewExecutionModal, setShowNewExecutionModal] = useState(false);
+  const [newExecutionInput, setNewExecutionInput] = useState('{}');
+  const [isStartingExecution, setIsStartingExecution] = useState(false);
+  const [isRedriving, setIsRedriving] = useState(false);
 
   // Debug logging for state changes
   useEffect(() => {
@@ -825,6 +829,15 @@ const ExecutionDetails: React.FC<ExecutionDetailsProps> = ({ execution: propExec
       });
     }
   }, [execution, history.length, loading, error, stateMachineDefinition, definitionLoading, definitionError, activeViewTab]);
+
+  // Cleanup polling on unmount
+  useEffect(() => {
+    return () => {
+      if (pollingInterval) {
+        clearInterval(pollingInterval);
+      }
+    };
+  }, [pollingInterval]);
 
   // Removed unused getExecutionDuration function
   // Removed unused showToast function
@@ -1121,20 +1134,21 @@ const ExecutionDetails: React.FC<ExecutionDetailsProps> = ({ execution: propExec
 
   const getStepStatus = (stepName: string) => {
     const stepEvents = getStepEvents(stepName);
+    
+    // Get the latest terminal event for this step (by highest event ID)
+    const sortedEvents = [...stepEvents].sort((a, b) => b.id - a.id);
+    
+    // Find the most recent terminal state (succeeded or failed)
+    for (const event of sortedEvents) {
+      if (event.type.includes('Succeeded') || event.type.includes('Exited')) {
+        return 'succeeded';
+      }
+      if (event.type.includes('Failed') || event.type.includes('TimedOut') || event.type.includes('Aborted')) {
+        return 'failed';
+      }
+    }
 
-    // Check for failure first
-    const hasFailed = stepEvents.some(e =>
-      e.type.includes('Failed') || e.type.includes('TimedOut') || e.type.includes('Aborted')
-    );
-    if (hasFailed) return 'failed';
-
-    // Check for success
-    const hasSucceeded = stepEvents.some(e =>
-      e.type.includes('Succeeded') || e.type.includes('Exited')
-    );
-    if (hasSucceeded) return 'succeeded';
-
-    // Check if step has started
+    // Check if step has started (no terminal state yet)
     const hasStarted = stepEvents.some(e =>
       e.type.includes('Started') || e.type.includes('Entered') || e.type.includes('Scheduled')
     );
@@ -1541,6 +1555,86 @@ const ExecutionDetails: React.FC<ExecutionDetailsProps> = ({ execution: propExec
     }
   };
 
+  const handleNewExecution = async () => {
+    if (!execution?.stateMachineArn) return;
+
+    setIsStartingExecution(true);
+    try {
+      const result = await stepFunctionsService.startExecution(
+        execution.stateMachineArn,
+        undefined,
+        newExecutionInput
+      );
+      if (result?.executionArn) {
+        setShowNewExecutionModal(false);
+        setNewExecutionInput('{}');
+        // Navigate to the new execution
+        navigate(`/execution/${encodeURIComponent(result.executionArn)}`);
+      }
+    } catch (err) {
+      console.error('Failed to start new execution:', err);
+      setError(err instanceof Error ? err.message : 'Failed to start new execution');
+    } finally {
+      setIsStartingExecution(false);
+    }
+  };
+
+  const handleRedriveExecution = async () => {
+    if (!execution?.executionArn) return;
+
+    setIsRedriving(true);
+    try {
+      const result = await stepFunctionsService.redriveExecution(execution.executionArn);
+      if (result) {
+        // Update status to RUNNING immediately for UI feedback
+        setExecution(prev => prev ? { ...prev, status: 'RUNNING' } : null);
+        // Start polling for updates
+        startPolling();
+      }
+    } catch (err) {
+      console.error('Failed to redrive execution:', err);
+      setError(err instanceof Error ? err.message : 'Failed to redrive execution');
+    } finally {
+      setIsRedriving(false);
+    }
+  };
+
+  const startPolling = () => {
+    // Clear any existing polling
+    if (pollingInterval) {
+      clearInterval(pollingInterval);
+    }
+    
+    // Poll every 2 seconds while execution is running
+    const interval = setInterval(async () => {
+      if (!execution?.executionArn) return;
+      
+      try {
+        const [executionData, historyData] = await Promise.all([
+          stepFunctionsService.describeExecution(execution.executionArn),
+          stepFunctionsService.getExecutionHistory(execution.executionArn)
+        ]);
+        
+        if (executionData) {
+          setExecution(executionData);
+          setHistory(historyData || []);
+          
+          // Stop polling if execution is no longer running
+          if (executionData.status !== 'RUNNING') {
+            clearInterval(interval);
+            setPollingInterval(null);
+          }
+        }
+      } catch (err) {
+        console.error('Polling error:', err);
+      }
+    }, 2000);
+    
+    setPollingInterval(interval);
+  };
+
+  const canRedrive = execution?.status === 'FAILED' || execution?.status === 'TIMED_OUT' || execution?.status === 'ABORTED';
+
   const handleClose = () => {
     if (pollingInterval) {
       clearInterval(pollingInterval);
@@ -1609,12 +1703,30 @@ const ExecutionDetails: React.FC<ExecutionDetailsProps> = ({ execution: propExec
           </div>
 
           <div className="execution-actions">
+            <button
+              onClick={() => setShowNewExecutionModal(true)}
+              className="btn btn-primary"
+              disabled={!execution?.stateMachineArn}
+            >
+              New execution
+            </button>
+
+            {canRedrive && (
+              <button
+                onClick={handleRedriveExecution}
+                className="btn btn-warning"
+                disabled={isRedriving}
+              >
+                {isRedriving ? 'Redriving...' : 'Redrive'}
+              </button>
+            )}
+
             {execution?.status === 'RUNNING' && (
               <button
                 onClick={handleStopExecution}
                 className="btn btn-danger"
               >
-                Stop Execution
+                Stop execution
               </button>
             )}
 
@@ -2431,6 +2543,49 @@ const ExecutionDetails: React.FC<ExecutionDetailsProps> = ({ execution: propExec
           </div>
         </div>
       </div>
+
+      {/* New Execution Modal */}
+      {showNewExecutionModal && (
+        <div className="modal-overlay" onClick={() => setShowNewExecutionModal(false)}>
+          <div className="modal-content new-execution-modal" onClick={e => e.stopPropagation()}>
+            <div className="modal-header">
+              <h3>Start new execution</h3>
+              <button className="modal-close" onClick={() => setShowNewExecutionModal(false)}>×</button>
+            </div>
+            <div className="modal-body">
+              <div className="form-group">
+                <label>State machine</label>
+                <div className="state-machine-arn">{execution?.stateMachineArn}</div>
+              </div>
+              <div className="form-group">
+                <label>Input (JSON)</label>
+                <textarea
+                  className="execution-input-textarea"
+                  value={newExecutionInput}
+                  onChange={e => setNewExecutionInput(e.target.value)}
+                  placeholder='{"key": "value"}'
+                  rows={10}
+                />
+              </div>
+            </div>
+            <div className="modal-footer">
+              <button
+                className="btn btn-secondary"
+                onClick={() => setShowNewExecutionModal(false)}
+              >
+                Cancel
+              </button>
+              <button
+                className="btn btn-primary"
+                onClick={handleNewExecution}
+                disabled={isStartingExecution}
+              >
+                {isStartingExecution ? 'Starting...' : 'Start execution'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

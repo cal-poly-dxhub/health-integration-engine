@@ -110,23 +110,33 @@ const WorkflowCanvasContent: React.FC = () => {
 
 
 
-  // Drop handler for adding new nodes from sidebar
+  // Drop handler for adding new nodes from sidebar and moving existing nodes
   const [{ isOver }, drop] = useDrop({
-    accept: 'node-type',
-    drop: (item: { type: string }, monitor) => {
+    accept: ['node-type', 'workflow-node'],
+    drop: (item: any, monitor) => {
       const offset = monitor.getClientOffset();
       if (offset && canvasRef.current) {
         const canvasRect = canvasRef.current.getBoundingClientRect();
-        const x = (offset.x - canvasRect.left - canvasOffset.x) / zoom;
-        const y = (offset.y - canvasRect.top - canvasOffset.y) / zoom;
+        const x = offset.x - canvasRect.left + canvasRef.current.scrollLeft;
+        const y = offset.y - canvasRect.top + canvasRef.current.scrollTop;
         
-        addNode(item.type as WorkflowNode['type'], Math.max(50, x), Math.max(50, y));
+        if (item.type === 'workflow-node') {
+          // Moving existing node
+          onMove(item.id, x - 100, y - 40); // Center the node on cursor
+        } else {
+          // Adding new node from sidebar
+          addNode(item.type as WorkflowNode['type'], Math.max(50, x), Math.max(50, y));
+        }
       }
     },
     collect: (monitor) => ({
       isOver: monitor.isOver(),
     }),
   });
+
+  const onMove = useCallback((nodeId: string, x: number, y: number) => {
+    updateNodePosition(nodeId, Math.max(0, x), Math.max(0, y));
+  }, []);
 
   const addNode = useCallback((type: WorkflowNode['type'], x: number, y: number) => {
     const newNode: WorkflowNode = {

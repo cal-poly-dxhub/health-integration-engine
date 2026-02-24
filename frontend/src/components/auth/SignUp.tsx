@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { authService } from '../../services/auth';
 
 interface SignUpProps {
-  onSignUpSuccess: (email: string) => void;
+  onSignUpSuccess: (email: string, password: string) => void;
   onSwitchToSignIn: () => void;
 }
 
@@ -46,7 +46,7 @@ export default function SignUp({ onSignUpSuccess, onSwitchToSignIn }: SignUpProp
         userRole: formData.userRole || undefined,
         organization: formData.organization || undefined,
       });
-      onSignUpSuccess(formData.email);
+      onSignUpSuccess(formData.email, formData.password);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Sign up failed');
     } finally {

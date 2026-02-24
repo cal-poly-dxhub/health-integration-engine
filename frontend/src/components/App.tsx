@@ -22,11 +22,13 @@ const authConfig = {
 function ConfirmSignUpWrapper() {
   const [searchParams] = useSearchParams();
   const email = searchParams.get('email') || '';
+  const password = searchParams.get('password') || undefined;
   
   return (
     <ConfirmSignUp 
       email={email}
-      onConfirmSuccess={() => window.location.href = '/signin'}
+      password={password}
+      onConfirmSuccess={() => window.location.href = '/dashboard'}
       onBackToSignUp={() => window.location.href = '/signup'}
     />
   );
@@ -83,7 +85,7 @@ function AppRoutes() {
           <Route path="/signup" element={
             <PublicRoute>
               <SignUp 
-                onSignUpSuccess={(email) => window.location.href = `/confirm-signup?email=${encodeURIComponent(email)}`}
+                onSignUpSuccess={(email, password) => window.location.href = `/confirm-signup?email=${encodeURIComponent(email)}&password=${encodeURIComponent(password)}`}
                 onSwitchToSignIn={() => window.location.href = '/signin'}
               />
             </PublicRoute>

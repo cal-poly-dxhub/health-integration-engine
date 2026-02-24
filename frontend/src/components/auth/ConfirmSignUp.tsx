@@ -3,11 +3,12 @@ import { authService } from '../../services/auth';
 
 interface ConfirmSignUpProps {
   email: string;
+  password?: string;
   onConfirmSuccess: () => void;
   onBackToSignUp: () => void;
 }
 
-export default function ConfirmSignUp({ email, onConfirmSuccess, onBackToSignUp }: ConfirmSignUpProps) {
+export default function ConfirmSignUp({ email, password, onConfirmSuccess, onBackToSignUp }: ConfirmSignUpProps) {
   const [confirmationCode, setConfirmationCode] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -20,6 +21,12 @@ export default function ConfirmSignUp({ email, onConfirmSuccess, onBackToSignUp 
 
     try {
       await authService.confirmSignUp({ username: email, confirmationCode });
+      
+      // Auto sign-in if password is available
+      if (password) {
+        await authService.signIn({ email, password });
+      }
+      
       onConfirmSuccess();
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Confirmation failed');

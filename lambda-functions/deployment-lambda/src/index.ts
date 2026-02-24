@@ -22,7 +22,8 @@ export {
   startExecution,
   stopExecution,
   describeStateMachine,
-  describeStateMachineForExecution
+  describeStateMachineForExecution,
+  redriveExecution
 } from './handlers/stepFunctionsApiHandlers';
 
 // EventBridge handlers

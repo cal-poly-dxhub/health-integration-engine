@@ -7,7 +7,8 @@ import {
   StartExecutionCommand,
   StopExecutionCommand,
   DescribeStateMachineCommand,
-  DescribeStateMachineForExecutionCommand
+  DescribeStateMachineForExecutionCommand,
+  RedriveExecutionCommand
 } from '@aws-sdk/client-sfn';
 import { extractUserIdFromEvent, createAuthErrorResponse, createSuccessHeaders } from '../utils/auth';
 
@@ -363,6 +364,50 @@ export const describeStateMachineForExecution = async (event: APIGatewayProxyEve
       statusCode: 500,
       headers: createSuccessHeaders(),
       body: JSON.stringify({ error: 'Failed to describe state machine for execution' }),
+    };
+  }
+};
+
+/**
+ * Redrive a failed execution from the point of failure
+ */
+export const redriveExecution = async (event: APIGatewayProxyEvent): Promise<APIGatewayProxyResult> => {
+  try {
+    const userId = extractUserIdFromEvent(event);
+    if (!userId) {
+      return createAuthErrorResponse('Valid authentication token required');
+    }
+
+    const body = JSON.parse(event.body || '{}');
+    const { executionArn } = body;
+
+    if (!executionArn) {
+      return {
+        statusCode: 400,
+        headers: createSuccessHeaders(),
+        body: JSON.stringify({ error: 'executionArn is required' }),
+      };
+    }
+
+    const command = new RedriveExecutionCommand({
+      executionArn,
+    });
+
+    const response = await sfnClient.send(command);
+
+    return {
+      statusCode: 200,
+      headers: createSuccessHeaders(),
+      body: JSON.stringify({
+        redriveDate: response.redriveDate ? response.redriveDate.toISOString() : undefined,
+      }),
+    };
+  } catch (error) {
+    console.error('Error redriving execution:', error);
+    return {
+      statusCode: 500,
+      headers: createSuccessHeaders(),
+      body: JSON.stringify({ error: 'Failed to redrive execution' }),
     };
   }
 };

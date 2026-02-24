@@ -28,14 +28,12 @@ const NodeComponent: React.FC<NodeComponentProps> = ({
 
   const [{ isDragging }, drag] = useDrag({
     type: 'workflow-node',
-    item: { id: node.id, type: 'workflow-node' },
+    item: { id: node.id, type: 'workflow-node', initialX: node.position.x, initialY: node.position.y },
     canDrag: (monitor) => {
-      // Don't allow drag if the initial click was on a handle
       const initialOffset = monitor.getInitialClientOffset();
       if (initialOffset) {
         const element = document.elementFromPoint(initialOffset.x, initialOffset.y);
         const isHandle = element?.closest('.node-handle');
-        console.log('🔍 Drag check - clicked element:', element?.className, 'isHandle:', !!isHandle);
         return !isHandle;
       }
       return true;
@@ -43,13 +41,6 @@ const NodeComponent: React.FC<NodeComponentProps> = ({
     collect: (monitor) => ({
       isDragging: monitor.isDragging(),
     }),
-    end: (_item, monitor) => {
-      const delta = monitor.getDifferenceFromInitialOffset();
-      if (delta && Math.abs(delta.x) > 5 && Math.abs(delta.y) > 5) {
-        // Only move if there was significant drag movement
-        onMove(node.id, node.position.x + delta.x, node.position.y + delta.y);
-      }
-    },
   });
 
   const getNodeIcon = (type: WorkflowNode['type']) => {

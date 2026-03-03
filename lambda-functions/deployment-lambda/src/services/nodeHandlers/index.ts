@@ -56,6 +56,7 @@ export * from './endHandler';
 export * from './lambdaHandler';
 export * from './databaseHandler';
 export * from './s3Handler';
+export * from './opensearchHandler';
 
 // Auto-register all handlers
 import './startHandler';
@@ -63,3 +64,4 @@ import './endHandler';
 import './lambdaHandler';
 import './databaseHandler';
 import './s3Handler';
+import './opensearchHandler';

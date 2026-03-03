@@ -55,6 +55,8 @@ const NodeComponent: React.FC<NodeComponentProps> = ({
         return '🗄️';
       case 'lambda':
         return '⚡';
+      case 'opensearch':
+        return '🔍';
       default:
         return '📦';
     }
@@ -72,6 +74,8 @@ const NodeComponent: React.FC<NodeComponentProps> = ({
         return '#8b5cf6'; // violet
       case 'lambda':
         return '#3b82f6'; // blue
+      case 'opensearch':
+        return '#ec4899'; // pink
       default:
         return '#6b7280'; // gray
     }

@@ -69,6 +69,13 @@ const NodeSidebar: React.FC = () => {
       color: '#3b82f6',
     },
     {
+      type: 'opensearch',
+      icon: '🔍',
+      label: 'OpenSearch',
+      description: 'Index or search documents',
+      color: '#ec4899',
+    },
+    {
       type: 'end',
       icon: '⏹️',
       label: 'End',

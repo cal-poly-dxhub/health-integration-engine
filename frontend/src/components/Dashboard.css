@@ -532,3 +532,25 @@
     opacity: 1;
   }
 }
+
+/* Search Tab Content */
+.search-tab-content {
+  padding: 24px;
+}
+
+.search-tab-header {
+  margin-bottom: 20px;
+}
+
+.search-tab-header h2 {
+  margin: 0 0 4px 0;
+  font-size: 24px;
+  font-weight: 600;
+  color: #111827;
+}
+
+.search-tab-header p {
+  margin: 0;
+  color: #6b7280;
+  font-size: 14px;
+}

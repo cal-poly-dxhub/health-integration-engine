@@ -7,6 +7,7 @@ import { workflowApiService } from '../../services/workflowApi';
 import ExecutionDetails from './ExecutionDetails';
 import DeleteWorkflowModal from './DeleteWorkflowModal';
 import DeploymentStatusModal from './DeploymentStatusModal';
+import OpenSearchPanel from './OpenSearchPanel';
 import './WorkflowDetails.css';
 
 interface WorkflowDetailsProps {
@@ -19,7 +20,7 @@ const WorkflowDetails: React.FC<WorkflowDetailsProps> = ({ workflow: propWorkflo
   const { workflowId } = useParams<{ workflowId: string }>();
   const navigate = useNavigate();
   const { workflows, getWorkflow, deleteWorkflow } = useWorkflows();
-  const [activeTab, setActiveTab] = useState<'executions' | 'definition'>('executions');
+  const [activeTab, setActiveTab] = useState<'executions' | 'definition' | 'search'>('executions');
   const [workflow, setWorkflow] = useState<Workflow | null>(propWorkflow || null);
   const [stateMachineDetails, setStateMachineDetails] = useState<StateMachineDetails | null>(null);
   const [executions, setExecutions] = useState<StepFunctionExecution[]>([]);
@@ -469,6 +470,12 @@ const WorkflowDetails: React.FC<WorkflowDetailsProps> = ({ workflow: propWorkflo
         >
           Definition
         </button>
+        <button
+          className={`tab-btn ${activeTab === 'search' ? 'active' : ''}`}
+          onClick={() => setActiveTab('search')}
+        >
+          🔍 Message Search
+        </button>
       </div>
 
       {/* Tab Content */}
@@ -670,6 +677,12 @@ const WorkflowDetails: React.FC<WorkflowDetailsProps> = ({ workflow: propWorkflo
                 </button>
               </div>
             )}
+          </div>
+        )}
+
+        {activeTab === 'search' && (
+          <div className="search-tab">
+            <OpenSearchPanel />
           </div>
         )}
       </div>

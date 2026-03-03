@@ -1,10 +1,10 @@
 import { z } from 'zod';
-import type { S3NodeConfig, DatabaseNodeConfig, LambdaNodeConfig } from './nodes';
+import type { S3NodeConfig, DatabaseNodeConfig, LambdaNodeConfig, OpenSearchNodeConfig } from './nodes';
 
 // Base node interface
 export interface WorkflowNode {
   id: string;
-  type: 'start' | 's3' | 'database' | 'lambda' | 'end';
+  type: 'start' | 's3' | 'database' | 'lambda' | 'opensearch' | 'end';
   name: string;
   position: {
     x: number;
@@ -15,7 +15,7 @@ export interface WorkflowNode {
 }
 
 // Node configuration types
-export type NodeConfig = S3NodeConfig | DatabaseNodeConfig | LambdaNodeConfig;
+export type NodeConfig = S3NodeConfig | DatabaseNodeConfig | LambdaNodeConfig | OpenSearchNodeConfig;
 
 // Connection between nodes
 export interface Connection {
@@ -78,7 +78,7 @@ export interface WorkflowRequest {
 // Zod validation schemas
 export const WorkflowNodeSchema = z.object({
   id: z.string().min(1),
-  type: z.enum(['start', 's3', 'database', 'lambda', 'end']),
+  type: z.enum(['start', 's3', 'database', 'lambda', 'opensearch', 'end']),
   name: z.string().min(1).max(100),
   position: z.object({
     x: z.number(),

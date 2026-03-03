@@ -19,7 +19,18 @@ const HOISTED_DEPS = [
     'ecdsa-sig-formatter',
     'safe-buffer',
     'semver',
-    'lru-memoizer'
+    'lru-memoizer',
+    '@smithy/signature-v4',
+    '@smithy/protocol-http',
+    '@smithy/util-middleware',
+    '@smithy/types',
+    '@smithy/is-array-buffer',
+    '@smithy/util-hex-encoding',
+    '@smithy/util-uri-escape',
+    '@aws-crypto/sha256-js',
+    '@aws-crypto/util',
+    '@aws-sdk/credential-providers',
+    'tslib'
 ];
 
 const distNodeModules = path.join(__dirname, '..', 'dist', 'node_modules');
@@ -43,7 +54,16 @@ if (fs.existsSync(parentNodeModules)) {
     for (const dep of HOISTED_DEPS) {
         const src = path.join(parentNodeModules, dep);
         const dest = path.join(distNodeModules, dep);
-        if (fs.existsSync(src) && !fs.existsSync(dest)) {
+        // Handle scoped packages (@scope/package)
+        if (dep.startsWith('@')) {
+            const scope = dep.split('/')[0];
+            const scopeDir = path.join(distNodeModules, scope);
+            if (!fs.existsSync(scopeDir)) {
+                fs.mkdirSync(scopeDir, { recursive: true });
+            }
+        }
+        if (fs.existsSync(src)) {
+            // Always copy if source exists (overwrite check removed for scoped packages)
             console.log(`  - ${dep}`);
             copyDir(src, dest);
         }

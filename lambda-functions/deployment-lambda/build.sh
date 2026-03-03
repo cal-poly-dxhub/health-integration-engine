@@ -37,6 +37,9 @@ HOISTED_DEPS=(
     "safe-buffer"
     "semver"
     "lru-memoizer"
+    "@smithy"
+    "@aws-crypto"
+    "tslib"
 )
 
 PARENT_NODE_MODULES="../../node_modules"
@@ -44,7 +47,7 @@ PARENT_NODE_MODULES="../../node_modules"
 if [ -d "$PARENT_NODE_MODULES" ]; then
     echo "📋 Copying hoisted dependencies from parent..."
     for dep in "${HOISTED_DEPS[@]}"; do
-        if [ -d "$PARENT_NODE_MODULES/$dep" ] && [ ! -d "dist/node_modules/$dep" ]; then
+        if [ -d "$PARENT_NODE_MODULES/$dep" ]; then
             echo "  - $dep"
             cp -R "$PARENT_NODE_MODULES/$dep" dist/node_modules/
         fi

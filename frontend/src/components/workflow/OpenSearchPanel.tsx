@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { Link } from 'react-router-dom';
 import apiService from '../../services/api';
 import './OpenSearchPanel.css';
 
@@ -11,17 +12,23 @@ interface SearchResult {
   ingestedAt?: string;
   s3Bucket?: string;
   s3Key?: string;
+  outputS3Bucket?: string;
+  outputS3Key?: string;
+  executionId?: string;
+  workflowId?: string;
   [key: string]: any;
 }
 
 interface OpenSearchPanelProps {
   collectionEndpoint?: string;
   indexName?: string;
+  workflowId?: string;
 }
 
 const OpenSearchPanel: React.FC<OpenSearchPanelProps> = ({ 
   collectionEndpoint: defaultEndpoint = '',
-  indexName: defaultIndex = 'health-messages-test'
+  indexName: defaultIndex = 'health-messages-test',
+  workflowId = ''
 }) => {
   const [endpoint, setEndpoint] = useState(defaultEndpoint);
   const [indexName, setIndexName] = useState(defaultIndex);
@@ -222,29 +229,37 @@ const OpenSearchPanel: React.FC<OpenSearchPanelProps> = ({
             <table className="results-table">
               <thead>
                 <tr>
+                  <th>Execution</th>
                   <th>Control ID</th>
                   <th>Type</th>
-                  <th>Partner</th>
-                  <th>Order #</th>
+                  <th>Source (Input)</th>
+                  <th>Output</th>
                   <th>Ingested</th>
-                  <th>S3 Location</th>
                 </tr>
               </thead>
               <tbody>
                 {results.map((result, idx) => (
                   <tr key={result.messageControlId || idx}>
-                    <td className="mono">{result.messageControlId || '-'}</td>
-                    <td>{result.messageType || '-'}</td>
-                    <td>{result.dataPartnerName || '-'}</td>
-                    <td className="mono">{result.fillerOrderNumber || '-'}</td>
-                    <td>{result.ingestedAt ? new Date(result.ingestedAt).toLocaleString() : '-'}</td>
-                    <td className="s3-location">
-                      {result.s3Bucket && result.s3Key ? (
-                        <span title={`s3://${result.s3Bucket}/${result.s3Key}`}>
-                          {result.s3Key.split('/').pop()}
-                        </span>
+                    <td>
+                      {result.executionId ? (
+                        <Link 
+                          to={`/workflow/${result.workflowId || workflowId}?execution=${result.executionId}`}
+                          className="execution-link"
+                          title={result.executionId}
+                        >
+                          {result.executionId.split(':').pop()?.slice(0, 12)}...
+                        </Link>
                       ) : '-'}
                     </td>
+                    <td className="mono">{result.messageControlId || result.Control_ID || '-'}</td>
+                    <td>{result.messageType || '-'}</td>
+                    <td className="s3-location" title={result.s3Bucket && result.s3Key ? `${result.s3Bucket}/${result.s3Key}` : ''}>
+                      {result.s3Bucket && result.s3Key ? `${result.s3Bucket}/${result.s3Key}` : '-'}
+                    </td>
+                    <td className="s3-location" title={result.outputS3Bucket && result.outputS3Key ? `${result.outputS3Bucket}/${result.outputS3Key}` : ''}>
+                      {result.outputS3Bucket && result.outputS3Key ? `${result.outputS3Bucket}/${result.outputS3Key}` : '-'}
+                    </td>
+                    <td>{result.ingestedAt ? new Date(result.ingestedAt).toLocaleString() : '-'}</td>
                   </tr>
                 ))}
               </tbody>

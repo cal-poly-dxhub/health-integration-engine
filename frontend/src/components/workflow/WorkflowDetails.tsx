@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { useParams, useNavigate } from 'react-router-dom';
+import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
 import { Workflow } from '../../types/workflow';
 import { useWorkflows } from '../../hooks/useWorkflows';
 import { stepFunctionsService, StepFunctionExecution, StateMachineDetails } from '../../services/stepFunctions';
@@ -19,6 +19,8 @@ interface WorkflowDetailsProps {
 const WorkflowDetails: React.FC<WorkflowDetailsProps> = ({ workflow: propWorkflow }) => {
   const { workflowId } = useParams<{ workflowId: string }>();
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
+  const executionParam = searchParams.get('execution');
   const { workflows, getWorkflow, deleteWorkflow } = useWorkflows();
   const [activeTab, setActiveTab] = useState<'executions' | 'definition' | 'search'>('executions');
   const [workflow, setWorkflow] = useState<Workflow | null>(propWorkflow || null);
@@ -156,6 +158,17 @@ const WorkflowDetails: React.FC<WorkflowDetailsProps> = ({ workflow: propWorkflo
       }
     }
   };
+
+  // Handle execution query param - auto-select execution from search results
+  useEffect(() => {
+    if (executionParam && executions.length > 0) {
+      const exec = executions.find(e => e.executionArn === executionParam || e.executionArn.endsWith(executionParam.split(':').pop() || ''));
+      if (exec) {
+        setSelectedExecution(exec);
+        setActiveTab('executions');
+      }
+    }
+  }, [executionParam, executions]);
 
   // Polling functions disabled - auto-refresh removed
   // const startPolling = (stateMachineArn: string) => {
@@ -682,7 +695,7 @@ const WorkflowDetails: React.FC<WorkflowDetailsProps> = ({ workflow: propWorkflo
 
         {activeTab === 'search' && (
           <div className="search-tab">
-            <OpenSearchPanel />
+            <OpenSearchPanel workflowId={workflowId} />
           </div>
         )}
       </div>

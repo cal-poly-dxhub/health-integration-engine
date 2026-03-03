@@ -841,19 +841,21 @@ export class WorkflowBuilderStack extends cdk.Stack {
     
     this.addLambdaIntegration(rolesResource, 'GET', iamRolesLambda, true);
     
-    // POST /opensearch/search - Search OpenSearch Serverless
+    // POST /opensearch/search - Search OpenSearch Serverless (Python Lambda)
     const opensearchResource = this.api.root.addResource('opensearch');
     const opensearchSearchResource = opensearchResource.addResource('search');
     
-    const opensearchSearchLambda = this.createLambdaFunction(
-      'OpenSearchSearchLambda',
-      'opensearch-search-handler',
-      '../lambda-functions/deployment-lambda/dist',
-      'index.opensearchSearch',
-      {
+    const opensearchSearchLambda = new lambda.Function(this, 'OpenSearchSearchLambda', {
+      functionName: 'opensearch-search-handler',
+      runtime: lambda.Runtime.PYTHON_3_11,
+      handler: 'index.lambda_handler',
+      code: lambda.Code.fromInline(this.getOpenSearchSearchCode()),
+      timeout: cdk.Duration.seconds(30),
+      memorySize: 256,
+      environment: {
         AWS_ACCOUNT_ID: this.account,
-      }
-    );
+      },
+    });
     
     // Grant OpenSearch Serverless permissions
     opensearchSearchLambda.addToRolePolicy(
@@ -1881,5 +1883,91 @@ export class WorkflowBuilderStack extends cdk.Stack {
     });
 
     return collection;
+  }
+
+  private getOpenSearchSearchCode(): string {
+    return `
+import json
+import boto3
+import urllib.request
+import hashlib
+from botocore.auth import SigV4Auth
+from botocore.awsrequest import AWSRequest
+from urllib.parse import urlparse
+
+CORS_HEADERS = {
+    'Access-Control-Allow-Origin': '*',
+    'Access-Control-Allow-Headers': 'Content-Type,Authorization',
+    'Access-Control-Allow-Methods': 'POST,OPTIONS',
+    'Content-Type': 'application/json'
+}
+
+def lambda_handler(event, context):
+    if event.get('httpMethod') == 'OPTIONS':
+        return {'statusCode': 200, 'headers': CORS_HEADERS, 'body': ''}
+    
+    try:
+        body = json.loads(event.get('body', '{}'))
+        endpoint = body.get('collectionEndpoint', '').rstrip('/')
+        index_name = body.get('indexName', 'health-messages')
+        query_params = body.get('query', {})
+        config = body.get('searchConfig', {})
+        
+        if not endpoint or not index_name:
+            return {'statusCode': 400, 'headers': CORS_HEADERS, 'body': json.dumps({'error': 'collectionEndpoint and indexName required'})}
+        
+        query = build_query(query_params, config)
+        url = f"{endpoint}/{index_name}/_search"
+        data = json.dumps(query).encode('utf-8')
+        body_hash = hashlib.sha256(data).hexdigest()
+        
+        parsed = urlparse(url)
+        session = boto3.Session()
+        creds = session.get_credentials().get_frozen_credentials()
+        region = session.region_name or 'us-west-2'
+        
+        headers = {'Content-Type': 'application/json', 'Host': parsed.netloc, 'x-amz-content-sha256': body_hash}
+        request = AWSRequest(method='POST', url=url, data=data, headers=headers)
+        SigV4Auth(creds, 'aoss', region).add_auth(request)
+        
+        req = urllib.request.Request(url, data=data, method='POST')
+        for k, v in request.headers.items():
+            req.add_header(k, v)
+        
+        with urllib.request.urlopen(req) as resp:
+            result = json.loads(resp.read().decode('utf-8'))
+            hits = result.get('hits', {})
+            return {
+                'statusCode': 200,
+                'headers': CORS_HEADERS,
+                'body': json.dumps({'total': hits.get('total', {}).get('value', 0), 'results': [h['_source'] for h in hits.get('hits', [])]})
+            }
+    except urllib.error.HTTPError as e:
+        error_body = e.read().decode('utf-8')
+        return {'statusCode': e.code, 'headers': CORS_HEADERS, 'body': json.dumps({'error': error_body})}
+    except Exception as e:
+        return {'statusCode': 500, 'headers': CORS_HEADERS, 'body': json.dumps({'error': str(e)})}
+
+def build_query(params, config):
+    must = []
+    filters = []
+    
+    if params.get('searchText'):
+        must.append({'query_string': {'query': f"*{params['searchText']}*"}})
+    if params.get('dataPartnerName'):
+        filters.append({'term': {'dataPartnerName': params['dataPartnerName']}})
+    if params.get('messageType'):
+        filters.append({'term': {'messageType': params['messageType']}})
+    if params.get('messageControlId'):
+        filters.append({'term': {'messageControlId': params['messageControlId']}})
+    if params.get('fillerOrderNumber'):
+        must.append({'match': {'fillerOrderNumber': params['fillerOrderNumber']}})
+    
+    date_field = config.get('dateRangeField', 'ingestedAt')
+    date_days = config.get('dateRangeDays', 7)
+    filters.append({'range': {date_field: {'gte': f'now-{date_days}d', 'lte': 'now'}}})
+    
+    return {'query': {'bool': {'must': must if must else [{'match_all': {}}], 'filter': filters}}, 'size': 100}
+`.trim();
   }
 }

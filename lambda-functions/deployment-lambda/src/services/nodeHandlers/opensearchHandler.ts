@@ -19,6 +19,7 @@ export const opensearchHandler: NodeHandler = (node, nextState, workflow, deploy
           'operation': 'index',
           'indexName': config.indexName || 'health-messages',
           'workflowId': deploymentContext?.workflowId,
+          'executionId.$': '$$.Execution.Id',
           'document.$': '$.lambdaResult.Payload',
           'metadata.$': '$.originalEvent.detail',
         },

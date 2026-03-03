@@ -181,7 +181,7 @@ const WorkflowCanvasContent: React.FC = () => {
     setSelectedNode(nodeId);
     // Open config modal for configurable nodes
     const node = nodes.find(n => n.id === nodeId);
-    if (node && ['s3', 'database', 'lambda'].includes(node.type)) {
+    if (node && ['s3', 'database', 'lambda', 'opensearch'].includes(node.type)) {
       setConfigModalOpen(true);
     }
   }, [nodes]);

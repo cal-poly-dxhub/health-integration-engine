@@ -84,8 +84,24 @@ export interface LambdaNodeConfig {
   };
 }
 
+// OpenSearch Serverless Node Configuration
+export interface OpenSearchNodeConfig {
+  type: 'opensearch';
+  operation: 'index' | 'search';
+  collectionEndpoint: string;
+  indexName: string;
+  // For search operation
+  queryType?: 'match' | 'term' | 'bool';
+  dateRangeField?: string;
+  dateRangeDays?: number;
+  iamRole?: {
+    useExisting: boolean;
+    existingRoleArn?: string;
+  };
+}
+
 // Union type for all node configurations
-export type NodeConfig = S3NodeConfig | DatabaseNodeConfig | LambdaNodeConfig;
+export type NodeConfig = S3NodeConfig | DatabaseNodeConfig | LambdaNodeConfig | OpenSearchNodeConfig;
 
 // Zod validation schemas
 export const S3NodeConfigSchema = z.object({
@@ -174,6 +190,10 @@ export const isLambdaNodeConfig = (config: NodeConfig): config is LambdaNodeConf
   return config.type === 'lambda';
 };
 
+export const isOpenSearchNodeConfig = (config: NodeConfig): config is OpenSearchNodeConfig => {
+  return config.type === 'opensearch';
+};
+
 // Default configurations for new nodes
 export const getDefaultNodeConfig = (nodeType: string): NodeConfig | undefined => {
   switch (nodeType) {
@@ -221,6 +241,15 @@ export const getDefaultNodeConfig = (nodeType: string): NodeConfig | undefined =
         tracingConfig: {
           mode: 'PassThrough',
         },
+      };
+    case 'opensearch':
+      return {
+        type: 'opensearch',
+        operation: 'index',
+        collectionEndpoint: '',
+        indexName: '',
+        dateRangeField: 'ingestedAt',
+        dateRangeDays: 2,
       };
     default:
       return undefined;

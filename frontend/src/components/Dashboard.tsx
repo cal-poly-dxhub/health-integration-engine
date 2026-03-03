@@ -4,6 +4,7 @@ import WorkflowList from './workflow/WorkflowList';
 import DeployedWorkflowsList from './workflow/DeployedWorkflowsList';
 import DeleteWorkflowModal from './workflow/DeleteWorkflowModal';
 import DeploymentStatusModal from './workflow/DeploymentStatusModal';
+import OpenSearchPanel from './workflow/OpenSearchPanel';
 import { useWorkflows } from '../hooks/useWorkflows';
 import { WorkflowMetadata } from '../types/workflow';
 import './Dashboard.css';
@@ -32,7 +33,7 @@ export default function Dashboard({ onSignOut, onEditWorkflow, onViewWorkflow }:
   const [workflowToDelete, setWorkflowToDelete] = useState<WorkflowMetadata | null>(null);
   const [isDeleting, setIsDeleting] = useState(false);
   const [isCreating, setIsCreating] = useState(false);
-  const [activeTab, setActiveTab] = useState<'workflows' | 'deployed'>('workflows');
+  const [activeTab, setActiveTab] = useState<'workflows' | 'deployed' | 'search'>('workflows');
   const [deleteError, setDeleteError] = useState<string | null>(null);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [deleteSuccess, setDeleteSuccess] = useState<string | null>(null);
@@ -239,6 +240,19 @@ export default function Dashboard({ onSignOut, onEditWorkflow, onViewWorkflow }:
                   <span className="tab-count">Message Router APIs</span>
                 </div>
               </button>
+              <button
+                className={`sidebar-tab ${activeTab === 'search' ? 'active' : ''}`}
+                onClick={() => setActiveTab('search')}
+              >
+                <div className="tab-icon-wrapper">
+                  <span className="tab-icon">🔍</span>
+                </div>
+                <div className="tab-content-wrapper">
+                  <span className="tab-title">Message Search</span>
+                  <span className="tab-description">Search indexed messages</span>
+                  <span className="tab-count">OpenSearch</span>
+                </div>
+              </button>
             </div>
           </div>
 
@@ -269,6 +283,16 @@ export default function Dashboard({ onSignOut, onEditWorkflow, onViewWorkflow }:
                 onRefresh={refreshWorkflows}
                 onViewWorkflow={handleViewWorkflow}
               />
+            )}
+
+            {activeTab === 'search' && (
+              <div className="search-tab-content">
+                <div className="search-tab-header">
+                  <h2>Message Search</h2>
+                  <p>Search indexed HL7 messages in OpenSearch</p>
+                </div>
+                <OpenSearchPanel />
+              </div>
             )}
           </div>
         </div>

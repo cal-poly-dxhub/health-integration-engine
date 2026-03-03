@@ -386,6 +386,9 @@ export class WorkflowBuilderStack extends cdk.Stack {
       ],
     });
 
+    // Create OpenSearch Serverless collection for message indexing
+    const opensearchCollection = this.createOpenSearchServerlessCollection();
+
     // Create deployment Lambda function
     const deploymentLambda = this.createLambdaFunction(
       'DeploymentLambda',
@@ -397,6 +400,7 @@ export class WorkflowBuilderStack extends cdk.Stack {
         WORKFLOWS_TABLE: this.workflowsTable.tableName,
         AWS_ACCOUNT_ID: this.account,
         LAMBDA_CODE_BUCKET: lambdaCodeBucket.bucketName,
+        OPENSEARCH_ENDPOINT: opensearchCollection.attrCollectionEndpoint,
       }
     );
 
@@ -836,6 +840,31 @@ export class WorkflowBuilderStack extends cdk.Stack {
     );
     
     this.addLambdaIntegration(rolesResource, 'GET', iamRolesLambda, true);
+    
+    // POST /opensearch/search - Search OpenSearch Serverless
+    const opensearchResource = this.api.root.addResource('opensearch');
+    const opensearchSearchResource = opensearchResource.addResource('search');
+    
+    const opensearchSearchLambda = this.createLambdaFunction(
+      'OpenSearchSearchLambda',
+      'opensearch-search-handler',
+      '../lambda-functions/deployment-lambda/dist',
+      'index.opensearchSearch',
+      {
+        AWS_ACCOUNT_ID: this.account,
+      }
+    );
+    
+    // Grant OpenSearch Serverless permissions
+    opensearchSearchLambda.addToRolePolicy(
+      new iam.PolicyStatement({
+        effect: iam.Effect.ALLOW,
+        actions: ['aoss:APIAccessAll'],
+        resources: ['*'],
+      })
+    );
+    
+    this.addLambdaIntegration(opensearchSearchResource, 'POST', opensearchSearchLambda, true);
     
     // GET /workflows - List user's workflows
     const listWorkflowsLambda = this.createLambdaFunction(
@@ -1780,5 +1809,77 @@ export class WorkflowBuilderStack extends cdk.Stack {
     }
 
     return resource.addMethod(method, integration, methodOptions);
+  }
+
+  /**
+   * Create OpenSearch Serverless collection for message indexing
+   */
+  private createOpenSearchServerlessCollection(): cdk.aws_opensearchserverless.CfnCollection {
+    const collectionName = `health-msgs-${this.account.slice(-6)}`;
+
+    // Encryption policy (required before collection)
+    const encryptionPolicy = new cdk.aws_opensearchserverless.CfnSecurityPolicy(this, 'OpenSearchEncryptionPolicy', {
+      name: `health-msgs-encrypt-${this.account.slice(-6)}`,
+      type: 'encryption',
+      policy: JSON.stringify({
+        Rules: [{ ResourceType: 'collection', Resource: [`collection/${collectionName}`] }],
+        AWSOwnedKey: true,
+      }),
+    });
+
+    // Network policy (allow public access for simplicity)
+    const networkPolicy = new cdk.aws_opensearchserverless.CfnSecurityPolicy(this, 'OpenSearchNetworkPolicy', {
+      name: `health-msgs-network-${this.account.slice(-6)}`,
+      type: 'network',
+      policy: JSON.stringify([{
+        Rules: [
+          { ResourceType: 'collection', Resource: [`collection/${collectionName}`] },
+          { ResourceType: 'dashboard', Resource: [`collection/${collectionName}`] },
+        ],
+        AllowFromPublic: true,
+      }]),
+    });
+
+    // Data access policy - allow all IAM principals in the account
+    const dataAccessPolicy = new cdk.aws_opensearchserverless.CfnAccessPolicy(this, 'OpenSearchDataAccessPolicy', {
+      name: `health-msgs-access-${this.account.slice(-6)}`,
+      type: 'data',
+      policy: JSON.stringify([{
+        Rules: [
+          {
+            ResourceType: 'index',
+            Resource: [`index/${collectionName}/*`],
+            Permission: ['aoss:*'],
+          },
+          {
+            ResourceType: 'collection',
+            Resource: [`collection/${collectionName}`],
+            Permission: ['aoss:*'],
+          },
+        ],
+        Principal: [`arn:aws:iam::${this.account}:root`],
+      }]),
+    });
+
+    // Create the collection
+    const collection = new cdk.aws_opensearchserverless.CfnCollection(this, 'OpenSearchCollection', {
+      name: collectionName,
+      type: 'SEARCH',
+      description: 'Shared collection for health message indexing across all workflows',
+    });
+
+    // Ensure policies are created before collection
+    collection.addDependency(encryptionPolicy);
+    collection.addDependency(networkPolicy);
+    collection.addDependency(dataAccessPolicy);
+
+    // Output the endpoint
+    new cdk.CfnOutput(this, 'OpenSearchEndpoint', {
+      value: collection.attrCollectionEndpoint,
+      description: 'OpenSearch Serverless collection endpoint',
+      exportName: 'OpenSearchEndpoint',
+    });
+
+    return collection;
   }
 }

@@ -84,6 +84,9 @@ export class IAMPermissionAnalyzer {
       case 'database':
         return this.getDatabasePermissions(config);
       
+      case 'opensearch':
+        return this.getOpenSearchPermissions(config);
+      
       case 'start':
       case 'end':
         return { actions: [], resources: [] };
@@ -151,6 +154,18 @@ export class IAMPermissionAnalyzer {
     const actions = operationPermissions[operation] || operationPermissions.read;
     
     return { actions, resources: [tableArn] };
+  }
+
+  /**
+   * Get OpenSearch-specific permissions
+   */
+  private static getOpenSearchPermissions(config: any): { actions: string[], resources: string[] } {
+    // OpenSearch operations are done via Lambda, so we need Lambda invoke permissions
+    // The Lambda itself will have aoss:* permissions
+    return {
+      actions: ['lambda:InvokeFunction'],
+      resources: ['arn:aws:lambda:*:*:function:*-opensearch-*'],
+    };
   }
 
   /**

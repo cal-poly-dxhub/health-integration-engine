@@ -3,7 +3,7 @@ import { z } from 'zod';
 // Base node interface
 export interface WorkflowNode {
   id: string;
-  type: 'start' | 's3' | 'database' | 'lambda' | 'end';
+  type: 'start' | 's3' | 'database' | 'lambda' | 'opensearch' | 'end';
   name: string;
   position: {
     x: number;
@@ -14,7 +14,7 @@ export interface WorkflowNode {
 }
 
 // Node configuration types
-export type NodeConfig = S3NodeConfig | DatabaseNodeConfig | LambdaNodeConfig;
+export type NodeConfig = S3NodeConfig | DatabaseNodeConfig | LambdaNodeConfig | OpenSearchNodeConfig;
 
 // S3 Node Configuration
 export interface S3NodeConfig {
@@ -83,6 +83,21 @@ export interface LambdaNodeConfig {
   };
   tracingConfig?: {
     mode: 'Active' | 'PassThrough';
+  };
+}
+
+// OpenSearch Serverless Node Configuration
+export interface OpenSearchNodeConfig {
+  type: 'opensearch';
+  operation: 'index' | 'search';
+  collectionEndpoint: string;
+  indexName: string;
+  queryType?: 'match' | 'term' | 'bool';
+  dateRangeField?: string;
+  dateRangeDays?: number;
+  iamRole?: {
+    useExisting: boolean;
+    existingRoleArn?: string;
   };
 }
 
@@ -156,7 +171,7 @@ export interface WorkflowRequest {
 // Zod validation schemas
 export const WorkflowNodeSchema = z.object({
   id: z.string().min(1),
-  type: z.enum(['start', 's3', 'database', 'lambda', 'end']),
+  type: z.enum(['start', 's3', 'database', 'lambda', 'opensearch', 'end']),
   name: z.string().min(1).max(100),
   position: z.object({
     x: z.number(),

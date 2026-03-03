@@ -1262,16 +1262,22 @@ def lambda_handler(event, context):
     document = event.get('document', {})
     metadata = event.get('metadata', {})
     workflow_id = event.get('workflowId', os.environ.get('WORKFLOW_ID', ''))
+    execution_id = event.get('executionId', '')
+    output_s3 = event.get('outputS3', {})
     
     doc = {
         **document,
         'workflowId': workflow_id,
+        'executionId': execution_id,
         's3Bucket': metadata.get('bucket', {}).get('name', ''),
         's3Key': metadata.get('object', {}).get('key', ''),
+        'outputS3Bucket': output_s3.get('bucket', ''),
+        'outputS3Key': output_s3.get('key', ''),
         'ingestedAt': datetime.utcnow().isoformat() + 'Z',
     }
     
-    doc_id = document.get('Control_ID') or document.get('messageControlId') or 'doc'
+    # Use execution ID for unique doc ID (allows same message to be indexed multiple times)
+    doc_id = execution_id.split(':')[-1] if execution_id else (document.get('Control_ID') or 'doc')
     url = f"{endpoint}/{index_name}/_doc/{doc_id}"
     body = json.dumps(doc).encode('utf-8')
     body_hash = hashlib.sha256(body).hexdigest()

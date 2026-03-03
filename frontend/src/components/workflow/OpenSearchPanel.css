@@ -212,3 +212,27 @@
   color: #9ca3af;
   font-size: 14px;
 }
+
+.execution-link {
+  color: #2563eb;
+  text-decoration: none;
+  font-family: monospace;
+  font-size: 12px;
+}
+
+.execution-link:hover {
+  text-decoration: underline;
+}
+
+.s3-location {
+  max-width: 200px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 12px;
+  font-family: monospace;
+}
+
+.filter-group.full-width {
+  flex: 1 1 100%;
+}

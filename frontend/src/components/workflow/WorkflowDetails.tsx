@@ -487,7 +487,7 @@ const WorkflowDetails: React.FC<WorkflowDetailsProps> = ({ workflow: propWorkflo
           className={`tab-btn ${activeTab === 'search' ? 'active' : ''}`}
           onClick={() => setActiveTab('search')}
         >
-          🔍 Message Search
+          Message Search
         </button>
       </div>
 
@@ -695,7 +695,10 @@ const WorkflowDetails: React.FC<WorkflowDetailsProps> = ({ workflow: propWorkflo
 
         {activeTab === 'search' && (
           <div className="search-tab">
-            <OpenSearchPanel workflowId={workflowId} />
+            <OpenSearchPanel 
+              workflowId={workflowId} 
+              indexName={workflow?.nodes?.find(n => n.type === 'opensearch')?.config?.indexName}
+            />
           </div>
         )}
       </div>

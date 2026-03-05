@@ -853,7 +853,7 @@ export class WorkflowBuilderStack extends cdk.Stack {
       timeout: cdk.Duration.seconds(30),
       memorySize: 256,
       environment: {
-        AWS_ACCOUNT_ID: this.account,
+        OPENSEARCH_ENDPOINT: opensearchCollection.attrCollectionEndpoint,
       },
     });
     
@@ -1888,6 +1888,7 @@ export class WorkflowBuilderStack extends cdk.Stack {
   private getOpenSearchSearchCode(): string {
     return `
 import json
+import os
 import boto3
 import urllib.request
 import hashlib
@@ -1908,13 +1909,18 @@ def lambda_handler(event, context):
     
     try:
         body = json.loads(event.get('body', '{}'))
-        endpoint = body.get('collectionEndpoint', '').rstrip('/')
+        endpoint = os.environ.get('OPENSEARCH_ENDPOINT', '').rstrip('/')
         index_name = body.get('indexName', 'health-messages')
         query_params = body.get('query', {})
         config = body.get('searchConfig', {})
+        workflow_id = body.get('workflowId', '')
         
         if not endpoint or not index_name:
-            return {'statusCode': 400, 'headers': CORS_HEADERS, 'body': json.dumps({'error': 'collectionEndpoint and indexName required'})}
+            return {'statusCode': 400, 'headers': CORS_HEADERS, 'body': json.dumps({'error': 'indexName required'})}
+        
+        # Add workflowId filter if provided
+        if workflow_id:
+            query_params['workflowId'] = workflow_id
         
         query = build_query(query_params, config)
         url = f"{endpoint}/{index_name}/_search"
@@ -1955,13 +1961,15 @@ def build_query(params, config):
     if params.get('searchText'):
         must.append({'query_string': {'query': f"*{params['searchText']}*"}})
     if params.get('dataPartnerName'):
-        filters.append({'term': {'dataPartnerName': params['dataPartnerName']}})
+        filters.append({'term': {'dataPartnerName.keyword': params['dataPartnerName']}})
     if params.get('messageType'):
-        filters.append({'term': {'messageType': params['messageType']}})
+        filters.append({'term': {'Message_Type.keyword': params['messageType']}})
     if params.get('messageControlId'):
-        filters.append({'term': {'messageControlId': params['messageControlId']}})
+        filters.append({'term': {'Control_ID.keyword': params['messageControlId']}})
     if params.get('fillerOrderNumber'):
         must.append({'match': {'fillerOrderNumber': params['fillerOrderNumber']}})
+    if params.get('workflowId'):
+        filters.append({'term': {'workflowId.keyword': params['workflowId']}})
     
     date_field = config.get('dateRangeField', 'ingestedAt')
     date_days = config.get('dateRangeDays', 7)

@@ -20,18 +20,15 @@ interface SearchResult {
 }
 
 interface OpenSearchPanelProps {
-  collectionEndpoint?: string;
   indexName?: string;
   workflowId?: string;
 }
 
 const OpenSearchPanel: React.FC<OpenSearchPanelProps> = ({ 
-  collectionEndpoint: defaultEndpoint = '',
-  indexName: defaultIndex = 'health-messages-test',
+  indexName: defaultIndex = 'health-messages',
   workflowId = ''
 }) => {
-  const [endpoint, setEndpoint] = useState(defaultEndpoint);
-  const [indexName, setIndexName] = useState(defaultIndex);
+  const [indexName] = useState(defaultIndex);
   const [searchParams, setSearchParams] = useState({
     searchText: '',
     dataPartnerName: '',
@@ -44,21 +41,15 @@ const OpenSearchPanel: React.FC<OpenSearchPanelProps> = ({
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [totalHits, setTotalHits] = useState(0);
-  const [showConfig, setShowConfig] = useState(!defaultEndpoint);
 
   const handleSearch = async () => {
-    if (!endpoint) {
-      setError('Please configure the OpenSearch endpoint first');
-      return;
-    }
-
     setLoading(true);
     setError(null);
 
     try {
       const data = await apiService.post<{ total: number; results: SearchResult[] }>('/opensearch/search', {
-        collectionEndpoint: endpoint,
         indexName,
+        workflowId,
         query: {
           searchText: searchParams.searchText || undefined,
           dataPartnerName: searchParams.dataPartnerName || undefined,
@@ -102,37 +93,8 @@ const OpenSearchPanel: React.FC<OpenSearchPanelProps> = ({
   return (
     <div className="opensearch-panel">
       <div className="opensearch-header">
-        <h3>🔍 Message Search</h3>
-        <button 
-          className="config-toggle"
-          onClick={() => setShowConfig(!showConfig)}
-        >
-          {showConfig ? 'Hide Config' : 'Show Config'}
-        </button>
+        <h3>Message Search</h3>
       </div>
-
-      {showConfig && (
-        <div className="opensearch-config">
-          <div className="config-row">
-            <label>Collection Endpoint</label>
-            <input
-              type="text"
-              value={endpoint}
-              onChange={(e) => setEndpoint(e.target.value)}
-              placeholder="https://xxx.us-west-2.aoss.amazonaws.com"
-            />
-          </div>
-          <div className="config-row">
-            <label>Index Name</label>
-            <input
-              type="text"
-              value={indexName}
-              onChange={(e) => setIndexName(e.target.value)}
-              placeholder="health-messages-test"
-            />
-          </div>
-        </div>
-      )}
 
       <div className="search-filters">
         <div className="filter-row">
@@ -233,7 +195,6 @@ const OpenSearchPanel: React.FC<OpenSearchPanelProps> = ({
                   <th>Control ID</th>
                   <th>Type</th>
                   <th>Source (Input)</th>
-                  <th>Output</th>
                   <th>Ingested</th>
                 </tr>
               </thead>
@@ -251,13 +212,10 @@ const OpenSearchPanel: React.FC<OpenSearchPanelProps> = ({
                         </Link>
                       ) : '-'}
                     </td>
-                    <td className="mono">{result.messageControlId || result.Control_ID || '-'}</td>
-                    <td>{result.messageType || '-'}</td>
+                    <td className="mono">{result.Control_ID || result.messageControlId || '-'}</td>
+                    <td>{result.Message_Type || result.messageType || '-'}</td>
                     <td className="s3-location" title={result.s3Bucket && result.s3Key ? `${result.s3Bucket}/${result.s3Key}` : ''}>
                       {result.s3Bucket && result.s3Key ? `${result.s3Bucket}/${result.s3Key}` : '-'}
-                    </td>
-                    <td className="s3-location" title={result.outputS3Bucket && result.outputS3Key ? `${result.outputS3Bucket}/${result.outputS3Key}` : ''}>
-                      {result.outputS3Bucket && result.outputS3Key ? `${result.outputS3Bucket}/${result.outputS3Key}` : '-'}
                     </td>
                     <td>{result.ingestedAt ? new Date(result.ingestedAt).toLocaleString() : '-'}</td>
                   </tr>

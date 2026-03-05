@@ -89,12 +89,9 @@ export interface LambdaNodeConfig {
 // OpenSearch Serverless Node Configuration
 export interface OpenSearchNodeConfig {
   type: 'opensearch';
-  operation: 'index' | 'search';
+  operation: 'index';
   collectionEndpoint: string;
   indexName: string;
-  queryType?: 'match' | 'term' | 'bool';
-  dateRangeField?: string;
-  dateRangeDays?: number;
   iamRole?: {
     useExisting: boolean;
     existingRoleArn?: string;

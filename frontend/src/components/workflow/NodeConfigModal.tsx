@@ -94,9 +94,8 @@ const NodeConfigModal: React.FC<NodeConfigModalProps> = ({
           break;
         case 'opensearch':
           setConfig({
-            operation: (node.config as any)?.operation || 'index',
+            operation: 'index',
             indexName: (node.config as any)?.indexName || 'health-messages',
-            dateRangeDays: (node.config as any)?.dateRangeDays || 2,
           });
           break;
         default:
@@ -557,23 +556,6 @@ const NodeConfigModal: React.FC<NodeConfigModalProps> = ({
   const renderOpenSearchConfig = () => (
     <div className="config-form">
       <div className="form-group">
-        <label htmlFor="operation">Operation</label>
-        <select
-          id="operation"
-          value={config.operation || 'index'}
-          onChange={(e) => handleInputChange('operation', e.target.value)}
-        >
-          <option value="index">Index Document</option>
-          <option value="search">Search Documents</option>
-        </select>
-        <small className="help-text">
-          {config.operation === 'index' 
-            ? 'Index documents from the previous Lambda step into OpenSearch' 
-            : 'Search for documents in OpenSearch'}
-        </small>
-      </div>
-
-      <div className="form-group">
         <label htmlFor="indexName">Index Name</label>
         <input
           id="indexName"
@@ -585,37 +567,10 @@ const NodeConfigModal: React.FC<NodeConfigModalProps> = ({
         <small className="help-text">Index name within the shared collection (default: health-messages)</small>
       </div>
 
-      {config.operation === 'search' && (
-        <div className="form-row">
-          <div className="form-group">
-            <label htmlFor="dateRangeDays">Date Range (days)</label>
-            <select
-              id="dateRangeDays"
-              value={config.dateRangeDays || 2}
-              onChange={(e) => handleInputChange('dateRangeDays', parseInt(e.target.value))}
-            >
-              <option value={1}>Last 1 day</option>
-              <option value={2}>Last 2 days</option>
-              <option value={7}>Last 7 days</option>
-              <option value={30}>Last 30 days</option>
-            </select>
-          </div>
-        </div>
-      )}
-
       <div className="trigger-info">
-        <h4>📋 {config.operation === 'index' ? 'How Indexing Works' : 'How Search Works'}</h4>
-        {config.operation === 'index' ? (
-          <>
-            <p>Documents from the previous Lambda's output will be indexed into OpenSearch.</p>
-            <p><strong>Workflow isolation:</strong> Each document is tagged with the workflow ID, so searches only return results from this workflow.</p>
-          </>
-        ) : (
-          <p>
-            Search queries are passed via <code>$.searchQuery</code>.
-            Results available in <code>$.opensearchResult</code>.
-          </p>
-        )}
+        <h4>📋 How Indexing Works</h4>
+        <p>Documents from the previous Lambda's output will be indexed into OpenSearch.</p>
+        <p><strong>Workflow isolation:</strong> Each document is tagged with the workflow ID, so searches only return results from this workflow.</p>
       </div>
     </div>
   );

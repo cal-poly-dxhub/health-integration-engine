@@ -1109,7 +1109,7 @@ def handler(event, context):
   }
 
   /**
-   * Generate OpenSearch Lambda resources for indexing and searching
+   * Generate OpenSearch Lambda resources for indexing
    */
   private static generateOpenSearchResources(workflow: Workflow, deploymentContext: DeploymentContext): any {
     const opensearchNodes = workflow.nodes.filter(node => node.type === 'opensearch');
@@ -1118,8 +1118,6 @@ def handler(event, context):
     console.log('🔍 CFT GENERATOR: Generating OpenSearch resources for', opensearchNodes.length, 'nodes');
 
     const resources: any = {};
-    const hasIndexOperation = opensearchNodes.some(n => (n.config as any)?.operation === 'index');
-    const hasSearchOperation = opensearchNodes.some(n => (n.config as any)?.operation === 'search');
 
     // IAM Role for OpenSearch Lambda functions
     resources.OpenSearchLambdaRole = {
@@ -1155,86 +1153,43 @@ def handler(event, context):
       },
     };
 
-    // OpenSearch Indexer Lambda (if any index operations)
-    if (hasIndexOperation) {
-      const indexerConfig = opensearchNodes.find(n => (n.config as any)?.operation === 'index')?.config as any;
-      // Use endpoint from environment (set by CDK) or from node config as fallback
-      const opensearchEndpoint = process.env.OPENSEARCH_ENDPOINT || indexerConfig?.collectionEndpoint || '';
-      
-      resources.OpenSearchIndexerLogGroup = {
-        Type: 'AWS::Logs::LogGroup',
-        Properties: {
-          LogGroupName: { 'Fn::Sub': '/aws/lambda/${WorkflowId}-opensearch-indexer' },
-          RetentionInDays: 7,
-        },
-      };
+    // OpenSearch Indexer Lambda
+    const indexerConfig = opensearchNodes[0]?.config as any;
+    const opensearchEndpoint = process.env.OPENSEARCH_ENDPOINT || indexerConfig?.collectionEndpoint || '';
+    
+    resources.OpenSearchIndexerLogGroup = {
+      Type: 'AWS::Logs::LogGroup',
+      Properties: {
+        LogGroupName: { 'Fn::Sub': '/aws/lambda/${WorkflowId}-opensearch-indexer' },
+        RetentionInDays: 7,
+      },
+    };
 
-      resources.OpenSearchIndexerFunction = {
-        Type: 'AWS::Lambda::Function',
-        DependsOn: ['OpenSearchIndexerLogGroup'],
-        Properties: {
-          FunctionName: { 'Fn::Sub': '${WorkflowId}-opensearch-indexer' },
-          Runtime: 'python3.11',
-          Handler: 'index.lambda_handler',
-          Role: { 'Fn::GetAtt': ['OpenSearchLambdaRole', 'Arn'] },
-          Timeout: 60,
-          MemorySize: 256,
-          Code: {
-            ZipFile: this.getOpenSearchIndexerCode(),
-          },
-          Environment: {
-            Variables: {
-              OPENSEARCH_ENDPOINT: opensearchEndpoint,
-              WORKFLOW_ID: { Ref: 'WorkflowId' },
-            },
-          },
-          Tags: [
-            { Key: 'WorkflowId', Value: { Ref: 'WorkflowId' } },
-            { Key: 'Purpose', Value: 'OpenSearch Indexer' },
-          ],
+    resources.OpenSearchIndexerFunction = {
+      Type: 'AWS::Lambda::Function',
+      DependsOn: ['OpenSearchIndexerLogGroup'],
+      Properties: {
+        FunctionName: { 'Fn::Sub': '${WorkflowId}-opensearch-indexer' },
+        Runtime: 'python3.11',
+        Handler: 'index.lambda_handler',
+        Role: { 'Fn::GetAtt': ['OpenSearchLambdaRole', 'Arn'] },
+        Timeout: 60,
+        MemorySize: 256,
+        Code: {
+          ZipFile: this.getOpenSearchIndexerCode(),
         },
-      };
-    }
-
-    // OpenSearch Searcher Lambda (if any search operations)
-    if (hasSearchOperation) {
-      const searcherConfig = opensearchNodes.find(n => (n.config as any)?.operation === 'search')?.config as any;
-      const opensearchEndpointSearch = process.env.OPENSEARCH_ENDPOINT || searcherConfig?.collectionEndpoint || '';
-      
-      resources.OpenSearchSearcherLogGroup = {
-        Type: 'AWS::Logs::LogGroup',
-        Properties: {
-          LogGroupName: { 'Fn::Sub': '/aws/lambda/${WorkflowId}-opensearch-searcher' },
-          RetentionInDays: 7,
-        },
-      };
-
-      resources.OpenSearchSearcherFunction = {
-        Type: 'AWS::Lambda::Function',
-        DependsOn: ['OpenSearchSearcherLogGroup'],
-        Properties: {
-          FunctionName: { 'Fn::Sub': '${WorkflowId}-opensearch-searcher' },
-          Runtime: 'python3.11',
-          Handler: 'index.lambda_handler',
-          Role: { 'Fn::GetAtt': ['OpenSearchLambdaRole', 'Arn'] },
-          Timeout: 60,
-          MemorySize: 256,
-          Code: {
-            ZipFile: this.getOpenSearchSearcherCode(),
+        Environment: {
+          Variables: {
+            OPENSEARCH_ENDPOINT: opensearchEndpoint,
+            WORKFLOW_ID: { Ref: 'WorkflowId' },
           },
-          Environment: {
-            Variables: {
-              OPENSEARCH_ENDPOINT: opensearchEndpointSearch,
-              WORKFLOW_ID: { Ref: 'WorkflowId' },
-            },
-          },
-          Tags: [
-            { Key: 'WorkflowId', Value: { Ref: 'WorkflowId' } },
-            { Key: 'Purpose', Value: 'OpenSearch Searcher' },
-          ],
         },
-      };
-    }
+        Tags: [
+          { Key: 'WorkflowId', Value: { Ref: 'WorkflowId' } },
+          { Key: 'Purpose', Value: 'OpenSearch Indexer' },
+        ],
+      },
+    };
 
     return resources;
   }
@@ -1307,86 +1262,4 @@ def lambda_handler(event, context):
 `.trim();
   }
 
-  /**
-   * Get OpenSearch Searcher Lambda code
-   */
-  private static getOpenSearchSearcherCode(): string {
-    return `
-import json
-import boto3
-import urllib.request
-import os
-
-def lambda_handler(event, context):
-    """Search documents in OpenSearch Serverless."""
-    print(f"Received event: {json.dumps(event)}")
-    
-    endpoint = os.environ.get('OPENSEARCH_ENDPOINT', '').rstrip('/')
-    index_name = event.get('indexName', 'health-messages')
-    query_params = event.get('query', {})
-    search_config = event.get('searchConfig', {})
-    workflow_id = event.get('workflowId', os.environ.get('WORKFLOW_ID', ''))
-    
-    if not endpoint:
-        raise ValueError("OPENSEARCH_ENDPOINT environment variable not set")
-    
-    query = build_search_query(query_params, search_config, workflow_id)
-    
-    url = f"{endpoint}/{index_name}/_search"
-    body = json.dumps(query).encode('utf-8')
-    
-    session = boto3.Session()
-    credentials = session.get_credentials()
-    region = session.region_name or 'us-west-2'
-    
-    from botocore.auth import SigV4Auth
-    from botocore.awsrequest import AWSRequest
-    
-    request = AWSRequest(method='POST', url=url, data=body, headers={'Content-Type': 'application/json'})
-    SigV4Auth(credentials, 'aoss', region).add_auth(request)
-    
-    req = urllib.request.Request(url, data=body, method='POST')
-    for key, value in dict(request.headers).items():
-        req.add_header(key, value)
-    
-    try:
-        with urllib.request.urlopen(req) as response:
-            result = json.loads(response.read().decode('utf-8'))
-            hits = result.get('hits', {})
-            return {
-                'statusCode': 200,
-                'total': hits.get('total', {}).get('value', 0),
-                'results': [hit.get('_source', {}) for hit in hits.get('hits', [])],
-            }
-    except urllib.error.HTTPError as e:
-        raise Exception(f"Search failed: {e.read().decode('utf-8')}")
-
-def build_search_query(params, config, workflow_id):
-    must_clauses = []
-    filter_clauses = []
-    
-    # Always filter by workflowId for isolation
-    if workflow_id:
-        filter_clauses.append({'term': {'workflowId': workflow_id}})
-    
-    if params.get('dataPartnerName'):
-        filter_clauses.append({'term': {'dataPartnerName': params['dataPartnerName']}})
-    if params.get('messageType'):
-        filter_clauses.append({'term': {'messageType': params['messageType']}})
-    
-    date_field = config.get('dateRangeField', 'ingestedAt')
-    date_days = config.get('dateRangeDays', 2)
-    filter_clauses.append({'range': {date_field: {'gte': f'now-{date_days}d', 'lte': 'now'}}})
-    
-    if params.get('fillerOrderNumber'):
-        must_clauses.append({'match': {'fillerOrderNumber': params['fillerOrderNumber']}})
-    if params.get('messageControlId'):
-        must_clauses.append({'term': {'messageControlId': params['messageControlId']}})
-    
-    return {
-        'query': {'bool': {'must': must_clauses or [{'match_all': {}}], 'filter': filter_clauses}},
-        'size': 100,
-    }
-`.trim();
-  }
 }

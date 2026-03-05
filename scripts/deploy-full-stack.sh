@@ -11,6 +11,7 @@ echo "=== Installing Dependencies ==="
 npm run install:all
 
 echo "=== Building Lambda Functions ==="
+cd "$ROOT_DIR/lambda-functions/workflow-lambda" && npm install && npm run build && cd "$ROOT_DIR"
 cd "$ROOT_DIR/lambda-functions/deployment-lambda" && npm run build && cd "$ROOT_DIR"
 cd "$ROOT_DIR/lambda-functions/websocket-lambda" && npm install && npm run build && cd "$ROOT_DIR"
 

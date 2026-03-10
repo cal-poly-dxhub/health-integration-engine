@@ -4,6 +4,7 @@ import * as apigatewayv2 from 'aws-cdk-lib/aws-apigatewayv2';
 import * as apigatewayv2Integrations from 'aws-cdk-lib/aws-apigatewayv2-integrations';
 import * as cognito from 'aws-cdk-lib/aws-cognito';
 import * as dynamodb from 'aws-cdk-lib/aws-dynamodb';
+import * as ec2 from 'aws-cdk-lib/aws-ec2';
 import * as lambda from 'aws-cdk-lib/aws-lambda';
 import * as logs from 'aws-cdk-lib/aws-logs';
 import * as iam from 'aws-cdk-lib/aws-iam';
@@ -25,12 +26,39 @@ export class WorkflowBuilderStack extends cdk.Stack {
   private readonly config: StackConfig;
   private workflowsTable: dynamodb.Table;
   public readonly frontendHosting: FrontendHosting;
+  private readonly vpc: ec2.Vpc;
+  private readonly lambdaSecurityGroup: ec2.SecurityGroup;
 
   constructor(scope: Construct, id: string, props?: cdk.StackProps) {
     super(scope, id, props);
     
     // Load configuration based on environment
     this.config = getConfig(process.env.NODE_ENV || 'development');
+
+    // Create VPC with NAT Gateway for Lambda functions
+    this.vpc = new ec2.Vpc(this, 'LambdaVpc', {
+      maxAzs: 2,
+      natGateways: 1,
+      subnetConfiguration: [
+        { name: 'public', subnetType: ec2.SubnetType.PUBLIC, cidrMask: 24 },
+        { name: 'private', subnetType: ec2.SubnetType.PRIVATE_WITH_EGRESS, cidrMask: 24 },
+      ],
+    });
+
+    // Free gateway endpoints for DynamoDB and S3
+    this.vpc.addGatewayEndpoint('DynamoDbEndpoint', {
+      service: ec2.GatewayVpcEndpointAwsService.DYNAMODB,
+    });
+    this.vpc.addGatewayEndpoint('S3Endpoint', {
+      service: ec2.GatewayVpcEndpointAwsService.S3,
+    });
+
+    // Security group for Lambda functions
+    this.lambdaSecurityGroup = new ec2.SecurityGroup(this, 'LambdaSecurityGroup', {
+      vpc: this.vpc,
+      description: 'Security group for Lambda functions in VPC',
+      allowAllOutbound: true,
+    });
 
     // Create API Gateway first (needed for Identity Pool permissions)
     this.api = this.createApiGateway();
@@ -1743,6 +1771,9 @@ export class WorkflowBuilderStack extends cdk.Stack {
       code,
       timeout: cdk.Duration.minutes(5),
       memorySize: 256,
+      vpc: this.vpc,
+      vpcSubnets: { subnetType: ec2.SubnetType.PRIVATE_WITH_EGRESS },
+      securityGroups: [this.lambdaSecurityGroup],
       environment: {
         NODE_ENV: 'production',
         USER_POOL_ID: this.userPool.userPoolId,

@@ -1715,7 +1715,7 @@ const ExecutionDetails: React.FC<ExecutionDetailsProps> = ({ execution: propExec
               <span className="status-icon">
                 {execution?.status === 'SUCCEEDED' ? '✓' :
                   execution?.status === 'FAILED' ? '✗' :
-                    execution?.status === 'RUNNING' ? '⟳' :
+                    execution?.status === 'RUNNING' ? '' :
                       execution?.status === 'TIMED_OUT' ? '⏱' :
                         execution?.status === 'ABORTED' ? '⏹' :
                           execution?.status === 'STOPPED' ? '⏹' :
@@ -1806,7 +1806,7 @@ const ExecutionDetails: React.FC<ExecutionDetailsProps> = ({ execution: propExec
                         <span className="status-icon">
                           {execution?.status === 'SUCCEEDED' ? '✓' :
                             execution?.status === 'FAILED' ? '✗' :
-                              execution?.status === 'RUNNING' ? '⟳' :
+                              execution?.status === 'RUNNING' ? '' :
                                 execution?.status === 'TIMED_OUT' ? '⏱' :
                                   execution?.status === 'ABORTED' ? '⏹' :
                                     execution?.status === 'STOPPED' ? '⏹' :
@@ -2130,7 +2130,7 @@ const ExecutionDetails: React.FC<ExecutionDetailsProps> = ({ execution: propExec
                       <span>Failed</span>
                     </div>
                     <div className="legend-item">
-                      <div className="legend-icon" style={{ backgroundColor: '#007bff' }}>⟳</div>
+                      <div className="legend-icon" style={{ backgroundColor: '#007bff' }}></div>
                       <span>Running</span>
                     </div>
                   </div>
@@ -2148,7 +2148,7 @@ const ExecutionDetails: React.FC<ExecutionDetailsProps> = ({ execution: propExec
                               getStepStatus(stepName) === 'failed' ? '#dc3545' : '#007bff'
                           }}>
                             {getStepStatus(stepName) === 'succeeded' ? '✓' :
-                              getStepStatus(stepName) === 'failed' ? '✗' : '⟳'}
+                              getStepStatus(stepName) === 'failed' ? '✗' : ''}
                           </div>
                           <div className="step-name">{stepName}</div>
                           <div className="step-status">{getStepStatus(stepName)}</div>
@@ -2208,7 +2208,7 @@ const ExecutionDetails: React.FC<ExecutionDetailsProps> = ({ execution: propExec
                                     getStepStatus(stepName) === 'failed' ? '#dc3545' : '#007bff'
                                 }}>
                                   {getStepStatus(stepName) === 'succeeded' ? '✓' :
-                                    getStepStatus(stepName) === 'failed' ? '✗' : '⟳'}
+                                    getStepStatus(stepName) === 'failed' ? '✗' : ''}
                                 </div>
                                 <span className="step-name-text">{stepName}</span>
                               </div>

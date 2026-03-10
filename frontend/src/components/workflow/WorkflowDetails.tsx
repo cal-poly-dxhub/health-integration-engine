@@ -36,8 +36,6 @@ const WorkflowDetails: React.FC<WorkflowDetailsProps> = ({ workflow: propWorkflo
     endDate: '',
     error: ''
   });
-  // Polling disabled - removed auto-refresh functionality
-  // const [pollingInterval, setPollingInterval] = useState<NodeJS.Timeout | null>(null);
   const [showDeleteModal, setShowDeleteModal] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
   const [showDeploymentModal, setShowDeploymentModal] = useState(false);
@@ -135,14 +133,6 @@ const WorkflowDetails: React.FC<WorkflowDetailsProps> = ({ workflow: propWorkflo
       );
       
       setExecutions(executionsWithErrors);
-      
-      // Auto-refresh disabled - no polling for running executions
-      // const hasRunningExecutions = executionsList.some(exec => exec.status === 'RUNNING');
-      // if (hasRunningExecutions && !pollingInterval) {
-      //   startPolling(stateMachineArn);
-      // } else if (!hasRunningExecutions && pollingInterval) {
-      //   stopPolling();
-      // }
     } catch (error) {
       console.error('Failed to load executions:', error);
       setExecutions([]);
@@ -164,30 +154,17 @@ const WorkflowDetails: React.FC<WorkflowDetailsProps> = ({ workflow: propWorkflo
     }
   }, [executionParam, executions]);
 
-  // Polling functions disabled - auto-refresh removed
-  // const startPolling = (stateMachineArn: string) => {
-  //   console.log('🔄 Starting real-time polling for executions');
-  //   const interval = setInterval(() => {
-  //     loadExecutions(stateMachineArn, true); // Silent reload
-  //   }, 3000); // Poll every 3 seconds
-  //   
-  //   setPollingInterval(interval);
-  // };
+  // Auto-refresh when there are running executions
+  useEffect(() => {
+    const hasRunning = executions.some(e => e.status === 'RUNNING');
+    if (!hasRunning || !workflow?.stepFunctionArn) return;
 
-  // const stopPolling = () => {
-  //   if (pollingInterval) {
-  //     console.log('⏹️ Stopping real-time polling');
-  //     clearInterval(pollingInterval);
-  //     setPollingInterval(null);
-  //   }
-  // };
+    const interval = setInterval(() => {
+      loadExecutions(workflow.stepFunctionArn!, true);
+    }, 5000);
 
-  // Cleanup polling on component unmount - disabled
-  // useEffect(() => {
-  //   return () => {
-  //     stopPolling();
-  //   };
-  // }, [pollingInterval]);
+    return () => clearInterval(interval);
+  }, [executions, workflow?.stepFunctionArn]);
 
   const handleEditWorkflow = () => {
     if (workflow) {
@@ -498,11 +475,11 @@ const WorkflowDetails: React.FC<WorkflowDetailsProps> = ({ workflow: propWorkflo
                   disabled={executionsLoading}
                   title="Refresh executions"
                 >
-                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                    <polyline points="23,4 23,10 17,10" />
-                    <polyline points="1,20 1,14 7,14" />
-                    <path d="m20.49,9a9,9 0 1 1 -2.13,-5.36l2.64,2.36" />
-                    <path d="m3.51,15a9,9 0 1 0 2.13,5.36l-2.64,-2.36" />
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                    <path d="M21.5 2v6h-6" />
+                    <path d="M2.5 22v-6h6" />
+                    <path d="M2 11.5a10 10 0 0 1 18.8-4.3L21.5 8" />
+                    <path d="M22 12.5a10 10 0 0 1-18.8 4.3L2.5 16" />
                   </svg>
                   {executionsLoading ? 'Refreshing...' : 'Refresh'}
                 </button>
@@ -611,7 +588,7 @@ const WorkflowDetails: React.FC<WorkflowDetailsProps> = ({ workflow: propWorkflo
                               <span className="status-icon">
                                 {execution.status === 'SUCCEEDED' ? '✓' :
                                   execution.status === 'FAILED' ? '✗' :
-                                    execution.status === 'RUNNING' ? '⟳' :
+                                    execution.status === 'RUNNING' ? '' :
                                       execution.status === 'TIMED_OUT' ? '⏱' :
                                         execution.status === 'ABORTED' ? '⏹' :
                                           execution.status === 'STOPPED' ? '⏹' :

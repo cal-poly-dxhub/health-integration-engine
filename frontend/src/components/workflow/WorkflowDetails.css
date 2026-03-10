@@ -647,7 +647,12 @@
 
 .status-badge.status-running .status-icon {
   color: #007bff;
-  animation: spin 2s linear infinite;
+  width: 14px;
+  height: 14px;
+  border: 2px solid #99d3ff;
+  border-top-color: #007bff;
+  border-radius: 50%;
+  animation: spin 1s linear infinite;
 }
 
 .status-badge.status-aborted,

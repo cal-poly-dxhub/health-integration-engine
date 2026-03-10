@@ -19,7 +19,7 @@ export const opensearchHandler: NodeHandler = (node, nextState, workflow, deploy
         'workflowId': deploymentContext?.workflowId,
         'executionId.$': '$$.Execution.Id',
         'document.$': '$.lambdaResult.Payload',
-        'metadata.$': '$.originalEvent.detail',
+        'metadata.$': '$.originalEvent',
       },
     },
     ResultPath: '$.opensearchResult',

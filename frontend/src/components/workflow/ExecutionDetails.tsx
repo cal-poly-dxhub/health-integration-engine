@@ -1729,7 +1729,21 @@ const ExecutionDetails: React.FC<ExecutionDetailsProps> = ({ execution: propExec
 
           <div className="execution-actions">
             <button
-              onClick={() => setShowNewExecutionModal(true)}
+              onClick={() => {
+                // Pre-populate with current execution's input if available
+                let inputToUse = '{}';
+                if (execution?.input) {
+                  inputToUse = execution.input;
+                } else {
+                  // Fallback: try to get input from ExecutionStarted event in history
+                  const startEvent = history.find(e => e.type === 'ExecutionStarted');
+                  if (startEvent?.executionStartedEventDetails?.input) {
+                    inputToUse = startEvent.executionStartedEventDetails.input;
+                  }
+                }
+                setNewExecutionInput(inputToUse);
+                setShowNewExecutionModal(true);
+              }}
               className="btn btn-primary"
               disabled={!execution?.stateMachineArn}
             >

@@ -965,7 +965,18 @@
     min-width: 0 !important;
     font-size: 0.65rem !important;
   }
-}/*
+}
+
+.loading-spinner.small {
+  width: 16px !important;
+  height: 16px !important;
+  border-width: 2px !important;
+  margin: 0 !important;
+  display: inline-block;
+  vertical-align: middle;
+}
+
+/*
  Spinner for loading states */
 .spinner {
   width: 16px;

@@ -27,7 +27,7 @@ const WorkflowDetails: React.FC<WorkflowDetailsProps> = ({ workflow: propWorkflo
   const [stateMachineDetails, setStateMachineDetails] = useState<StateMachineDetails | null>(null);
   const [executions, setExecutions] = useState<StepFunctionExecution[]>([]);
   const [selectedExecution, setSelectedExecution] = useState<StepFunctionExecution | null>(null);
-  const [loading, setLoading] = useState(false);
+  const [loading, setLoading] = useState(!!workflowId);
   const [executionsLoading, setExecutionsLoading] = useState(false);
   const [filters, setFilters] = useState({
     name: '',
@@ -54,15 +54,9 @@ const WorkflowDetails: React.FC<WorkflowDetailsProps> = ({ workflow: propWorkflo
     });
     
     if (workflowId && !propWorkflow) {
-      // Load workflow from ID
-      const foundWorkflow = workflows.find(w => w.id === workflowId);
-      console.log('🔍 WorkflowDetails: Found workflow in list:', !!foundWorkflow);
-      if (foundWorkflow) {
-        // Convert WorkflowMetadata to Workflow by loading full data
-        loadWorkflowDetails(workflowId);
-      }
+      loadWorkflowDetails(workflowId);
     }
-  }, [workflowId, workflows, propWorkflow]);
+  }, [workflowId, propWorkflow]);
 
   const loadWorkflowDetails = async (id: string) => {
     console.log('🔄 WorkflowDetails: Loading workflow details for ID:', id);

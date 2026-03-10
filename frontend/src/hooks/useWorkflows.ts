@@ -630,7 +630,7 @@ export const useWorkflows = (params: ListWorkflowsParams = {}) => {
 // Hook for managing individual workflow data
 export const useWorkflow = (workflowId?: string) => {
   const [workflow, setWorkflow] = useState<Workflow | null>(null);
-  const [loading, setLoading] = useState(false);
+  const [loading, setLoading] = useState(!!workflowId);
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
 

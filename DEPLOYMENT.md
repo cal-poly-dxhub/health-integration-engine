@@ -55,6 +55,18 @@ lambda:
   # ... and more
 ```
 
+### Build Lambda Functions
+
+```bash
+cd lambda-functions/workflow-lambda
+npm install
+npm run build
+```
+
+This compiles TypeScript into the `dist/` folder that CDK references as a Lambda asset. Without this step, `cdk deploy` will fail with a "Cannot find asset" error.
+
+The `deployment-lambda` is built automatically by CDK via its `build.sh` script, but `workflow-lambda` must be built manually before deploying.
+
 ### Deploying the Stack
 
 ```bash
@@ -66,6 +78,14 @@ The CDK will automatically:
 - Run `build.sh` for deployment-lambda (bundles all dependencies)
 - Deploy all 18 Lambda functions with proper dependencies
 - Configure API Gateway, Cognito, DynamoDB, Step Functions, etc.
+
+### Full Stack Deploy (Recommended)
+
+For a complete deployment including frontend, use the deploy script which handles all build steps automatically:
+
+```bash
+./scripts/deploy-full-stack.sh
+```
 
 ### Common Issues & Solutions
 

@@ -7,7 +7,7 @@
   flex-direction: column;
   background: #ffffff;
   font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-  overflow: hidden;
+  overflow-y: auto;
   position: relative;
 }
 
@@ -306,14 +306,12 @@
 
 /* Tab Content */
 .tab-content {
-  flex: 1;
   padding: 2rem;
-  overflow-y: auto;
+  min-height: 60vh;
 }
 
 /* Executions Tab */
 .executions-tab {
-  height: 100%;
   display: flex;
   flex-direction: column;
 }
@@ -483,7 +481,7 @@
 .executions-table-container {
   border: 1px solid #e2e8f0;
   border-radius: 0.5rem;
-  overflow: hidden;
+  overflow: auto;
   background: white;
 }
 

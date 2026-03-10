@@ -32,7 +32,7 @@ const NodeConfigModal: React.FC<NodeConfigModalProps> = ({
 
   // Fetch IAM roles when modal opens
   useEffect(() => {
-    if (isOpen && (node.type === 'lambda' || node.type === 's3' || node.type === 'database')) {
+    if (isOpen && node.type === 'lambda') {
       fetchIAMRoles(node.type);
     }
   }, [isOpen, node.type]);
@@ -61,9 +61,6 @@ const NodeConfigModal: React.FC<NodeConfigModalProps> = ({
             operation: (node.config as any)?.operation || 'read',
             folderPrefix: (node.config as any)?.folderPrefix || '',
             triggerOnUpload: (node.config as any)?.triggerOnUpload ?? true,
-            iamRole: (node.config as any)?.iamRole?.useExisting && (node.config as any)?.iamRole?.existingRoleArn
-              ? (node.config as any).iamRole 
-              : { useExisting: false, existingRoleArn: '' },
           });
           break;
         case 'database':
@@ -75,9 +72,6 @@ const NodeConfigModal: React.FC<NodeConfigModalProps> = ({
             query: (node.config as any)?.query || '',
             username: (node.config as any)?.username || '',
             password: (node.config as any)?.password || '',
-            iamRole: (node.config as any)?.iamRole?.useExisting && (node.config as any)?.iamRole?.existingRoleArn
-              ? (node.config as any).iamRole 
-              : { useExisting: false, existingRoleArn: '' },
           });
           break;
         case 'lambda':
@@ -248,8 +242,6 @@ const NodeConfigModal: React.FC<NodeConfigModalProps> = ({
         <small className="help-text">Optional folder prefix to watch. Leave empty to watch entire bucket. Include trailing slash.</small>
       </div>
 
-      {renderIAMRoleSelector('s3', 'states.amazonaws.com')}
-
       <div className="trigger-info">
         <h4>🔄 Auto-Trigger Enabled</h4>
         <p>
@@ -352,8 +344,6 @@ const NodeConfigModal: React.FC<NodeConfigModalProps> = ({
         />
         {errors.query && <span className="error-text">{errors.query}</span>}
       </div>
-
-      {renderIAMRoleSelector('database', 'states.amazonaws.com')}
     </div>
   );
 

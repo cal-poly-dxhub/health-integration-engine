@@ -393,6 +393,14 @@ export class CloudFormationTemplateGenerator {
       }
       
       const stateDefinition = handler(node, nextState, workflow, deploymentContext);
+      
+      // If the handler returned additional states (e.g., Choice with sub-states), merge them
+      if (stateDefinition._additionalStates) {
+        const additionalStates = stateDefinition._additionalStates;
+        delete stateDefinition._additionalStates;
+        Object.assign(definition.States, additionalStates);
+      }
+      
       definition.States[stateName] = stateDefinition;
       
       console.log(`    ✅ Generated state definition:`, JSON.stringify(stateDefinition, null, 2));
@@ -1224,8 +1232,8 @@ def lambda_handler(event, context):
         **document,
         'workflowId': workflow_id,
         'executionId': execution_id,
-        's3Bucket': metadata.get('bucket', {}).get('name', ''),
-        's3Key': metadata.get('object', {}).get('key', ''),
+        's3Bucket': metadata.get('detail', {}).get('bucket', {}).get('name', ''),
+        's3Key': metadata.get('detail', {}).get('object', {}).get('key', ''),
         'outputS3Bucket': output_s3.get('bucket', ''),
         'outputS3Key': output_s3.get('key', ''),
         'ingestedAt': datetime.utcnow().isoformat() + 'Z',

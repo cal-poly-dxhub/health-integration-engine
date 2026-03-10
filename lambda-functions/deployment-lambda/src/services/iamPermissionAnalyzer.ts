@@ -109,7 +109,7 @@ export class IAMPermissionAnalyzer {
     const objectArn = `arn:aws:s3:::${bucketName}/${objectKey}`;
 
     const operationPermissions: Record<string, string[]> = {
-      read: ['s3:GetObject', 's3:GetObjectVersion'],
+      read: ['s3:GetObject', 's3:GetObjectVersion', 's3:ListBucket'],
       write: ['s3:PutObject', 's3:PutObjectAcl'],
       list: ['s3:ListBucket'],
       delete: ['s3:DeleteObject'],
@@ -117,8 +117,9 @@ export class IAMPermissionAnalyzer {
 
     const actions = operationPermissions[operation] || operationPermissions.write;
     
-    // For list operations, we need bucket permissions; for others, we need object permissions
-    const resources = operation === 'list' ? [bucketArn] : [objectArn];
+    // For read/list operations, we need both bucket and object permissions
+    const resources = operation === 'list' ? [bucketArn] : 
+                      operation === 'read' ? [bucketArn, objectArn] : [objectArn];
     
     return { actions, resources };
   }

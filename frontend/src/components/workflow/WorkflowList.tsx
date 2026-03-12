@@ -1,5 +1,6 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { WorkflowMetadata } from '../../types/workflow';
+import OpenSearchPanel from './OpenSearchPanel';
 // import WorkflowCard from './WorkflowCard';
 import './WorkflowList.css';
 
@@ -38,6 +39,22 @@ const WorkflowList: React.FC<WorkflowListProps> = ({
   const [sortBy, setSortBy] = useState<'name' | 'created' | 'modified'>('modified');
   const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('desc');
   const [filterStatus, setFilterStatus] = useState<'all' | 'draft' | 'deployed'>('all');
+  const [showGlobalSearch, setShowGlobalSearch] = useState(false);
+
+  // Cmd/Ctrl+K to open global search
+  useEffect(() => {
+    const onKeyDown = (e: KeyboardEvent) => {
+      if ((e.metaKey || e.ctrlKey) && e.key === 'k') {
+        e.preventDefault();
+        setShowGlobalSearch(prev => !prev);
+      }
+      if (e.key === 'Escape' && showGlobalSearch) {
+        setShowGlobalSearch(false);
+      }
+    };
+    window.addEventListener('keydown', onKeyDown);
+    return () => window.removeEventListener('keydown', onKeyDown);
+  }, [showGlobalSearch]);
 
   // Filter and sort workflows
   const filteredAndSortedWorkflows = useMemo(() => {
@@ -184,6 +201,18 @@ const WorkflowList: React.FC<WorkflowListProps> = ({
               Sign Out
             </button>
           </div>
+          <button
+            className="search-messages-btn"
+            onClick={() => setShowGlobalSearch(true)}
+            title="Search across all workflows (⌘K)"
+          >
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+              <circle cx="11" cy="11" r="8" />
+              <line x1="21" y1="21" x2="16.65" y2="16.65" />
+            </svg>
+            Search Messages
+            <kbd className="kbd-shortcut">⌘K</kbd>
+          </button>
           <button
             onClick={onCreateNew}
             className="create-workflow-btn"
@@ -456,6 +485,23 @@ const WorkflowList: React.FC<WorkflowListProps> = ({
           </div>
         )}
       </div>
+
+      {/* Global Search Modal */}
+      {showGlobalSearch && (
+        <div className="global-search-overlay" onClick={() => setShowGlobalSearch(false)}>
+          <div className="global-search-modal" onClick={(e) => e.stopPropagation()}>
+            <div className="global-search-modal-header">
+              <h2>🔍 Search Across All Workflows</h2>
+              <button className="global-search-close" onClick={() => setShowGlobalSearch(false)} aria-label="Close search">
+                ✕
+              </button>
+            </div>
+            <div className="global-search-modal-body">
+              <OpenSearchPanel />
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

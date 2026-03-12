@@ -3573,3 +3573,97 @@
 .execution-actions .btn {
   white-space: nowrap;
 }
+
+/* Header Search Button */
+.header-search-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  background: rgba(255, 255, 255, 0.15);
+  border: 1px solid rgba(255, 255, 255, 0.3);
+  border-radius: 6px;
+  padding: 5px 14px;
+  font-size: 13px;
+  color: #fff;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.header-search-btn:hover {
+  background: rgba(255, 255, 255, 0.25);
+  border-color: rgba(255, 255, 255, 0.5);
+}
+
+.header-kbd-hint {
+  background: rgba(255, 255, 255, 0.2);
+  border: 1px solid rgba(255, 255, 255, 0.3);
+  border-radius: 4px;
+  padding: 1px 5px;
+  font-size: 11px;
+  font-family: inherit;
+  color: rgba(255, 255, 255, 0.8);
+}
+
+/* Global Search Modal (scoped inside execution-details for z-index) */
+.execution-details .global-search-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.5);
+  z-index: 2000;
+  display: flex;
+  justify-content: center;
+  align-items: flex-start;
+  padding-top: 80px;
+}
+
+.execution-details .global-search-modal {
+  background: #fff;
+  border-radius: 12px;
+  width: 90%;
+  max-width: 960px;
+  max-height: calc(100vh - 120px);
+  display: flex;
+  flex-direction: column;
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+  animation: globalSearchSlideIn 0.2s ease-out;
+}
+
+@keyframes globalSearchSlideIn {
+  from { opacity: 0; transform: translateY(-20px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+.execution-details .global-search-modal-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 16px 24px;
+  border-bottom: 1px solid #e5e7eb;
+}
+
+.execution-details .global-search-modal-header h2 {
+  margin: 0;
+  font-size: 18px;
+  color: #111827;
+}
+
+.execution-details .global-search-close {
+  background: none;
+  border: none;
+  font-size: 20px;
+  color: #6b7280;
+  cursor: pointer;
+  padding: 4px 8px;
+  border-radius: 4px;
+}
+
+.execution-details .global-search-close:hover {
+  background: #f3f4f6;
+  color: #111827;
+}
+
+.execution-details .global-search-modal-body {
+  padding: 20px 24px;
+  overflow-y: auto;
+  flex: 1;
+}

@@ -39,6 +39,22 @@ export default function Dashboard({ onSignOut, onEditWorkflow, onViewWorkflow }:
   const [deleteSuccess, setDeleteSuccess] = useState<string | null>(null);
   const [showDeletionProgressModal, setShowDeletionProgressModal] = useState(false);
   const [deletionId, setDeletionId] = useState<string>('');
+  const [showGlobalSearch, setShowGlobalSearch] = useState(false);
+
+  // Cmd/Ctrl+K to open global search
+  useEffect(() => {
+    const onKeyDown = (e: KeyboardEvent) => {
+      if ((e.metaKey || e.ctrlKey) && e.key === 'k') {
+        e.preventDefault();
+        setShowGlobalSearch(prev => !prev);
+      }
+      if (e.key === 'Escape' && showGlobalSearch) {
+        setShowGlobalSearch(false);
+      }
+    };
+    window.addEventListener('keydown', onKeyDown);
+    return () => window.removeEventListener('keydown', onKeyDown);
+  }, [showGlobalSearch]);
 
   useEffect(() => {
     const loadUser = async () => {
@@ -197,6 +213,14 @@ export default function Dashboard({ onSignOut, onEditWorkflow, onViewWorkflow }:
               </h1>
             </div>
             <div className="nav-user-section">
+              <button
+                className="nav-search-btn"
+                onClick={() => setShowGlobalSearch(true)}
+                title="Search across all workflows (⌘K)"
+              >
+                🔍 Search Messages
+                <kbd className="kbd-hint">⌘K</kbd>
+              </button>
               <span className="nav-user-info">Welcome, {user?.email}</span>
               <button onClick={handleSignOut} className="nav-button">
                 Sign Out
@@ -372,6 +396,23 @@ export default function Dashboard({ onSignOut, onEditWorkflow, onViewWorkflow }:
             }
           }}
         />
+      )}
+
+      {/* Global Search Modal */}
+      {showGlobalSearch && (
+        <div className="global-search-overlay" onClick={() => setShowGlobalSearch(false)}>
+          <div className="global-search-modal" onClick={(e) => e.stopPropagation()}>
+            <div className="global-search-modal-header">
+              <h2>🔍 Search Across All Workflows</h2>
+              <button className="global-search-close" onClick={() => setShowGlobalSearch(false)} aria-label="Close search">
+                ✕
+              </button>
+            </div>
+            <div className="global-search-modal-body">
+              <OpenSearchPanel />
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );

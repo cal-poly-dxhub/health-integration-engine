@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
 import { Workflow } from '../../types/workflow';
 import { useWorkflows } from '../../hooks/useWorkflows';
@@ -41,6 +41,55 @@ const WorkflowDetails: React.FC<WorkflowDetailsProps> = ({ workflow: propWorkflo
   const [showDeploymentModal, setShowDeploymentModal] = useState(false);
   const [deploymentId, setDeploymentId] = useState<string>('');
   const [detailsCollapsed, setDetailsCollapsed] = useState(false);
+  const tableRef = useRef<HTMLTableElement>(null);
+  const [colWidthsInitialized, setColWidthsInitialized] = useState(false);
+
+  // Convert percentage widths to pixels on mount so resizing is stable
+  useEffect(() => {
+    const table = tableRef.current;
+    if (!table || colWidthsInitialized) return;
+    const cols = table.querySelectorAll('colgroup col') as NodeListOf<HTMLElement>;
+    const ths = table.querySelectorAll('thead th') as NodeListOf<HTMLElement>;
+    if (ths.length === 0) return;
+    cols.forEach((col, i) => {
+      col.style.width = `${ths[i].offsetWidth}px`;
+    });
+    table.style.width = `${table.offsetWidth}px`;
+    setColWidthsInitialized(true);
+  });
+
+  const handleResizeStart = useCallback((index: number, e: React.MouseEvent) => {
+    e.preventDefault();
+    const table = tableRef.current;
+    if (!table) return;
+    const cols = table.querySelectorAll('colgroup col') as NodeListOf<HTMLElement>;
+    const th = table.querySelectorAll('thead th')[index] as HTMLElement;
+    if (!cols[index] || !th) return;
+
+    const startX = e.clientX;
+    const startWidth = th.offsetWidth;
+    const startTableWidth = table.offsetWidth;
+
+    document.body.style.cursor = 'col-resize';
+    document.body.style.userSelect = 'none';
+
+    const onMouseMove = (ev: MouseEvent) => {
+      const diff = ev.clientX - startX;
+      const newWidth = Math.max(60, startWidth + diff);
+      cols[index].style.width = `${newWidth}px`;
+      table.style.width = `${startTableWidth + (newWidth - startWidth)}px`;
+    };
+
+    const onMouseUp = () => {
+      document.body.style.cursor = '';
+      document.body.style.userSelect = '';
+      document.removeEventListener('mousemove', onMouseMove);
+      document.removeEventListener('mouseup', onMouseUp);
+    };
+
+    document.addEventListener('mousemove', onMouseMove);
+    document.addEventListener('mouseup', onMouseUp);
+  }, []);
 
 
 
@@ -511,18 +560,31 @@ const WorkflowDetails: React.FC<WorkflowDetailsProps> = ({ workflow: propWorkflo
               </div>
             ) : (
               <div className="executions-table-container">
-                <table className="executions-table">
+                <table className="executions-table" ref={tableRef}>
+                  <colgroup>
+                    <col style={{ width: '25%' }} />
+                    <col style={{ width: '12%' }} />
+                    <col style={{ width: '18%' }} />
+                    <col style={{ width: '18%' }} />
+                    <col style={{ width: '10%' }} />
+                    <col style={{ width: '17%' }} />
+                  </colgroup>
                   <thead>
                     <tr>
-                      <th>Name</th>
-                      <th>Status</th>
-                      <th>Start Time</th>
-                      <th>End Time</th>
-                      <th>Duration</th>
-                      <th>Error</th>
+                      {['Name', 'Status', 'Start Time', 'End Time', 'Duration', 'Error'].map((label, i) => (
+                        <th key={label}>
+                          {label}
+                          <span
+                            className="col-resize-handle"
+                            onMouseDown={(e) => handleResizeStart(i, e)}
+                          />
+                        </th>
+                      ))}
                     </tr>
-                    <tr className="filter-row">
-                      <th>
+                  </thead>
+                  <tbody>
+                    <tr className="executions-filter-row">
+                      <td>
                         <input
                           type="text"
                           placeholder="Filter name..."
@@ -530,8 +592,8 @@ const WorkflowDetails: React.FC<WorkflowDetailsProps> = ({ workflow: propWorkflo
                           onChange={(e) => setFilters(f => ({ ...f, name: e.target.value }))}
                           className="filter-input"
                         />
-                      </th>
-                      <th>
+                      </td>
+                      <td>
                         <select
                           value={filters.status}
                           onChange={(e) => setFilters(f => ({ ...f, status: e.target.value }))}
@@ -544,25 +606,25 @@ const WorkflowDetails: React.FC<WorkflowDetailsProps> = ({ workflow: propWorkflo
                           <option value="TIMED_OUT">Timed Out</option>
                           <option value="ABORTED">Aborted</option>
                         </select>
-                      </th>
-                      <th>
+                      </td>
+                      <td>
                         <input
                           type="date"
                           value={filters.startDate}
                           onChange={(e) => setFilters(f => ({ ...f, startDate: e.target.value }))}
                           className="filter-input"
                         />
-                      </th>
-                      <th>
+                      </td>
+                      <td>
                         <input
                           type="date"
                           value={filters.endDate}
                           onChange={(e) => setFilters(f => ({ ...f, endDate: e.target.value }))}
                           className="filter-input"
                         />
-                      </th>
-                      <th></th>
-                      <th>
+                      </td>
+                      <td></td>
+                      <td>
                         <input
                           type="text"
                           placeholder="Filter error..."
@@ -570,10 +632,8 @@ const WorkflowDetails: React.FC<WorkflowDetailsProps> = ({ workflow: propWorkflo
                           onChange={(e) => setFilters(f => ({ ...f, error: e.target.value }))}
                           className="filter-input"
                         />
-                      </th>
+                      </td>
                     </tr>
-                  </thead>
-                  <tbody>
                     {filteredExecutions.map((execution, index) => {
                       // Debug logging for execution object
                       if (index === 0) {

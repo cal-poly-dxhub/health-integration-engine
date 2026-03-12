@@ -506,7 +506,8 @@
 .executions-table-container {
   border: 1px solid #e2e8f0;
   border-radius: 0.5rem;
-  overflow: auto;
+  overflow-x: auto;
+  overflow-y: visible;
   background: white;
 }
 
@@ -514,6 +515,7 @@
   width: 100%;
   border-collapse: collapse;
   font-size: 0.875rem;
+  table-layout: fixed;
 }
 
 .executions-table thead {
@@ -527,6 +529,26 @@
   font-weight: 600;
   color: #374151;
   border-right: 1px solid #f1f5f9;
+  position: relative;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.col-resize-handle {
+  position: absolute;
+  right: 0;
+  top: 0;
+  bottom: 0;
+  width: 5px;
+  cursor: col-resize;
+  background: transparent;
+  z-index: 1;
+}
+
+.col-resize-handle:hover,
+.col-resize-handle:active {
+  background: #3b82f6;
 }
 
 .executions-table th:last-child {
@@ -550,8 +572,11 @@
   padding: 0.75rem 1rem;
   border-right: 1px solid #f1f5f9;
   vertical-align: middle;
-  color: #374151; /* Ensure text is visible */
+  color: #374151;
   background-color: transparent;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .execution-row td:last-child {
@@ -559,32 +584,28 @@
 }
 
 .execution-name {
-  min-width: 200px;
+  /* no min-width — let table-layout: fixed handle sizing */
 }
 
 /* Status column specific styling */
 .executions-table th:nth-child(2),
 .executions-table td:nth-child(2) {
-  width: 150px !important;
-  min-width: 150px !important;
-  max-width: 150px !important;
   text-align: center;
 }
 
 .executions-table td:nth-child(2) {
-  padding: 0.75rem 0.25rem !important;
+  padding: 0.75rem 0.25rem;
 }
 
 /* Ensure status badges in table have proper sizing */
 .executions-table .status-badge {
-  min-width: 130px !important;
-  width: 130px !important;
-  max-width: 130px !important;
-  padding: 0.5rem 0.75rem !important;
-  font-size: 0.7rem !important;
-  white-space: nowrap !important;
-  overflow: hidden !important;
-  text-overflow: ellipsis !important;
+  padding: 0.5rem 0.75rem;
+  font-size: 0.7rem;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  display: inline-block;
+  max-width: 100%;
 }
 
 .execution-link {
@@ -595,6 +616,11 @@
   text-decoration: none;
   padding: 0;
   font-size: 0.875rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  display: block;
+  max-width: 100%;
 }
 
 .execution-link:hover {
@@ -908,10 +934,11 @@
 }
 
 /* Filter Row Styles */
-.filter-row th {
+.executions-filter-row td {
   padding: 0.5rem;
   background-color: #f8fafc;
   border-bottom: 2px solid #e2e8f0;
+  border-right: 1px solid #f1f5f9;
 }
 
 .filter-input {
@@ -921,6 +948,7 @@
   border-radius: 0.375rem;
   font-size: 0.875rem;
   background-color: white;
+  box-sizing: border-box;
 }
 
 .filter-input:focus {
@@ -937,6 +965,7 @@
   font-size: 0.875rem;
   background-color: white;
   cursor: pointer;
+  box-sizing: border-box;
 }
 
 .filter-select:focus {

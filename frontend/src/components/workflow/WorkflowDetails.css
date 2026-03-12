@@ -163,9 +163,33 @@
 }
 
 .workflow-title-section {
-  display: block;
+  display: flex;
+  align-items: center;
+  gap: 1rem;
   margin-bottom: 2rem;
   width: 100%;
+}
+
+.workflow-details-header.collapsed .workflow-title-section {
+  margin-bottom: 0;
+}
+
+.toggle-details-btn {
+  background: none;
+  border: 1px solid #d1d5db;
+  border-radius: 6px;
+  padding: 4px 12px;
+  font-size: 13px;
+  color: #6b7280;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: all 0.15s ease;
+}
+
+.toggle-details-btn:hover {
+  background: #f3f4f6;
+  color: #374151;
+  border-color: #9ca3af;
 }
 
 .workflow-title {
@@ -308,6 +332,7 @@
 .tab-content {
   padding: 2rem;
   min-height: 60vh;
+  flex: 1;
 }
 
 /* Executions Tab */

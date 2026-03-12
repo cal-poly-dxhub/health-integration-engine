@@ -1990,15 +1990,15 @@ def build_query(params, config):
     filters = []
     
     if params.get('searchText'):
-        must.append({'query_string': {'query': f"*{params['searchText']}*"}})
+        must.append({'multi_match': {'query': params['searchText'], 'fields': ['*'], 'fuzziness': 'AUTO'}})
     if params.get('dataPartnerName'):
-        filters.append({'term': {'dataPartnerName.keyword': params['dataPartnerName']}})
+        must.append({'match': {'dataPartnerName': {'query': params['dataPartnerName'], 'fuzziness': 'AUTO'}}})
     if params.get('messageType'):
-        filters.append({'term': {'Message_Type.keyword': params['messageType']}})
+        must.append({'match': {'Message_Type': {'query': params['messageType'], 'fuzziness': 'AUTO'}}})
     if params.get('messageControlId'):
-        filters.append({'term': {'Control_ID.keyword': params['messageControlId']}})
+        must.append({'match': {'Control_ID': {'query': params['messageControlId'], 'fuzziness': 'AUTO'}}})
     if params.get('fillerOrderNumber'):
-        must.append({'match': {'fillerOrderNumber': params['fillerOrderNumber']}})
+        must.append({'match': {'fillerOrderNumber': {'query': params['fillerOrderNumber'], 'fuzziness': 'AUTO'}}})
     if params.get('workflowId'):
         filters.append({'term': {'workflowId.keyword': params['workflowId']}})
     

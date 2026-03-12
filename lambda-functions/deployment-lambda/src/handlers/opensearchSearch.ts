@@ -119,28 +119,22 @@ function buildSearchQuery(params: SearchRequest['query'], config?: SearchRequest
   const mustClauses: any[] = [];
   const filterClauses: any[] = [];
 
-  // General text search across all fields
   if (params.searchText) {
-    mustClauses.push({ query_string: { query: `*${params.searchText}*` } });
+    mustClauses.push({ multi_match: { query: params.searchText, fields: ['*'], fuzziness: 'AUTO' } });
   }
-
-  // Metadata filters (exact match)
   if (params.dataPartnerName) {
-    filterClauses.push({ term: { dataPartnerName: params.dataPartnerName } });
+    mustClauses.push({ match: { dataPartnerName: { query: params.dataPartnerName, fuzziness: 'AUTO' } } });
   }
   if (params.messageType) {
-    filterClauses.push({ term: { messageType: params.messageType } });
+    mustClauses.push({ match: { messageType: { query: params.messageType, fuzziness: 'AUTO' } } });
   }
   if (params.messageControlId) {
-    filterClauses.push({ term: { messageControlId: params.messageControlId } });
+    mustClauses.push({ match: { messageControlId: { query: params.messageControlId, fuzziness: 'AUTO' } } });
   }
-
-  // Text search for filler order number
   if (params.fillerOrderNumber) {
-    mustClauses.push({ match: { fillerOrderNumber: params.fillerOrderNumber } });
+    mustClauses.push({ match: { fillerOrderNumber: { query: params.fillerOrderNumber, fuzziness: 'AUTO' } } });
   }
 
-  // Date range filter
   const dateField = config?.dateRangeField || 'ingestedAt';
   const dateDays = config?.dateRangeDays || 2;
   filterClauses.push({

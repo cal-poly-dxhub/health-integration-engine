@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { stepFunctionsService, ExecutionHistoryEvent, StepFunctionExecution } from '../../services/stepFunctions';
+import OpenSearchPanel from './OpenSearchPanel';
 import './ExecutionDetails.css';
 import { error } from 'console';
 import { ms } from 'zod/v4/locales';
@@ -798,6 +799,7 @@ const ExecutionDetails: React.FC<ExecutionDetailsProps> = ({ execution: propExec
   const [activeGraphTab, setActiveGraphTab] = useState<'graph' | 'table'>('graph');
   const [stateMachineDefinition, setStateMachineDefinition] = useState<any>(null);
   const [definitionLoading, setDefinitionLoading] = useState(false);
+  const [showGlobalSearch, setShowGlobalSearch] = useState(false);
   const [definitionError, setDefinitionError] = useState<string | null>(null);
   const [showNewExecutionModal, setShowNewExecutionModal] = useState(false);
   const [newExecutionInput, setNewExecutionInput] = useState('{}');
@@ -1696,6 +1698,21 @@ const ExecutionDetails: React.FC<ExecutionDetailsProps> = ({ execution: propExec
 
   const uniqueEventTypes = Array.from(new Set(history.map(e => e.type))).sort();
 
+  // Cmd/Ctrl+K to open global search
+  useEffect(() => {
+    const onKeyDown = (e: KeyboardEvent) => {
+      if ((e.metaKey || e.ctrlKey) && e.key === 'k') {
+        e.preventDefault();
+        setShowGlobalSearch(prev => !prev);
+      }
+      if (e.key === 'Escape' && showGlobalSearch) {
+        setShowGlobalSearch(false);
+      }
+    };
+    window.addEventListener('keydown', onKeyDown);
+    return () => window.removeEventListener('keydown', onKeyDown);
+  }, [showGlobalSearch]);
+
   return (
     <div className="execution-details">
       {toast && (
@@ -1707,6 +1724,14 @@ const ExecutionDetails: React.FC<ExecutionDetailsProps> = ({ execution: propExec
       <div className="execution-header">
         <div className="execution-title">
           <h2>Execution Details</h2>
+          <button
+            className="header-search-btn"
+            onClick={() => setShowGlobalSearch(true)}
+            title="Search across all workflows (⌘K)"
+          >
+            🔍 Search Messages
+            <kbd className="header-kbd-hint">⌘K</kbd>
+          </button>
         </div>
 
         <div className="execution-status">
@@ -2629,6 +2654,23 @@ const ExecutionDetails: React.FC<ExecutionDetailsProps> = ({ execution: propExec
               >
                 {isStartingExecution ? 'Starting...' : 'Start execution'}
               </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Global Search Modal */}
+      {showGlobalSearch && (
+        <div className="global-search-overlay" onClick={() => setShowGlobalSearch(false)}>
+          <div className="global-search-modal" onClick={(e) => e.stopPropagation()}>
+            <div className="global-search-modal-header">
+              <h2>🔍 Search Across All Workflows</h2>
+              <button className="global-search-close" onClick={() => setShowGlobalSearch(false)} aria-label="Close search">
+                ✕
+              </button>
+            </div>
+            <div className="global-search-modal-body">
+              <OpenSearchPanel />
             </div>
           </div>
         </div>

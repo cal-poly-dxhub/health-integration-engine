@@ -41,6 +41,15 @@ const OpenSearchPanel: React.FC<OpenSearchPanelProps> = ({
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [totalHits, setTotalHits] = useState(0);
+  const [expandedRows, setExpandedRows] = useState<Set<number>>(new Set());
+
+  const toggleRow = (idx: number) => {
+    setExpandedRows(prev => {
+      const next = new Set(prev);
+      next.has(idx) ? next.delete(idx) : next.add(idx);
+      return next;
+    });
+  };
 
   const handleSearch = async () => {
     setLoading(true);
@@ -191,6 +200,7 @@ const OpenSearchPanel: React.FC<OpenSearchPanelProps> = ({
             <table className="results-table">
               <thead>
                 <tr>
+                  <th style={{ width: '40px' }}></th>
                   <th>Execution</th>
                   <th>Control ID</th>
                   <th>Type</th>
@@ -200,25 +210,47 @@ const OpenSearchPanel: React.FC<OpenSearchPanelProps> = ({
               </thead>
               <tbody>
                 {results.map((result, idx) => (
-                  <tr key={result.messageControlId || idx}>
-                    <td>
-                      {result.executionId ? (
-                        <Link 
-                          to={`/workflow/${result.workflowId || workflowId}?execution=${result.executionId}`}
-                          className="execution-link"
-                          title={result.executionId}
+                  <React.Fragment key={result.messageControlId || idx}>
+                    <tr className={expandedRows.has(idx) ? 'row-expanded' : ''}>
+                      <td>
+                        <button
+                          className="expand-toggle"
+                          onClick={() => toggleRow(idx)}
+                          aria-expanded={expandedRows.has(idx)}
+                          aria-label={expandedRows.has(idx) ? 'Collapse full message' : 'Expand full message'}
                         >
-                          {result.executionId.split(':').pop()?.slice(0, 12)}...
-                        </Link>
-                      ) : '-'}
-                    </td>
-                    <td className="mono">{result.Control_ID || result.messageControlId || '-'}</td>
-                    <td>{result.Message_Type || result.messageType || '-'}</td>
-                    <td className="s3-location" title={result.s3Bucket && result.s3Key ? `${result.s3Bucket}/${result.s3Key}` : ''}>
-                      {result.s3Bucket && result.s3Key ? `${result.s3Bucket}/${result.s3Key}` : '-'}
-                    </td>
-                    <td>{result.ingestedAt ? new Date(result.ingestedAt).toLocaleString() : '-'}</td>
-                  </tr>
+                          {expandedRows.has(idx) ? '▾' : '▸'}
+                        </button>
+                      </td>
+                      <td>
+                        {result.executionId ? (
+                          <Link 
+                            to={`/workflow/${result.workflowId || workflowId}?execution=${result.executionId}`}
+                            className="execution-link"
+                            title={result.executionId}
+                          >
+                            {result.executionId.split(':').pop()?.slice(0, 12)}...
+                          </Link>
+                        ) : '-'}
+                      </td>
+                      <td className="mono">{result.Control_ID || result.messageControlId || '-'}</td>
+                      <td>{result.Message_Type || result.messageType || '-'}</td>
+                      <td className="s3-location" title={result.s3Bucket && result.s3Key ? `${result.s3Bucket}/${result.s3Key}` : ''}>
+                        {result.s3Bucket && result.s3Key ? `${result.s3Bucket}/${result.s3Key}` : '-'}
+                      </td>
+                      <td>{result.ingestedAt ? new Date(result.ingestedAt).toLocaleString() : '-'}</td>
+                    </tr>
+                    {expandedRows.has(idx) && (
+                      <tr className="expanded-row">
+                        <td colSpan={6}>
+                          <div className="full-message-container">
+                            <div className="full-message-header">Full Document</div>
+                            <pre className="full-message-content">{JSON.stringify(result, null, 2)}</pre>
+                          </div>
+                        </td>
+                      </tr>
+                    )}
+                  </React.Fragment>
                 ))}
               </tbody>
             </table>

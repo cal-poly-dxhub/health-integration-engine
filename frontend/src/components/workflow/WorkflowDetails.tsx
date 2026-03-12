@@ -40,6 +40,22 @@ const WorkflowDetails: React.FC<WorkflowDetailsProps> = ({ workflow: propWorkflo
   const [isDeleting, setIsDeleting] = useState(false);
   const [showDeploymentModal, setShowDeploymentModal] = useState(false);
   const [deploymentId, setDeploymentId] = useState<string>('');
+  const [showGlobalSearch, setShowGlobalSearch] = useState(false);
+
+  // Cmd/Ctrl+K to open global search
+  useEffect(() => {
+    const onKeyDown = (e: KeyboardEvent) => {
+      if ((e.metaKey || e.ctrlKey) && e.key === 'k') {
+        e.preventDefault();
+        setShowGlobalSearch(prev => !prev);
+      }
+      if (e.key === 'Escape' && showGlobalSearch) {
+        setShowGlobalSearch(false);
+      }
+    };
+    window.addEventListener('keydown', onKeyDown);
+    return () => window.removeEventListener('keydown', onKeyDown);
+  }, [showGlobalSearch]);
 
 
 
@@ -388,6 +404,13 @@ const WorkflowDetails: React.FC<WorkflowDetailsProps> = ({ workflow: propWorkflo
         
         {/* Action Buttons - In banner */}
         <div className="workflow-actions">
+          <button
+            className="action-btn search-btn"
+            onClick={() => setShowGlobalSearch(true)}
+            title="Search across all workflows (⌘K)"
+          >
+            🔍 Search Messages
+          </button>
           <button onClick={handleEditWorkflow} className="action-btn edit-btn">
             Edit
           </button>
@@ -717,6 +740,23 @@ const WorkflowDetails: React.FC<WorkflowDetailsProps> = ({ workflow: propWorkflo
             }}
           />
         </>
+      )}
+
+      {/* Global Search Modal */}
+      {showGlobalSearch && (
+        <div className="global-search-overlay" onClick={() => setShowGlobalSearch(false)}>
+          <div className="global-search-modal" onClick={(e) => e.stopPropagation()}>
+            <div className="global-search-modal-header">
+              <h2>🔍 Search Across All Workflows</h2>
+              <button className="global-search-close" onClick={() => setShowGlobalSearch(false)} aria-label="Close search">
+                ✕
+              </button>
+            </div>
+            <div className="global-search-modal-body">
+              <OpenSearchPanel />
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );

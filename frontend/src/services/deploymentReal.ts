@@ -10,6 +10,17 @@ export interface DeploymentRequest {
     enableLogging?: boolean;
     enableXRay?: boolean;
     tags?: Record<string, string>;
+    vpcConfig?: {
+      mode: 'none' | 'existing' | 'new';
+      existing?: {
+        vpcId: string;
+        subnetIds: string[];
+        securityGroupIds: string[];
+      };
+      new?: {
+        cidrBlock?: string;
+      };
+    };
   };
 }
 

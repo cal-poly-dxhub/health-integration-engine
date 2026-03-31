@@ -130,6 +130,7 @@ export const handler = async (
           DeploymentId: deploymentId,
           ...deploymentRequest.configuration?.tags,
         },
+        vpcConfig: deploymentRequest.configuration?.vpcConfig,
       },
       resources: {
         lambdaFunctions: [],

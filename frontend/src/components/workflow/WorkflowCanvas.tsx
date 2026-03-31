@@ -11,6 +11,7 @@ import NodeComponent from './NodeComponent';
 import NodeSidebar from './NodeSidebar';
 import NodeConfigModal from './NodeConfigModal';
 import DeploymentStatusModal from './DeploymentStatusModal';
+import VpcConfigModal, { VpcConfig } from './VpcConfigModal';
 import ConnectionsRenderer from './ConnectionsRenderer';
 import './WorkflowCanvas.css';
 
@@ -38,6 +39,7 @@ const WorkflowCanvasContent: React.FC = () => {
   // Removed unused isSavingRef state
   const isSavingRefRef = useRef(false);
   const [deploymentModalOpen, setDeploymentModalOpen] = useState(false);
+  const [vpcModalOpen, setVpcModalOpen] = useState(false);
   const [currentDeploymentId, setCurrentDeploymentId] = useState<string | null>(null);
   const [lastDeploymentStatus, setLastDeploymentStatus] = useState<DeploymentStatus | null>(null);
 
@@ -296,20 +298,45 @@ const WorkflowCanvasContent: React.FC = () => {
   const handleDeploy = useCallback(async () => {
     if (isDeploying || !workflow) return;
     
-    try {
-      setIsDeploying(true);
-      
-      // First save the workflow if there are unsaved changes
-      if (hasUnsavedChanges) {
+    // First save the workflow if there are unsaved changes
+    if (hasUnsavedChanges) {
+      try {
+        setIsSaving(true);
         await saveWorkflow({
           name: workflowName,
           nodes,
           connections,
         });
         setHasUnsavedChanges(false);
+      } finally {
+        setIsSaving(false);
       }
+    }
 
-      // Validate workflow for deployment
+    // Validate workflow for deployment
+    const currentWorkflow = {
+      ...workflow,
+      name: workflowName,
+      nodes,
+      connections,
+    };
+
+    const validation = DeploymentService.validateWorkflowForDeployment(currentWorkflow);
+    if (!validation.isValid) {
+      alert(`Workflow validation failed:\n\n${validation.errors.join('\n')}`);
+      return;
+    }
+
+    // Open VPC config modal
+    setVpcModalOpen(true);
+  }, [workflowName, nodes, connections, isDeploying, workflow, saveWorkflow, hasUnsavedChanges]);
+
+  const handleDeployWithVpc = useCallback(async (vpcConfig: VpcConfig) => {
+    if (isDeploying || !workflow) return;
+
+    try {
+      setIsDeploying(true);
+
       const currentWorkflow = {
         ...workflow,
         name: workflowName,
@@ -317,16 +344,10 @@ const WorkflowCanvasContent: React.FC = () => {
         connections,
       };
 
-      const validation = DeploymentService.validateWorkflowForDeployment(currentWorkflow);
-      if (!validation.isValid) {
-        alert(`Workflow validation failed:\n\n${validation.errors.join('\n')}`);
-        return;
-      }
-
       // Start deployment
       const deploymentResponse = await DeploymentService.deployWorkflow({
         workflowId: workflow.id,
-        workflowData: currentWorkflow, // Include workflow data for real deployment
+        workflowData: currentWorkflow,
         environment: 'development',
         configuration: {
           enableLogging: true,
@@ -335,9 +356,11 @@ const WorkflowCanvasContent: React.FC = () => {
             DeployedFrom: 'WorkflowBuilder',
             Environment: 'development',
           },
+          vpcConfig,
         },
       });
 
+      setVpcModalOpen(false);
       setCurrentDeploymentId(deploymentResponse.deploymentId);
       setDeploymentModalOpen(true);
       
@@ -347,7 +370,7 @@ const WorkflowCanvasContent: React.FC = () => {
     } finally {
       setIsDeploying(false);
     }
-  }, [workflowName, nodes, connections, isDeploying, workflow, saveWorkflow, hasUnsavedChanges]);
+  }, [workflowName, nodes, connections, isDeploying, workflow]);
 
   const loadLastDeploymentStatus = useCallback(async (deploymentId: string) => {
     try {
@@ -774,6 +797,14 @@ const WorkflowCanvasContent: React.FC = () => {
           onSave={handleConfigSave}
         />
       )}
+
+      {/* VPC Configuration Modal */}
+      <VpcConfigModal
+        isOpen={vpcModalOpen}
+        onClose={() => setVpcModalOpen(false)}
+        onDeploy={handleDeployWithVpc}
+        isDeploying={isDeploying}
+      />
 
       {/* Deployment Status Modal */}
       {deploymentModalOpen && currentDeploymentId && (

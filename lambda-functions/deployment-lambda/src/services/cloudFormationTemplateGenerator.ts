@@ -1244,7 +1244,7 @@ export class CloudFormationTemplateGenerator {
    */
   private static getDefaultHandler(runtime: string): string {
     if (runtime.includes('python')) {
-      return 'index.lambda_handler';
+      return 'lambda_function.lambda_handler';
     } else if (runtime.includes('nodejs')) {
       return 'index.handler';
     } else if (runtime.includes('java')) {

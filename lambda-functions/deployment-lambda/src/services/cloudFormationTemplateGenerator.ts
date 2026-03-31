@@ -1,9 +1,174 @@
-import { DeploymentContext } from '../types/deployment';
+import { DeploymentContext, VpcDeploymentConfig } from '../types/deployment';
 import { Workflow } from '../types/workflow';
 import { NodeHandlerRegistry } from './nodeHandlers';
 import { IAMPermissionAnalyzer } from './iamPermissionAnalyzer';
 
 export class CloudFormationTemplateGenerator {
+
+  /**
+   * Generate CloudFormation resources for a new VPC
+   */
+  private static generateNewVpcResources(vpcConfig: VpcDeploymentConfig): any {
+    const cidr = vpcConfig.new?.cidrBlock || '10.0.0.0/16';
+    // Extract base octets (e.g., '10.0.0.0/16' → '10.0')
+    const octets = cidr.split('/')[0].split('.');
+    const base = `${octets[0]}.${octets[1]}`;
+    return {
+      WorkflowVpc: {
+        Type: 'AWS::EC2::VPC',
+        Properties: {
+          CidrBlock: cidr,
+          EnableDnsSupport: true,
+          EnableDnsHostnames: true,
+          Tags: [
+            { Key: 'Name', Value: { 'Fn::Sub': 'workflow-vpc-${WorkflowId}' } },
+            { Key: 'WorkflowId', Value: { Ref: 'WorkflowId' } },
+          ],
+        },
+      },
+      WorkflowPrivateSubnetA: {
+        Type: 'AWS::EC2::Subnet',
+        Properties: {
+          VpcId: { Ref: 'WorkflowVpc' },
+          CidrBlock: `${base}.0.0/24`,
+          AvailabilityZone: { 'Fn::Select': ['0', { 'Fn::GetAZs': '' }] },
+          Tags: [{ Key: 'Name', Value: { 'Fn::Sub': 'workflow-private-a-${WorkflowId}' } }],
+        },
+      },
+      WorkflowPrivateSubnetB: {
+        Type: 'AWS::EC2::Subnet',
+        Properties: {
+          VpcId: { Ref: 'WorkflowVpc' },
+          CidrBlock: `${base}.1.0/24`,
+          AvailabilityZone: { 'Fn::Select': ['1', { 'Fn::GetAZs': '' }] },
+          Tags: [{ Key: 'Name', Value: { 'Fn::Sub': 'workflow-private-b-${WorkflowId}' } }],
+        },
+      },
+      WorkflowPublicSubnet: {
+        Type: 'AWS::EC2::Subnet',
+        Properties: {
+          VpcId: { Ref: 'WorkflowVpc' },
+          CidrBlock: `${base}.2.0/24`,
+          AvailabilityZone: { 'Fn::Select': ['0', { 'Fn::GetAZs': '' }] },
+          Tags: [{ Key: 'Name', Value: { 'Fn::Sub': 'workflow-public-${WorkflowId}' } }],
+        },
+      },
+      WorkflowInternetGateway: {
+        Type: 'AWS::EC2::InternetGateway',
+        Properties: {
+          Tags: [{ Key: 'Name', Value: { 'Fn::Sub': 'workflow-igw-${WorkflowId}' } }],
+        },
+      },
+      WorkflowIgwAttachment: {
+        Type: 'AWS::EC2::VPCGatewayAttachment',
+        Properties: {
+          VpcId: { Ref: 'WorkflowVpc' },
+          InternetGatewayId: { Ref: 'WorkflowInternetGateway' },
+        },
+      },
+      WorkflowEip: {
+        Type: 'AWS::EC2::EIP',
+        Properties: { Domain: 'vpc' },
+      },
+      WorkflowNatGateway: {
+        Type: 'AWS::EC2::NatGateway',
+        Properties: {
+          AllocationId: { 'Fn::GetAtt': ['WorkflowEip', 'AllocationId'] },
+          SubnetId: { Ref: 'WorkflowPublicSubnet' },
+          Tags: [{ Key: 'Name', Value: { 'Fn::Sub': 'workflow-nat-${WorkflowId}' } }],
+        },
+        DependsOn: ['WorkflowIgwAttachment'],
+      },
+      WorkflowPublicRouteTable: {
+        Type: 'AWS::EC2::RouteTable',
+        Properties: {
+          VpcId: { Ref: 'WorkflowVpc' },
+        },
+      },
+      WorkflowPublicRoute: {
+        Type: 'AWS::EC2::Route',
+        Properties: {
+          RouteTableId: { Ref: 'WorkflowPublicRouteTable' },
+          DestinationCidrBlock: '0.0.0.0/0',
+          GatewayId: { Ref: 'WorkflowInternetGateway' },
+        },
+        DependsOn: ['WorkflowIgwAttachment'],
+      },
+      WorkflowPublicSubnetRtAssoc: {
+        Type: 'AWS::EC2::SubnetRouteTableAssociation',
+        Properties: {
+          SubnetId: { Ref: 'WorkflowPublicSubnet' },
+          RouteTableId: { Ref: 'WorkflowPublicRouteTable' },
+        },
+      },
+      WorkflowPrivateRouteTable: {
+        Type: 'AWS::EC2::RouteTable',
+        Properties: {
+          VpcId: { Ref: 'WorkflowVpc' },
+        },
+      },
+      WorkflowPrivateRoute: {
+        Type: 'AWS::EC2::Route',
+        Properties: {
+          RouteTableId: { Ref: 'WorkflowPrivateRouteTable' },
+          DestinationCidrBlock: '0.0.0.0/0',
+          NatGatewayId: { Ref: 'WorkflowNatGateway' },
+        },
+      },
+      WorkflowPrivateSubnetARtAssoc: {
+        Type: 'AWS::EC2::SubnetRouteTableAssociation',
+        Properties: {
+          SubnetId: { Ref: 'WorkflowPrivateSubnetA' },
+          RouteTableId: { Ref: 'WorkflowPrivateRouteTable' },
+        },
+      },
+      WorkflowPrivateSubnetBRtAssoc: {
+        Type: 'AWS::EC2::SubnetRouteTableAssociation',
+        Properties: {
+          SubnetId: { Ref: 'WorkflowPrivateSubnetB' },
+          RouteTableId: { Ref: 'WorkflowPrivateRouteTable' },
+        },
+      },
+      WorkflowSecurityGroup: {
+        Type: 'AWS::EC2::SecurityGroup',
+        Properties: {
+          GroupDescription: { 'Fn::Sub': 'Lambda SG for workflow ${WorkflowId}' },
+          VpcId: { Ref: 'WorkflowVpc' },
+          SecurityGroupEgress: [{
+            IpProtocol: '-1',
+            CidrIp: '0.0.0.0/0',
+          }],
+          Tags: [{ Key: 'Name', Value: { 'Fn::Sub': 'workflow-lambda-sg-${WorkflowId}' } }],
+        },
+      },
+    };
+  }
+
+  /**
+   * Get VpcConfig property for a Lambda CloudFormation resource, or undefined if no VPC
+   */
+  private static getLambdaVpcConfig(deploymentContext: DeploymentContext): any | undefined {
+    const vpc = deploymentContext.configuration.vpcConfig;
+    if (!vpc || vpc.mode === 'none') return undefined;
+
+    if (vpc.mode === 'existing') {
+      return {
+        SubnetIds: vpc.existing!.subnetIds,
+        SecurityGroupIds: vpc.existing!.securityGroupIds,
+      };
+    }
+
+    // mode === 'new' — reference the resources we created
+    return {
+      SubnetIds: [
+        { Ref: 'WorkflowPrivateSubnetA' },
+        { Ref: 'WorkflowPrivateSubnetB' },
+      ],
+      SecurityGroupIds: [
+        { Ref: 'WorkflowSecurityGroup' },
+      ],
+    };
+  }
   /**
    * Extract S3 trigger configuration from workflow nodes
    */
@@ -180,6 +345,11 @@ export class CloudFormationTemplateGenerator {
       },
 
       Resources: {
+        // VPC resources (if creating a new VPC)
+        ...(deploymentContext.configuration.vpcConfig?.mode === 'new'
+          ? this.generateNewVpcResources(deploymentContext.configuration.vpcConfig)
+          : {}),
+
         // IAM Role for Step Functions
         StepFunctionsExecutionRole: {
           Type: 'AWS::IAM::Role',
@@ -463,6 +633,7 @@ export class CloudFormationTemplateGenerator {
       const connectedPermissions = this.analyzeLambdaConnectedNodes(lambdaNode, workflow);
       
       // Lambda execution role
+      const vpcEnabled = deploymentContext.configuration.vpcConfig?.mode && deploymentContext.configuration.vpcConfig.mode !== 'none';
       const roleProperties: any = {
         RoleName: {
           'Fn::Sub': `Lambda-${truncatedName}-Role-\${WorkflowId}`,
@@ -481,6 +652,7 @@ export class CloudFormationTemplateGenerator {
         },
         ManagedPolicyArns: [
           'arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole',
+          ...(vpcEnabled ? ['arn:aws:iam::aws:policy/service-role/AWSLambdaVPCAccessExecutionRole'] : []),
         ],
         Tags: [
           { Key: 'WorkflowId', Value: { Ref: 'WorkflowId' } },
@@ -544,6 +716,7 @@ export class CloudFormationTemplateGenerator {
       };
 
       // Lambda function (without API Gateway trigger)
+      const lambdaVpcConfig = this.getLambdaVpcConfig(deploymentContext);
       resources[lambdaFunctionName] = {
         Type: 'AWS::Lambda::Function',
         Properties: {
@@ -557,6 +730,7 @@ export class CloudFormationTemplateGenerator {
           Description: `Lambda function for workflow node: ${nodeName}`,
           Timeout: lambdaNode.config?.timeout || 30,
           MemorySize: lambdaNode.config?.memorySize || 128,
+          ...(lambdaVpcConfig ? { VpcConfig: lambdaVpcConfig } : {}),
           Environment: {
             Variables: {
               WORKFLOW_ID: { Ref: 'WorkflowId' },
@@ -1127,6 +1301,8 @@ def handler(event, context):
 
     const resources: any = {};
 
+    const osVpcEnabled = deploymentContext.configuration.vpcConfig?.mode && deploymentContext.configuration.vpcConfig.mode !== 'none';
+
     // IAM Role for OpenSearch Lambda functions
     resources.OpenSearchLambdaRole = {
       Type: 'AWS::IAM::Role',
@@ -1142,6 +1318,7 @@ def handler(event, context):
         },
         ManagedPolicyArns: [
           'arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole',
+          ...(osVpcEnabled ? ['arn:aws:iam::aws:policy/service-role/AWSLambdaVPCAccessExecutionRole'] : []),
         ],
         Policies: [{
           PolicyName: 'OpenSearchAccess',
@@ -1173,6 +1350,7 @@ def handler(event, context):
       },
     };
 
+    const osVpcConfig = this.getLambdaVpcConfig(deploymentContext);
     resources.OpenSearchIndexerFunction = {
       Type: 'AWS::Lambda::Function',
       DependsOn: ['OpenSearchIndexerLogGroup'],
@@ -1183,6 +1361,7 @@ def handler(event, context):
         Role: { 'Fn::GetAtt': ['OpenSearchLambdaRole', 'Arn'] },
         Timeout: 60,
         MemorySize: 256,
+        ...(osVpcConfig ? { VpcConfig: osVpcConfig } : {}),
         Code: {
           ZipFile: this.getOpenSearchIndexerCode(),
         },

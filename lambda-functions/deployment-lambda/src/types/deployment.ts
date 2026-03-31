@@ -1,5 +1,18 @@
 import { z } from 'zod';
 
+// VPC configuration for workflow-deployed Lambdas
+export interface VpcDeploymentConfig {
+  mode: 'none' | 'existing' | 'new';
+  existing?: {
+    vpcId: string;
+    subnetIds: string[];
+    securityGroupIds: string[];
+  };
+  new?: {
+    cidrBlock?: string; // defaults to 10.0.0.0/16
+  };
+}
+
 // Deployment request
 export interface DeploymentRequest {
   workflowId: string;
@@ -10,6 +23,7 @@ export interface DeploymentRequest {
     enableLogging?: boolean;
     enableXRay?: boolean;
     tags?: Record<string, string>;
+    vpcConfig?: VpcDeploymentConfig;
   };
 }
 
@@ -185,6 +199,7 @@ export interface DeploymentContext {
     enableLogging: boolean;
     enableXRay: boolean;
     tags: Record<string, string>;
+    vpcConfig?: VpcDeploymentConfig;
   };
   resources: {
     lambdaFunctions: LambdaFunctionConfig[];
@@ -195,6 +210,18 @@ export interface DeploymentContext {
 }
 
 // Zod validation schemas
+export const VpcDeploymentConfigSchema = z.object({
+  mode: z.enum(['none', 'existing', 'new']),
+  existing: z.object({
+    vpcId: z.string().min(1),
+    subnetIds: z.array(z.string().min(1)).min(1),
+    securityGroupIds: z.array(z.string().min(1)).min(1),
+  }).optional(),
+  new: z.object({
+    cidrBlock: z.string().optional(),
+  }).optional(),
+});
+
 export const DeploymentRequestSchema = z.object({
   workflowId: z.string().min(1),
   workflowData: z.any().optional(), // Include workflow data for localStorage-based workflows
@@ -204,6 +231,7 @@ export const DeploymentRequestSchema = z.object({
     enableLogging: z.boolean().optional(),
     enableXRay: z.boolean().optional(),
     tags: z.record(z.string()).optional(),
+    vpcConfig: VpcDeploymentConfigSchema.optional(),
   }).optional(),
 });
 

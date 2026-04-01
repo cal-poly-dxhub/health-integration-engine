@@ -791,8 +791,7 @@ const ExecutionDetails: React.FC<ExecutionDetailsProps> = ({ execution: propExec
   const [selectedEventTypes, setSelectedEventTypes] = useState<Set<string>>(new Set());
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [autoRefresh, setAutoRefresh] = useState(false); // Auto-refresh disabled
-  const [activeViewTab, setActiveViewTab] = useState<'overview' | 'input-output' | 'definition' | 'events'>('overview');
-  const [activeEventsTab, setActiveEventsTab] = useState<'all' | 'errors'>('all');
+  const [activeViewTab, setActiveViewTab] = useState<'overview' | 'input-output' | 'definition' | 'events' | null>('overview');
   const [selectedStep, setSelectedStep] = useState<string | null>(null);
   const [activeStepTab, setActiveStepTab] = useState<'input-output' | 'details' | 'definition' | 'events'>('input-output');
   const [activeGraphTab, setActiveGraphTab] = useState<'graph' | 'table'>('graph');
@@ -803,8 +802,16 @@ const ExecutionDetails: React.FC<ExecutionDetailsProps> = ({ execution: propExec
   const [newExecutionInput, setNewExecutionInput] = useState('{}');
   const [isStartingExecution, setIsStartingExecution] = useState(false);
   const [isRedriving, setIsRedriving] = useState(false);
-  const [topPanelHeight, setTopPanelHeight] = useState(280);
+  const [topPanelHeight, setTopPanelHeight] = useState(() => {
+    const saved = localStorage.getItem('exec-details-panel-height');
+    return saved ? parseInt(saved, 10) : 240;
+  });
   const [isResizing, setIsResizing] = useState(false);
+  const [graphPanelWidth, setGraphPanelWidth] = useState(() => {
+    const saved = localStorage.getItem('exec-details-graph-width');
+    return saved ? parseInt(saved, 10) : 40;
+  });
+  const [isHResizing, setIsHResizing] = useState(false);
 
   // Debug logging for state changes
   useEffect(() => {
@@ -850,12 +857,39 @@ const ExecutionDetails: React.FC<ExecutionDetailsProps> = ({ execution: propExec
 
     const handleMouseMove = (moveEvent: MouseEvent) => {
       const delta = moveEvent.clientY - startY;
-      const newHeight = Math.min(Math.max(startHeight + delta, 150), window.innerHeight * 0.6);
+      const newHeight = Math.min(Math.max(startHeight + delta, 120), window.innerHeight * 0.6);
       setTopPanelHeight(newHeight);
     };
 
     const handleMouseUp = () => {
       setIsResizing(false);
+      localStorage.setItem('exec-details-panel-height', topPanelHeight.toString());
+      document.removeEventListener('mousemove', handleMouseMove);
+      document.removeEventListener('mouseup', handleMouseUp);
+    };
+
+    document.addEventListener('mousemove', handleMouseMove);
+    document.addEventListener('mouseup', handleMouseUp);
+  };
+
+  // Handle horizontal resize drag between graph and content panels
+  const handleHResizeMouseDown = (e: React.MouseEvent) => {
+    e.preventDefault();
+    setIsHResizing(true);
+    const startX = e.clientX;
+    const startWidth = graphPanelWidth;
+    const containerWidth = (e.currentTarget.parentElement as HTMLElement)?.offsetWidth || window.innerWidth;
+
+    const handleMouseMove = (moveEvent: MouseEvent) => {
+      const deltaPx = moveEvent.clientX - startX;
+      const deltaPct = (deltaPx / containerWidth) * 100;
+      const newWidth = Math.min(Math.max(startWidth + deltaPct, 20), 80);
+      setGraphPanelWidth(newWidth);
+    };
+
+    const handleMouseUp = () => {
+      setIsHResizing(false);
+      localStorage.setItem('exec-details-graph-width', graphPanelWidth.toString());
       document.removeEventListener('mousemove', handleMouseMove);
       document.removeEventListener('mouseup', handleMouseUp);
     };
@@ -1673,27 +1707,6 @@ const ExecutionDetails: React.FC<ExecutionDetailsProps> = ({ execution: propExec
 
   let filteredEvents = filterEvents(history);
 
-  // Filter events based on active events tab
-  if (activeEventsTab === 'errors') {
-    filteredEvents = filteredEvents.filter(event =>
-      event.type.toLowerCase().includes('failed') ||
-      event.type.toLowerCase().includes('error')
-    );
-  }
-
-  // Debug events when on events tab
-  useEffect(() => {
-    if (activeViewTab === 'events') {
-      console.log('🔍 Events debug:', {
-        totalHistory: history.length,
-        filteredEvents: filteredEvents.length,
-        activeEventsTab,
-        eventSearchFilter,
-        eventTypeFilter
-      });
-    }
-  }, [activeViewTab, history.length, filteredEvents.length, activeEventsTab, eventSearchFilter, eventTypeFilter]);
-
   const uniqueEventTypes = Array.from(new Set(history.map(e => e.type))).sort();
 
   return (
@@ -1777,37 +1790,35 @@ const ExecutionDetails: React.FC<ExecutionDetailsProps> = ({ execution: propExec
       </div>
 
       {/* Top Panel - Execution Details Tabs */}
-      <div className="execution-top-panel" style={{ height: topPanelHeight, maxHeight: topPanelHeight }}>
+      <div className={`execution-top-panel ${!activeViewTab ? 'collapsed' : ''}`} style={activeViewTab ? { height: topPanelHeight, maxHeight: topPanelHeight } : undefined}>
         <div className="execution-detail-tabs">
           <button
             className={`execution-tab ${activeViewTab === 'overview' ? 'active' : ''}`}
-            onClick={() => setActiveViewTab('overview')}
+            onClick={() => setActiveViewTab(activeViewTab === 'overview' ? null : 'overview')}
           >
             Details
           </button>
           <button
             className={`execution-tab ${activeViewTab === 'input-output' ? 'active' : ''}`}
-            onClick={() => setActiveViewTab('input-output')}
+            onClick={() => setActiveViewTab(activeViewTab === 'input-output' ? null : 'input-output')}
           >
             Execution input and output
           </button>
           <button
             className={`execution-tab ${activeViewTab === 'definition' ? 'active' : ''}`}
-            onClick={() => {
-              console.log('Definition tab clicked');
-              setActiveViewTab('definition');
-            }}
+            onClick={() => setActiveViewTab(activeViewTab === 'definition' ? null : 'definition')}
           >
             Definition
           </button>
           <button
             className={`execution-tab ${activeViewTab === 'events' ? 'active' : ''}`}
-            onClick={() => setActiveViewTab('events')}
+            onClick={() => setActiveViewTab(activeViewTab === 'events' ? null : 'events')}
           >
             Events
           </button>
         </div>
 
+        {activeViewTab && (
         <div className="execution-detail-content">
           {activeViewTab === 'overview' && (
             <div className="execution-details-grid">
@@ -1822,9 +1833,7 @@ const ExecutionDetails: React.FC<ExecutionDetailsProps> = ({ execution: propExec
                             execution?.status === 'FAILED' ? '✗' :
                               execution?.status === 'RUNNING' ? '' :
                                 execution?.status === 'TIMED_OUT' ? '⏱' :
-                                  execution?.status === 'ABORTED' ? '⏹' :
-                                    execution?.status === 'STOPPED' ? '⏹' :
-                                      execution?.status === 'CANCELLED' ? '⏹' : '○'}
+                                  execution?.status === 'ABORTED' ? '⏹' : '○'}
                         </span>
                         {execution?.status}
                       </span>
@@ -1857,20 +1866,20 @@ const ExecutionDetails: React.FC<ExecutionDetailsProps> = ({ execution: propExec
                     </span>
                   </div>
                 </div>
-                <div className="detail-column">
-                  <div className="detail-item">
-                    <span className="detail-label">State machine ARN</span>
-                    <div className="execution-arn">
-                      <span>{execution?.stateMachineArn || 'N/A'}</span>
-                      <span className="arn-copy-icon" title="Copy ARN">📋</span>
-                    </div>
+              </div>
+              <div className="arn-section">
+                <div className="detail-item" style={{ padding: '0.5rem 0' }}>
+                  <span className="detail-label">State machine ARN</span>
+                  <div className="execution-arn">
+                    <span>{execution?.stateMachineArn || 'N/A'}</span>
+                    <span className="arn-copy-icon" title="Copy ARN">📋</span>
                   </div>
-                  <div className="detail-item">
-                    <span className="detail-label">Execution ARN</span>
-                    <div className="execution-arn">
-                      <span>{execution?.executionArn || 'N/A'}</span>
-                      <span className="arn-copy-icon" title="Copy ARN">📋</span>
-                    </div>
+                </div>
+                <div className="detail-item" style={{ padding: '0.5rem 0' }}>
+                  <span className="detail-label">Execution ARN</span>
+                  <div className="execution-arn">
+                    <span>{execution?.executionArn || 'N/A'}</span>
+                    <span className="arn-copy-icon" title="Copy ARN">📋</span>
                   </div>
                 </div>
               </div>
@@ -2038,82 +2047,75 @@ const ExecutionDetails: React.FC<ExecutionDetailsProps> = ({ execution: propExec
           )}
 
           {activeViewTab === 'events' && (
-            <div className="events-summary">
-              <div className="events-stats">
-                <div className="events-header-info">
-                  <span className="events-count">Total Events: {history.length}</span>
-                  <span className="events-filtered">Filtered: {filteredEvents.length}</span>
-                  <span className="events-errors">
-                    Errors: {history.filter(e => e.type.toLowerCase().includes('failed') || e.type.toLowerCase().includes('error')).length}
-                  </span>
-                </div>
-                <div className="events-tabs">
-                  <button
-                    className={`events-tab ${activeEventsTab === 'all' ? 'active' : ''}`}
-                    onClick={() => setActiveEventsTab('all')}
-                  >
-                    All Events
-                  </button>
-                  <button
-                    className={`events-tab ${activeEventsTab === 'errors' ? 'active' : ''}`}
-                    onClick={() => setActiveEventsTab('errors')}
-                  >
-                    Errors
-                  </button>
-                </div>
+            <div className="events-content-full">
+              <div className="events-filters">
+                <input
+                  type="text"
+                  placeholder="Filter events..."
+                  value={eventSearchFilter}
+                  onChange={(e) => setEventSearchFilter(e.target.value)}
+                  className="events-filter-input"
+                />
+                <input
+                  type="date"
+                  value={eventDateFilter}
+                  onChange={(e) => setEventDateFilter(e.target.value)}
+                  className="events-filter-date"
+                />
+                <select
+                  value={eventTypeFilter}
+                  onChange={(e) => setEventTypeFilter(e.target.value)}
+                  className="events-filter-select"
+                >
+                  <option value="">All Types</option>
+                  {uniqueEventTypes.map(type => (
+                    <option key={type} value={type}>{type}</option>
+                  ))}
+                </select>
               </div>
-              
-              {/* All Events with Scrollbar */}
-              <div className="all-events-preview">
-                <h4>All Events ({activeEventsTab === 'errors' ? 
-                  history.filter(e => e.type.toLowerCase().includes('failed') || e.type.toLowerCase().includes('error')).length : 
-                  history.length})</h4>
-                <div className="events-scrollable-table">
-                  <table className="full-events-table">
-                    <thead>
-                      <tr>
-                        <th className="expand-col"></th>
-                        <th>ID</th>
-                        <th>Type</th>
-                        <th>Step</th>
-                        <th>Timestamp</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {(activeEventsTab === 'errors' ? 
-                        history.filter(e => e.type.toLowerCase().includes('failed') || e.type.toLowerCase().includes('error')) : 
-                        history
-                      ).map(event => {
-                        return (
-                          <TopPanelEventRow
-                            key={event.id}
-                            event={event}
-                            formatDate={formatDate}
-                          />
-                        );
-                      })}
-                    </tbody>
-                  </table>
-                </div>
+              <div className="events-scrollable-table">
+                <table className="full-events-table">
+                  <thead>
+                    <tr>
+                      <th className="expand-col"></th>
+                      <th>ID</th>
+                      <th>Type</th>
+                      <th>Step</th>
+                      <th>Timestamp</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {filteredEvents.map(event => (
+                      <TopPanelEventRow
+                        key={event.id}
+                        event={event}
+                        formatDate={formatDate}
+                      />
+                    ))}
+                  </tbody>
+                </table>
               </div>
             </div>
           )}
         </div>
+        )}
       </div>
 
-      {/* Resize Handle */}
+      {/* Resize Handle - only show when a tab is active */}
+      {activeViewTab && (
       <div 
         className={`resize-handle ${isResizing ? 'resizing' : ''}`}
         onMouseDown={handleResizeMouseDown}
       >
         <div className="resize-handle-bar" />
       </div>
+      )}
 
       {/* Main Content Area - Standardized Layout for All Tabs */}
       <div className="execution-content">
-        <div className="graph-and-step-container">
-          {/* Left Panel - Graph View (35% width - consistent across all tabs) */}
-          <div className="graph-panel">
+        <div className={`graph-and-step-container ${!activeViewTab && !selectedStep ? 'no-tab-selected' : ''} ${isHResizing ? 'resizing-h' : ''}`}>
+          {/* Left Panel - Graph View */}
+          <div className="graph-panel" style={{ flex: `0 0 ${graphPanelWidth}%` }}>
             <div className="graph-header">
               <div className="graph-tabs">
                 <button 
@@ -2259,7 +2261,15 @@ const ExecutionDetails: React.FC<ExecutionDetailsProps> = ({ execution: propExec
             </div>
           </div>
 
-          {/* Right Panel - Content Panel (65% width - consistent across all tabs) */}
+          {/* Horizontal Resize Handle */}
+          <div
+            className={`h-resize-handle ${isHResizing ? 'resizing' : ''}`}
+            onMouseDown={handleHResizeMouseDown}
+          >
+            <div className="h-resize-handle-bar" />
+          </div>
+
+          {/* Right Panel - Content Panel */}
           <div className="content-panel">
             {selectedStep ? (
               /* Step Details Panel - When step is selected */
@@ -2488,104 +2498,10 @@ const ExecutionDetails: React.FC<ExecutionDetailsProps> = ({ execution: propExec
                 {activeViewTab === 'events' && (
                   <div className="events-content">
                     <h3>Execution Events</h3>
-                    <p>All execution events are displayed in the events panel below. Select a step from the graph to view step-specific events.</p>
+                    <p>View all execution events in the Events tab above. Select a step from the graph to view step-specific events.</p>
                   </div>
                 )}
               </div>
-            )}
-          </div>
-        </div>
-      </div>
-
-      {/* Bottom Panel - Events (300px height - consistent across all tabs) */}
-      <div className="execution-events-panel">
-        <div className="events-panel-header">
-          <div className="events-panel-title">Execution Events</div>
-          <div className="events-panel-tabs">
-            <button
-              className={`events-tab ${activeEventsTab === 'all' ? 'active' : ''}`}
-              onClick={() => setActiveEventsTab('all')}
-            >
-              All Events ({history.length})
-            </button>
-            <button
-              className={`events-tab ${activeEventsTab === 'errors' ? 'active' : ''}`}
-              onClick={() => setActiveEventsTab('errors')}
-            >
-              Errors ({history.filter(e => e.type.toLowerCase().includes('failed') || e.type.toLowerCase().includes('error')).length})
-            </button>
-          </div>
-        </div>
-
-        <div className="events-panel-content">
-          <div className="events-filters">
-            <input
-              type="text"
-              placeholder="Filter events..."
-              value={eventSearchFilter}
-              onChange={(e) => setEventSearchFilter(e.target.value)}
-              className="events-filter-input"
-            />
-            <input
-              type="date"
-              value={eventDateFilter}
-              onChange={(e) => setEventDateFilter(e.target.value)}
-              className="events-filter-date"
-            />
-            <select
-              value={eventTypeFilter}
-              onChange={(e) => setEventTypeFilter(e.target.value)}
-              className="events-filter-select"
-            >
-              <option value="">All Types</option>
-              {uniqueEventTypes.map(type => (
-                <option key={type} value={type}>{type}</option>
-              ))}
-            </select>
-          </div>
-
-          <div className="events-table-container">
-            {loading ? (
-              <div className="loading-message">
-                <div className="loading-spinner"></div>
-                <span>Loading events...</span>
-              </div>
-            ) : error ? (
-              <div className="error-message">
-                <div className="error-icon">⚠️</div>
-                <div className="error-content">
-                  <div className="error-title">Error Loading Events</div>
-                  <div className="error-text">{error}</div>
-                </div>
-              </div>
-            ) : filteredEvents.length === 0 ? (
-              <div className="no-events">
-                <p>No events found matching the current filters.</p>
-              </div>
-            ) : (
-              <table className="events-table">
-                <thead>
-                  <tr>
-                    <th className="events-expand-col"></th>
-                    <th className="events-id-col">ID</th>
-                    <th className="events-type-col">Type</th>
-                    <th className="events-step-col">Step</th>
-                    <th className="events-resource-col">Resource</th>
-                    <th className="events-timestamp-col">Timestamp</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {filteredEvents.map(event => (
-                    <EventRow
-                      key={event.id}
-                      event={event}
-                      formatDate={formatDate}
-                      formatDuration={formatDuration}
-                      allEvents={history}
-                    />
-                  ))}
-                </tbody>
-              </table>
             )}
           </div>
         </div>

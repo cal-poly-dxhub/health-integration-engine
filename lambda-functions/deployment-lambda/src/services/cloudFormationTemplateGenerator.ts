@@ -724,9 +724,8 @@ export class CloudFormationTemplateGenerator {
             'Fn::Sub': `\${WorkflowId}-${sanitizedName}`,
           },
           Runtime: lambdaNode.config?.runtime || 'python3.12',
-          Handler: lambdaNode.config?.handler || this.getDefaultHandler(lambdaNode.config?.runtime || 'python3.12'),
+          ...await this.generateLambdaCodeAndHandler(lambdaNode, deploymentContext, lambdaCodeUploads || []),
           Role: lambdaRoleArn,
-          Code: await this.generateLambdaCodeConfig(lambdaNode, deploymentContext, lambdaCodeUploads || []),
           Description: `Lambda function for workflow node: ${nodeName}`,
           Timeout: lambdaNode.config?.timeout || 30,
           MemorySize: lambdaNode.config?.memorySize || 128,
@@ -928,9 +927,14 @@ export class CloudFormationTemplateGenerator {
   }
 
   /**
-   * Generate Lambda code configuration - uses S3 for reliable code deployment
+   * Generate Lambda code and handler configuration - returns both Code and Handler
+   * so the handler matches the code deployment method (S3 zip vs CloudFormation ZipFile)
    */
-  private static async generateLambdaCodeConfig(lambdaNode: any, deploymentContext: DeploymentContext, lambdaCodeUploads?: any[]): Promise<any> {
+  private static async generateLambdaCodeAndHandler(lambdaNode: any, deploymentContext: DeploymentContext, lambdaCodeUploads?: any[]): Promise<{ Handler: string; Code: any }> {
+    const runtime = lambdaNode.config?.runtime || 'python3.12';
+    const customHandler = lambdaNode.config?.handler;
+    const defaultHandler = this.getDefaultHandler(runtime);
+
     console.log('🔧 CFT GENERATOR: Generating Lambda code config for node:', lambdaNode.id);
     
     // First, check if we have pre-uploaded S3 code for this node
@@ -939,12 +943,9 @@ export class CloudFormationTemplateGenerator {
       
       if (codeUpload) {
         console.log('✅ CFT GENERATOR: Using pre-uploaded S3 code for node:', lambdaNode.id);
-        console.log('🪣 CFT GENERATOR: S3 Bucket:', codeUpload.s3Bucket);
-        console.log('🔑 CFT GENERATOR: S3 Key:', codeUpload.s3Key);
-        
         return {
-          S3Bucket: codeUpload.s3Bucket,
-          S3Key: codeUpload.s3Key
+          Handler: customHandler || defaultHandler,
+          Code: { S3Bucket: codeUpload.s3Bucket, S3Key: codeUpload.s3Key },
         };
       }
     }
@@ -962,25 +963,30 @@ export class CloudFormationTemplateGenerator {
       const bucketName = this.getCodeBucketName(deploymentContext);
       
       console.log('📦 CFT GENERATOR: Using on-the-fly S3 deployment');
-      console.log('🪣 CFT GENERATOR: S3 Bucket:', bucketName);
-      console.log('🔑 CFT GENERATOR: S3 Key:', s3Key);
       
       // Upload code to S3 immediately
       await this.uploadCodeToS3(zipBuffer, bucketName, s3Key);
       
       return {
-        S3Bucket: bucketName,
-        S3Key: s3Key
+        Handler: customHandler || defaultHandler,
+        Code: { S3Bucket: bucketName, S3Key: s3Key },
       };
     } catch (error) {
       console.warn('⚠️ CFT GENERATOR: On-the-fly S3 deployment failed, falling back to inline code:', error);
       
       // Final fallback to inline code deployment
+      // CloudFormation ZipFile creates the file as index.py (Python) or index.js (Node.js),
+      // so the handler must use "index" as the module name, not "lambda_function"
+      const zipFileHandler = runtime.includes('python') ? 'index.lambda_handler' :
+                             runtime.includes('nodejs') ? 'index.handler' :
+                             'index.lambda_handler';
+      
       console.log('📝 CFT GENERATOR: Using inline code deployment as final fallback');
+      console.log('📝 CFT GENERATOR: Overriding handler to match ZipFile behavior:', zipFileHandler);
       
       // Normalize and validate the code
-      const normalizedCode = this.normalizeLambdaCode(code, lambdaNode.config?.runtime || 'python3.12');
-      const validation = this.validateLambdaCode(normalizedCode, lambdaNode.config?.runtime || 'python3.12');
+      const normalizedCode = this.normalizeLambdaCode(code, runtime);
+      const validation = this.validateLambdaCode(normalizedCode, runtime);
       
       if (!validation.isValid) {
         throw new Error(`Invalid Lambda code: ${validation.warnings.join(', ')}`);
@@ -991,7 +997,8 @@ export class CloudFormationTemplateGenerator {
       }
       
       return {
-        ZipFile: normalizedCode
+        Handler: customHandler || zipFileHandler,
+        Code: { ZipFile: normalizedCode },
       };
     }
   }

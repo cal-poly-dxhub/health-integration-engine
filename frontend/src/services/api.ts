@@ -133,7 +133,7 @@ class ApiService {
 const getApiBaseURL = (): string => {
   return (import.meta as any).env.VITE_API_BASE_URL ||
     (import.meta as any).env.VITE_API_GATEWAY_URL ||
-    'https://vqrp7icb97.execute-api.us-east-1.amazonaws.com/v1';
+    '';
 };
 
 export const apiService = new ApiService({

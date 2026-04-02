@@ -14,7 +14,7 @@ const defaultConfig: AuthConfig = {
   userPoolId: import.meta.env.VITE_COGNITO_USER_POOL_ID || '',
   userPoolClientId: import.meta.env.VITE_COGNITO_USER_POOL_CLIENT_ID || '',
   identityPoolId: import.meta.env.VITE_COGNITO_IDENTITY_POOL_ID || '',
-  region: import.meta.env.VITE_AWS_REGION || 'us-east-1',
+  region: import.meta.env.VITE_AWS_REGION || '',
   domain: import.meta.env.VITE_COGNITO_DOMAIN || undefined,
 };
 
@@ -33,16 +33,7 @@ const validateConfig = (config: AuthConfig): void => {
 export const getAuthConfig = (): AuthConfig => {
   // In development, you might want to use hardcoded values for testing
   if (import.meta.env.DEV && !defaultConfig.userPoolId) {
-    console.warn('Using development authentication configuration. Make sure to set proper environment variables for production.');
-    
-    // Return development configuration with actual CDK deployment values
-    return {
-      userPoolId: 'us-east-1_LRMU1zzTB',
-      userPoolClientId: '447v4ue26n8ker2173jsf2nebp',
-      identityPoolId: 'us-east-1:8e95d42b-b3e4-4e85-8890-040183faa5ac',
-      region: 'us-east-1',
-      domain: 'workflow-builder-development.auth.us-east-1.amazoncognito.com',
-    };
+    console.warn('Missing authentication configuration. Run the deploy script to populate .env with CDK outputs.');
   }
 
   validateConfig(defaultConfig);

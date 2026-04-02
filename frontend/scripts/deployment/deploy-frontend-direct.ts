@@ -246,7 +246,8 @@ class DirectFrontendDeployer {
       this.spinner.succeed(`Uploaded to S3 bucket: ${bucketName}`);
       
       // Display S3 website URL
-      const s3WebsiteUrl = `http://${bucketName}.s3-website-us-east-1.amazonaws.com`;
+      const awsRegionForUrl = await this.getAWSRegion();
+      const s3WebsiteUrl = `http://${bucketName}.s3-website-${awsRegionForUrl}.amazonaws.com`;
       console.log(chalk.blue(`S3 Website URL: ${s3WebsiteUrl}`));
       
       return bucketName;
@@ -261,9 +262,7 @@ class DirectFrontendDeployer {
     
     try {
       const awsRegion = await this.getAWSRegion();
-      const s3WebsiteEndpoint = awsRegion === 'us-east-1' 
-        ? `${bucketName}.s3-website-us-east-1.amazonaws.com`
-        : `${bucketName}.s3-website-${awsRegion}.amazonaws.com`;
+      const s3WebsiteEndpoint = `${bucketName}.s3-website-${awsRegion}.amazonaws.com`;
 
       // Check if distribution already exists for this bucket
       let distributionId = '';
@@ -397,17 +396,15 @@ class DirectFrontendDeployer {
   }
 
   private async getAWSRegion(): Promise<string> {
+    const region = this.options.region || 
+                  process.env.AWS_REGION || 
+                  process.env.AWS_DEFAULT_REGION;
+    if (region) return region;
+
     try {
-      // Try to get region from AWS CLI configuration
-      const region = this.options.region || 
-                    process.env.AWS_REGION || 
-                    process.env.AWS_DEFAULT_REGION ||
-                    execSync('aws configure get region', { stdio: 'pipe' }).toString().trim() ||
-                    'us-east-1'; // fallback
-      
-      return region;
+      return execSync('aws configure get region', { stdio: 'pipe' }).toString().trim();
     } catch {
-      return 'us-east-1'; // fallback to us-east-1
+      throw new Error('AWS region not configured. Set AWS_REGION or configure it in your AWS profile.');
     }
   }
 

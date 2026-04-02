@@ -86,12 +86,6 @@ const NodeConfigModal: React.FC<NodeConfigModalProps> = ({
               : { useExisting: false, existingRoleArn: '' },
           });
           break;
-        case 'opensearch':
-          setConfig({
-            operation: 'index',
-            indexName: (node.config as any)?.indexName || 'health-messages',
-          });
-          break;
         default:
           setConfig({});
       }
@@ -115,9 +109,6 @@ const NodeConfigModal: React.FC<NodeConfigModalProps> = ({
       case 'lambda':
         if (!config.functionName) newErrors.functionName = 'Function name is required';
         if (!config.code) newErrors.code = 'Function code is required';
-        break;
-      case 'opensearch':
-        // No required fields - endpoint comes from CDK, index has default
         break;
     }
 
@@ -543,34 +534,11 @@ const NodeConfigModal: React.FC<NodeConfigModalProps> = ({
     </div>
   );
 
-  const renderOpenSearchConfig = () => (
-    <div className="config-form">
-      <div className="form-group">
-        <label htmlFor="indexName">Index Name</label>
-        <input
-          id="indexName"
-          type="text"
-          value={config.indexName || 'health-messages'}
-          onChange={(e) => handleInputChange('indexName', e.target.value)}
-          placeholder="health-messages"
-        />
-        <small className="help-text">Index name within the shared collection (default: health-messages)</small>
-      </div>
-
-      <div className="trigger-info">
-        <h4>📋 How Indexing Works</h4>
-        <p>Documents from the previous Lambda's output will be indexed into OpenSearch.</p>
-        <p><strong>Workflow isolation:</strong> Each document is tagged with the workflow ID, so searches only return results from this workflow.</p>
-      </div>
-    </div>
-  );
-
   const getModalTitle = () => {
     switch (node.type) {
       case 's3': return 'Configure S3 Operation';
       case 'database': return 'Configure Database Query';
       case 'lambda': return 'Configure Lambda Function';
-      case 'opensearch': return 'Configure OpenSearch';
       default: return 'Configure Node';
     }
   };
@@ -589,7 +557,6 @@ const NodeConfigModal: React.FC<NodeConfigModalProps> = ({
           {node.type === 's3' && renderS3Config()}
           {node.type === 'database' && renderDatabaseConfig()}
           {node.type === 'lambda' && renderLambdaConfig()}
-          {node.type === 'opensearch' && renderOpenSearchConfig()}
         </div>
 
         <div className="modal-footer">

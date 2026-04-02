@@ -11,7 +11,7 @@ const environment = app.node.tryGetContext('environment') || process.env.NODE_EN
 new AmplifyStack(app, `WorkflowBuilderAmplify-${environment}`, {
   env: {
     account: process.env.CDK_DEFAULT_ACCOUNT,
-    region: process.env.CDK_DEFAULT_REGION || 'us-east-1',
+    region: process.env.CDK_DEFAULT_REGION,
   },
   description: `Amplify infrastructure for AWS Step Functions Workflow Builder (${environment})`,
   tags: {

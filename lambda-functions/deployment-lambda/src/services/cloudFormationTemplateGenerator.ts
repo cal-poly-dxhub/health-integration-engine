@@ -539,6 +539,9 @@ export class CloudFormationTemplateGenerator {
     })));
     
     workflow.nodes.forEach(node => {
+      // Skip opensearch nodes — they'll be inserted before End automatically
+      if (node.type === 'opensearch') return;
+
       console.log(`  📦 Processing node: ${node.name || node.id} (type: ${node.type})`);
       console.log(`    🏷️  Node details:`, { 
         id: node.id, 
@@ -574,6 +577,27 @@ export class CloudFormationTemplateGenerator {
       
       console.log(`    ✅ Generated state definition:`, JSON.stringify(stateDefinition, null, 2));
     });
+
+    // Insert opensearch state before End if an opensearch node exists
+    const opensearchNode = workflow.nodes.find(n => n.type === 'opensearch');
+    if (opensearchNode) {
+      const endStateName = endNode.name ? `${endNode.name}_${endNode.id}` : `${endNode.type}_${endNode.id}`;
+      const osStateName = opensearchNode.name ? `${opensearchNode.name}_${opensearchNode.id}` : `opensearch_${opensearchNode.id}`;
+
+      // Find the state that currently points to End and rewire it to OpenSearch
+      for (const [name, state] of Object.entries(definition.States)) {
+        if (name !== endStateName && (state as any).Next === endStateName) {
+          (state as any).Next = osStateName;
+          console.log(`    🔗 Rewired "${name}" → "${osStateName}" (was → "${endStateName}")`);
+          break;
+        }
+      }
+
+      // Generate the opensearch state pointing to End
+      const osHandler = NodeHandlerRegistry.getHandler('opensearch');
+      definition.States[osStateName] = osHandler(opensearchNode, endStateName, workflow, deploymentContext);
+      console.log(`    ✅ Inserted OpenSearch state "${osStateName}" before "${endStateName}"`);
+    }
 
     const definitionJson = JSON.stringify(definition, null, 2);
     console.log('✅ CFT GENERATOR: Step Functions definition completed');

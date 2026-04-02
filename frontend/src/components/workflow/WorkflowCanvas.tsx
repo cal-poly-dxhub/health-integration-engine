@@ -42,6 +42,17 @@ const WorkflowCanvasContent: React.FC = () => {
   const [vpcModalOpen, setVpcModalOpen] = useState(false);
   const [currentDeploymentId, setCurrentDeploymentId] = useState<string | null>(null);
   const [lastDeploymentStatus, setLastDeploymentStatus] = useState<DeploymentStatus | null>(null);
+  const [opensearchEnabled, setOpensearchEnabled] = useState(false);
+  const [opensearchIndexName, setOpensearchIndexName] = useState('health-messages');
+
+  const buildOpensearchNode = useCallback((): WorkflowNode => ({
+    id: 'opensearch-auto',
+    type: 'opensearch',
+    name: 'OpenSearch Indexing',
+    position: { x: 0, y: 0 },
+    config: { type: 'opensearch' as const, operation: 'index' as const, indexName: opensearchIndexName, collectionEndpoint: '' },
+    isConfigured: true,
+  }), [opensearchIndexName]);
 
   const canvasRef = useRef<HTMLDivElement>(null);
 
@@ -77,7 +88,13 @@ const WorkflowCanvasContent: React.FC = () => {
       });
       
       console.log('🔍 Fixed nodes:', fixedNodes.map(n => ({ id: n.id, type: n.type, isConfigured: n.isConfigured })));
-      setNodes(fixedNodes);
+      // Filter out opensearch nodes from canvas — they're controlled by the checkbox now
+      const osNode = fixedNodes.find(n => n.type === 'opensearch');
+      if (osNode) {
+        setOpensearchEnabled(true);
+        setOpensearchIndexName((osNode.config as any)?.indexName || 'health-messages');
+      }
+      setNodes(fixedNodes.filter(n => n.type !== 'opensearch'));
       setConnections(workflow.connections || []);
       setHasUnsavedChanges(false);
       
@@ -273,9 +290,11 @@ const WorkflowCanvasContent: React.FC = () => {
       // setIsSavingRef(true); // Removed unused function
       isSavingRefRef.current = true;
       
+      const saveNodes = opensearchEnabled ? [...nodes, buildOpensearchNode()] : nodes;
+
       await saveWorkflow({
         name: workflowName,
-        nodes,
+        nodes: saveNodes,
         connections,
       });
       
@@ -302,9 +321,10 @@ const WorkflowCanvasContent: React.FC = () => {
     if (hasUnsavedChanges) {
       try {
         setIsSaving(true);
+        const deploySaveNodes = opensearchEnabled ? [...nodes, buildOpensearchNode()] : nodes;
         await saveWorkflow({
           name: workflowName,
-          nodes,
+          nodes: deploySaveNodes,
           connections,
         });
         setHasUnsavedChanges(false);
@@ -340,7 +360,7 @@ const WorkflowCanvasContent: React.FC = () => {
       const currentWorkflow = {
         ...workflow,
         name: workflowName,
-        nodes,
+        nodes: opensearchEnabled ? [...nodes, buildOpensearchNode()] : nodes,
         connections,
       };
 
@@ -578,6 +598,26 @@ const WorkflowCanvasContent: React.FC = () => {
           >
             {isSaving ? 'Saving...' : 'Save'}
           </button>
+          <div className="opensearch-toggle">
+            <label className="opensearch-checkbox" title="Enable OpenSearch indexing for this workflow">
+              <input
+                type="checkbox"
+                checked={opensearchEnabled}
+                onChange={(e) => setOpensearchEnabled(e.target.checked)}
+              />
+              🔍 OpenSearch
+            </label>
+            {opensearchEnabled && (
+              <input
+                type="text"
+                className="opensearch-index-input"
+                value={opensearchIndexName}
+                onChange={(e) => setOpensearchIndexName(e.target.value)}
+                placeholder="Index name"
+                title="OpenSearch index name"
+              />
+            )}
+          </div>
           <button 
             onClick={handleDeploy}
             className="toolbar-btn deploy-btn"

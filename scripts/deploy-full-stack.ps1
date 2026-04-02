@@ -1,48 +1,70 @@
+param(
+    [string]$Profile = "",
+    [string]$Region = "us-east-1"
+)
+
 $ErrorActionPreference = "Stop"
 
-$ScriptDir = Split-Path -Parent $MyInvocation.MyCommand.Path
-$RootDir = Split-Path -Parent $ScriptDir
-Set-Location $RootDir
+# Build AWS CLI flags
+$awsArgs = @()
+if ($Profile -ne "") {
+    $awsArgs += "--profile", $Profile
+    $env:AWS_PROFILE = $Profile
+    Write-Host "Using AWS profile: $Profile"
+}
 
-$Region = "us-west-2"
+# Set region env vars early so all tools (CDK, AWS CLI) pick it up
+$env:CDK_DEFAULT_REGION = $Region
+$env:AWS_DEFAULT_REGION = $Region
+$env:AWS_REGION = $Region
+Write-Host "Using region: $Region"
+
+$RootDir = (Resolve-Path "$PSScriptRoot\..").Path
+
+Set-Location $RootDir
 
 Write-Host "=== Installing Dependencies ==="
 npm run install:all
+if ($LASTEXITCODE -ne 0) { throw "install:all failed" }
 
 Write-Host "=== Building Lambda Functions ==="
 Set-Location "$RootDir\lambda-functions\workflow-lambda"
-npm install
-npm run build
+npm install; if ($LASTEXITCODE -ne 0) { throw "workflow-lambda install failed" }
+npm run build; if ($LASTEXITCODE -ne 0) { throw "workflow-lambda build failed" }
+
 Set-Location "$RootDir\lambda-functions\deployment-lambda"
-npm run build
+npm run build; if ($LASTEXITCODE -ne 0) { throw "deployment-lambda build failed" }
+
 Set-Location "$RootDir\lambda-functions\websocket-lambda"
-npm install
-npm run build
-Set-Location $RootDir
+npm install; if ($LASTEXITCODE -ne 0) { throw "websocket-lambda install failed" }
+npm run build; if ($LASTEXITCODE -ne 0) { throw "websocket-lambda build failed" }
 
 Write-Host "=== Installing Infrastructure Dependencies ==="
 Set-Location "$RootDir\infrastructure"
-npm install
-Set-Location $RootDir
+npm install; if ($LASTEXITCODE -ne 0) { throw "infrastructure install failed" }
 
 Write-Host "=== Deploying CDK Infrastructure ==="
 Set-Location "$RootDir\infrastructure"
-cdk deploy --require-approval never --outputs-file cdk-outputs.json
+Remove-Item -Recurse -Force "cdk.out" -ErrorAction SilentlyContinue
+$cdkCmd = "npx cdk deploy --require-approval never --outputs-file cdk-outputs.json $($awsArgs -join ' ')"
+Invoke-Expression $cdkCmd
+if ($LASTEXITCODE -ne 0) { throw "CDK deploy failed" }
 
 Write-Host "=== Extracting CDK Outputs ==="
-$CdkOutputs = Get-Content cdk-outputs.json | ConvertFrom-Json
-$Stack = $CdkOutputs.WorkflowBuilderStack
+$outputs = Get-Content cdk-outputs.json | ConvertFrom-Json
+$stack = $outputs.WorkflowBuilderStack
 
-$ApiUrl = $Stack.ApiGatewayUrl
-$UserPoolId = $Stack.UserPoolId
-$UserPoolClientId = $Stack.UserPoolClientId
-$IdentityPoolId = $Stack.IdentityPoolId
-$CognitoDomain = $Stack.CognitoDomain
-$WebSocketUrl = $Stack.WebSocketApiUrl
+$ApiUrl = $stack.ApiGatewayUrl
+$UserPoolId = $stack.UserPoolId
+$UserPoolClientId = $stack.UserPoolClientId
+$IdentityPoolId = $stack.IdentityPoolId
+$CognitoDomain = $stack.CognitoDomain
+$WebSocketUrl = $stack.WebSocketApiUrl
 
-$S3Bucket = ($Stack.PSObject.Properties | Where-Object { $_.Name -like "FrontendHostingFrontendBucketName*" }).Value
-$CloudFrontId = ($Stack.PSObject.Properties | Where-Object { $_.Name -like "FrontendHostingCloudFrontDistributionId*" }).Value
-$CloudFrontUrl = ($Stack.PSObject.Properties | Where-Object { $_.Name -like "FrontendHostingCloudFrontUrl*" }).Value
+$stackProps = $stack.PSObject.Properties
+$S3Bucket = ($stackProps | Where-Object { $_.Name -like "FrontendHostingFrontendBucketName*" }).Value
+$CloudFrontId = ($stackProps | Where-Object { $_.Name -like "FrontendHostingCloudFrontDistributionId*" }).Value
+$CloudFrontUrl = ($stackProps | Where-Object { $_.Name -like "FrontendHostingCloudFrontUrl*" }).Value
 
 Write-Host "=== Updating Frontend .env ==="
 Set-Location "$RootDir\frontend"
@@ -58,16 +80,18 @@ VITE_WEBSOCKET_URL=$WebSocketUrl
 VITE_NODE_ENV=development
 VITE_ENABLE_DEBUG=true
 VITE_ENABLE_MOCK_DATA=false
-"@ | Out-File -FilePath .env -Encoding utf8
+"@ | Set-Content .env -Encoding UTF8
 
 Write-Host "=== Building Frontend ==="
-npm run build
+npm run build; if ($LASTEXITCODE -ne 0) { throw "Frontend build failed" }
 
 Write-Host "=== Deploying to S3 ==="
-aws s3 sync dist/ "s3://$S3Bucket/" --delete --region $Region
+aws s3 sync dist/ "s3://$S3Bucket/" --delete --region $Region @awsArgs
+if ($LASTEXITCODE -ne 0) { throw "S3 sync failed" }
 
 Write-Host "=== Invalidating CloudFront Cache ==="
-aws cloudfront create-invalidation --distribution-id $CloudFrontId --paths "/*"
+aws cloudfront create-invalidation --distribution-id $CloudFrontId --paths "/*" @awsArgs
+if ($LASTEXITCODE -ne 0) { throw "CloudFront invalidation failed" }
 
 Write-Host ""
 Write-Host "=== Deployment Complete ==="

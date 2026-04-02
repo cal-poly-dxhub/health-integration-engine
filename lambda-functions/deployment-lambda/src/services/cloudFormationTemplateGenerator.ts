@@ -195,7 +195,6 @@ export class CloudFormationTemplateGenerator {
     // EventBridge Rule to capture S3 ObjectCreated events
     resources.S3TriggerEventRule = {
       Type: 'AWS::Events::Rule',
-      DependsOn: 'StepFunctionsStateMachine',
       Properties: {
         Name: { 'Fn::Sub': `S3Trigger-\${WorkflowId}` },
         Description: { 'Fn::Sub': `Trigger Step Function when objects are created in S3 bucket ${s3Config.bucketName}` },

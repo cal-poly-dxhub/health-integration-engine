@@ -59,7 +59,7 @@ async function generateEnvironmentConfig(
     cognitoIdentityPoolId: '',
     cognitoDomain: '',
     websocketUrl: '',
-    region: 'us-east-1',
+    region: process.env.AWS_REGION || process.env.AWS_DEFAULT_REGION || '',
     customVariables: {}
   };
 

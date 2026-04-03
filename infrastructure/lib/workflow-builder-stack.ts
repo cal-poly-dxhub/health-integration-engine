@@ -1475,6 +1475,19 @@ export class WorkflowBuilderStack extends cdk.Stack {
       })
     );
 
+    // Grant EventBridge permissions to clean up rules before stack deletion
+    deleteCloudFormationStackLambda.addToRolePolicy(
+      new iam.PolicyStatement({
+        effect: iam.Effect.ALLOW,
+        actions: [
+          'events:ListTargetsByRule',
+          'events:RemoveTargets',
+          'events:DeleteRule',
+        ],
+        resources: ['*'],
+      })
+    );
+
     // Read the deletion state machine definition
     const stateMachineDefinition = fs.readFileSync(
       '../lambda-functions/deployment-lambda/src/stepfunctions/deletionStateMachine.json',

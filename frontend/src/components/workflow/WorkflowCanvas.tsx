@@ -11,7 +11,7 @@ import NodeComponent from './NodeComponent';
 import NodeSidebar from './NodeSidebar';
 import NodeConfigModal from './NodeConfigModal';
 import DeploymentStatusModal from './DeploymentStatusModal';
-import VpcConfigModal, { VpcConfig } from './VpcConfigModal';
+import { VpcConfig } from './VpcConfigModal';
 import ConnectionsRenderer from './ConnectionsRenderer';
 import './WorkflowCanvas.css';
 
@@ -39,7 +39,6 @@ const WorkflowCanvasContent: React.FC = () => {
   // Removed unused isSavingRef state
   const isSavingRefRef = useRef(false);
   const [deploymentModalOpen, setDeploymentModalOpen] = useState(false);
-  const [vpcModalOpen, setVpcModalOpen] = useState(false);
   const [currentDeploymentId, setCurrentDeploymentId] = useState<string | null>(null);
   const [lastDeploymentStatus, setLastDeploymentStatus] = useState<DeploymentStatus | null>(null);
   const [opensearchEnabled, setOpensearchEnabled] = useState(false);
@@ -314,6 +313,46 @@ const WorkflowCanvasContent: React.FC = () => {
     }
   }, [workflowName, nodes, connections, isSaving, workflow, saveWorkflow]);
 
+  const handleDeployWithVpc = useCallback(async (vpcConfig: VpcConfig) => {
+    if (isDeploying || !workflow) return;
+
+    try {
+      setIsDeploying(true);
+
+      const currentWorkflow = {
+        ...workflow,
+        name: workflowName,
+        nodes: opensearchEnabled ? [...nodes, buildOpensearchNode()] : nodes,
+        connections,
+      };
+
+      // Start deployment
+      const deploymentResponse = await DeploymentService.deployWorkflow({
+        workflowId: workflow.id,
+        workflowData: currentWorkflow,
+        environment: 'development',
+        configuration: {
+          enableLogging: true,
+          enableXRay: false,
+          tags: {
+            DeployedFrom: 'WorkflowBuilder',
+            Environment: 'development',
+          },
+          vpcConfig,
+        },
+      });
+
+      setCurrentDeploymentId(deploymentResponse.deploymentId);
+      setDeploymentModalOpen(true);
+      
+    } catch (error) {
+      console.error('Failed to deploy workflow:', error);
+      alert('Failed to start deployment. Please try again.');
+    } finally {
+      setIsDeploying(false);
+    }
+  }, [workflowName, nodes, connections, isDeploying, workflow]);
+
   const handleDeploy = useCallback(async () => {
     if (isDeploying || !workflow) return;
     
@@ -347,50 +386,9 @@ const WorkflowCanvasContent: React.FC = () => {
       return;
     }
 
-    // Open VPC config modal
-    setVpcModalOpen(true);
-  }, [workflowName, nodes, connections, isDeploying, workflow, saveWorkflow, hasUnsavedChanges]);
-
-  const handleDeployWithVpc = useCallback(async (vpcConfig: VpcConfig) => {
-    if (isDeploying || !workflow) return;
-
-    try {
-      setIsDeploying(true);
-
-      const currentWorkflow = {
-        ...workflow,
-        name: workflowName,
-        nodes: opensearchEnabled ? [...nodes, buildOpensearchNode()] : nodes,
-        connections,
-      };
-
-      // Start deployment
-      const deploymentResponse = await DeploymentService.deployWorkflow({
-        workflowId: workflow.id,
-        workflowData: currentWorkflow,
-        environment: 'development',
-        configuration: {
-          enableLogging: true,
-          enableXRay: false,
-          tags: {
-            DeployedFrom: 'WorkflowBuilder',
-            Environment: 'development',
-          },
-          vpcConfig,
-        },
-      });
-
-      setVpcModalOpen(false);
-      setCurrentDeploymentId(deploymentResponse.deploymentId);
-      setDeploymentModalOpen(true);
-      
-    } catch (error) {
-      console.error('Failed to deploy workflow:', error);
-      alert('Failed to start deployment. Please try again.');
-    } finally {
-      setIsDeploying(false);
-    }
-  }, [workflowName, nodes, connections, isDeploying, workflow]);
+    // Deploy immediately with no VPC
+    handleDeployWithVpc({ mode: 'none' });
+  }, [workflowName, nodes, connections, isDeploying, workflow, saveWorkflow, hasUnsavedChanges, handleDeployWithVpc]);
 
   const loadLastDeploymentStatus = useCallback(async (deploymentId: string) => {
     try {
@@ -837,14 +835,6 @@ const WorkflowCanvasContent: React.FC = () => {
           onSave={handleConfigSave}
         />
       )}
-
-      {/* VPC Configuration Modal */}
-      <VpcConfigModal
-        isOpen={vpcModalOpen}
-        onClose={() => setVpcModalOpen(false)}
-        onDeploy={handleDeployWithVpc}
-        isDeploying={isDeploying}
-      />
 
       {/* Deployment Status Modal */}
       {deploymentModalOpen && currentDeploymentId && (

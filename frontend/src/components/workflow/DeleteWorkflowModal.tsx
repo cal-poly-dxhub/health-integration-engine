@@ -28,7 +28,7 @@ const DeleteWorkflowModal: React.FC<DeleteWorkflowModalProps> = ({
     if (canDelete) {
       try {
         await onConfirm();
-        handleClose();
+        // Don't close here — parent will close when deletion completes or navigate away
       } catch (error) {
         // Error handling is done by the parent component
         console.error('Delete workflow error:', error);

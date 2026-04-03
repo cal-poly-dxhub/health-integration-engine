@@ -11,6 +11,7 @@ import {
   StackStatus,
   StackResourceDriftStatus,
 } from '@aws-sdk/client-cloudformation';
+import { EventBridgeClient, ListTargetsByRuleCommand, RemoveTargetsCommand, DeleteRuleCommand } from '@aws-sdk/client-eventbridge';
 import { DynamoDBClient } from '@aws-sdk/client-dynamodb';
 import { DynamoDBDocumentClient, UpdateCommand, GetCommand } from '@aws-sdk/lib-dynamodb';
 
@@ -384,7 +385,16 @@ export class CloudFormationStackManager {
         }
       }
 
-      // 2. Delete the stack if it exists
+      // 2. Clean up EventBridge rule targets before stack deletion (prevents DELETE_FAILED)
+      if (stackExists) {
+        try {
+          await this.cleanupEventBridgeRules(workflowId);
+        } catch (ebError) {
+          console.warn('⚠️ CloudFormation Stack Manager: EventBridge cleanup failed (non-fatal):', ebError);
+        }
+      }
+
+      // 3. Delete the stack if it exists
       if (stackExists) {
         try {
           console.log(`🚀 CloudFormation Stack Manager: About to send DeleteStackCommand for ${stackName}`);
@@ -427,7 +437,7 @@ export class CloudFormationStackManager {
         }
       }
 
-      // 3. Clean up workflow database records regardless of stack deletion outcome
+      // 4. Clean up workflow database records regardless of stack deletion outcome
       try {
         await this.cleanupWorkflowRecords(workflowId, userId);
         console.log('✅ CloudFormation Stack Manager: Workflow database records cleaned up');
@@ -436,7 +446,7 @@ export class CloudFormationStackManager {
         result.partialFailures.push('Failed to clean up workflow database records');
       }
 
-      // 4. Determine overall success
+      // 5. Determine overall success
       const hasPartialFailures = result.partialFailures.length > 0;
       result.success = !hasPartialFailures;
       
@@ -707,6 +717,35 @@ export class CloudFormationStackManager {
       'UPDATE_ROLLBACK_COMPLETE',
     ];
     return updateableStates.includes(stackStatus);
+  }
+
+  /**
+   * Clean up EventBridge rules and targets for a workflow before stack deletion
+   */
+  private async cleanupEventBridgeRules(workflowId: string): Promise<void> {
+    const ebClient = new EventBridgeClient({ region: process.env.AWS_REGION });
+    const ruleName = `S3Trigger-${workflowId}`;
+
+    try {
+      // List targets on the rule
+      const targets = await ebClient.send(new ListTargetsByRuleCommand({ Rule: ruleName }));
+      const targetIds = targets.Targets?.map(t => t.Id!).filter(Boolean) || [];
+
+      if (targetIds.length > 0) {
+        console.log(`🧹 Removing ${targetIds.length} targets from EventBridge rule: ${ruleName}`);
+        await ebClient.send(new RemoveTargetsCommand({ Rule: ruleName, Ids: targetIds }));
+      }
+
+      console.log(`🧹 Deleting EventBridge rule: ${ruleName}`);
+      await ebClient.send(new DeleteRuleCommand({ Name: ruleName }));
+      console.log(`✅ EventBridge rule cleaned up: ${ruleName}`);
+    } catch (error: any) {
+      if (error.name === 'ResourceNotFoundException') {
+        console.log(`ℹ️ EventBridge rule ${ruleName} does not exist — skipping`);
+        return;
+      }
+      throw error;
+    }
   }
 
   /**

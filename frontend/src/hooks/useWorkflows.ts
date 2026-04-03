@@ -361,45 +361,10 @@ export const useWorkflows = (params: ListWorkflowsParams = {}) => {
       
       console.log('✅ Workflow marked as deleting, state updated');
 
-      // Show progressive deletion stages for better UX
-      
-      // Stage 1: Preparing deletion
-      setState(prev => ({
-        ...prev,
-        workflows: prev.workflows.map(w => 
-          w.id === workflowId 
-            ? { ...w, status: 'preparing-deletion' as any, isDeleting: true, deletionStage: 'Preparing deletion...' }
-            : w
-        ),
-      }));
-      await new Promise(resolve => setTimeout(resolve, 800));
-
-      // Stage 2: Contacting server
-      setState(prev => ({
-        ...prev,
-        workflows: prev.workflows.map(w => 
-          w.id === workflowId 
-            ? { ...w, deletionStage: 'Contacting server...' }
-            : w
-        ),
-      }));
-      await new Promise(resolve => setTimeout(resolve, 500));
-
       // Start deletion process
       const response = await workflowApiService.deleteWorkflow(workflowId);
       
       console.log('✅ Deletion response:', response);
-      
-      // Stage 3: Processing deletion
-      setState(prev => ({
-        ...prev,
-        workflows: prev.workflows.map(w => 
-          w.id === workflowId 
-            ? { ...w, deletionStage: 'Processing deletion...' }
-            : w
-        ),
-      }));
-      await new Promise(resolve => setTimeout(resolve, 800));
       
       // If deletion is async, keep showing progress
       if (response.status === 'DELETION_IN_PROGRESS') {
@@ -455,28 +420,13 @@ export const useWorkflows = (params: ListWorkflowsParams = {}) => {
           details: response?.details,
         };
       } else {
-        // Stage 4: Finalizing
-        setState(prev => ({
-          ...prev,
-          workflows: prev.workflows.map(w => 
-            w.id === workflowId 
-              ? { ...w, deletionStage: 'Finalizing...' }
-              : w
-          ),
-        }));
-        await new Promise(resolve => setTimeout(resolve, 600));
-        
-        // Synchronous deletion completed - remove from UI after showing progress
-        setState(prev => ({
-          ...prev,
-          workflows: prev.workflows.filter(w => w.id !== workflowId),
-        }));
-        
+        // Deletion response was not async — keep workflow as "deleting" until confirmed
         return {
           success: true,
-          message: `Workflow "${workflowToDelete.name}" deleted successfully`,
+          message: `Workflow "${workflowToDelete.name}" deletion initiated`,
           workflowId: workflowId,
           timestamp: new Date().toISOString(),
+          deletionId: workflowId,
           details: response?.details,
         };
       }

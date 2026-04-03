@@ -408,11 +408,12 @@ export class CloudFormationStackManager {
           console.log(`📥 CloudFormation Stack Manager: DeleteStackCommand response:`, deleteResponse);
 
           console.log(`🗑️ CloudFormation Stack Manager: Stack deletion initiated for ${stackName}`);
-          console.log(`ℹ️ CloudFormation Stack Manager: Deletion will continue asynchronously in the background`);
+          
+          // Wait for stack deletion to actually complete
+          await this.waitForStackDeletion(stackName);
           
           result.deletedResources = resources;
-          result.warnings.push('CloudFormation stack deletion initiated - resources will be cleaned up asynchronously');
-          console.log(`✅ CloudFormation Stack Manager: Stack deletion initiated successfully for ${stackName}`);
+          console.log(`✅ CloudFormation Stack Manager: Stack deletion completed for ${stackName}`);
           
         } catch (deletionError: any) {
           console.error(`❌ CloudFormation Stack Manager: Stack deletion failed:`, deletionError);
@@ -490,7 +491,7 @@ export class CloudFormationStackManager {
     stackName: string, 
     progressCallback?: (status: string, resourceCount?: number) => Promise<void>
   ): Promise<void> {
-    const maxAttempts = 60; // 30 minutes max
+    const maxAttempts = 25; // ~4 minutes (fits within Lambda 5min timeout)
     let attempts = 0;
     let lastStatus = '';
     let lastResourceCount = 0;
@@ -577,7 +578,7 @@ export class CloudFormationStackManager {
           console.warn('⚠️ Could not get resource count:', resourceError);
         }
 
-        await this.sleep(30000); // Wait 30 seconds
+        await this.sleep(10000); // Wait 10 seconds
         attempts++;
 
       } catch (error: any) {
@@ -590,17 +591,17 @@ export class CloudFormationStackManager {
         }
         
         if (attempts >= maxAttempts - 1) {
-          console.error(`❌ CloudFormation Stack Manager: Stack deletion timed out after ${maxAttempts * 30} seconds`);
-          throw new Error(`Stack deletion timed out after ${maxAttempts * 30} seconds. Last status: ${lastStatus}`);
+          console.error(`❌ CloudFormation Stack Manager: Stack deletion timed out after ${maxAttempts * 10} seconds`);
+          throw new Error(`Stack deletion timed out after ${maxAttempts * 10} seconds. Last status: ${lastStatus}`);
         }
         
         console.warn(`⚠️ CloudFormation Stack Manager: Error checking stack status (attempt ${attempts + 1}/${maxAttempts}):`, error.message);
-        await this.sleep(30000);
+        await this.sleep(10000);
         attempts++;
       }
     }
 
-    throw new Error(`Stack deletion timed out after ${maxAttempts * 30} seconds. Last status: ${lastStatus}`);
+    throw new Error(`Stack deletion timed out after ${maxAttempts * 10} seconds. Last status: ${lastStatus}`);
   }
 
   /**

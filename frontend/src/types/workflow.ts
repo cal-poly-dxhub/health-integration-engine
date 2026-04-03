@@ -39,7 +39,7 @@ export interface Workflow {
   updatedAt: string;
   version: number;
   isDeployed: boolean;
-  deploymentStatus?: 'draft' | 'pending' | 'deploying' | 'deployed' | 'failed' | 'delete_failed';
+  deploymentStatus?: 'draft' | 'pending' | 'deploying' | 'deployed' | 'failed' | 'delete_failed' | 'deleting';
   stepFunctionArn?: string;
   lastDeploymentId?: string;
   lastDeployment?: {
@@ -59,7 +59,7 @@ export interface WorkflowMetadata {
   createdAt: string;
   updatedAt: string;
   isDeployed: boolean;
-  deploymentStatus?: 'draft' | 'pending' | 'deploying' | 'deployed' | 'failed' | 'delete_failed';
+  deploymentStatus?: 'draft' | 'pending' | 'deploying' | 'deployed' | 'failed' | 'delete_failed' | 'deleting';
   stepFunctionArn?: string;
   nodeCount: number;
   // Status checking fields
@@ -108,7 +108,7 @@ export const WorkflowSchema = z.object({
   updatedAt: z.string(),
   version: z.number().min(1),
   isDeployed: z.boolean(),
-  deploymentStatus: z.enum(['draft', 'pending', 'deploying', 'deployed', 'failed', 'delete_failed']).optional(),
+  deploymentStatus: z.enum(['draft', 'pending', 'deploying', 'deployed', 'failed', 'delete_failed', 'deleting']).optional(),
   stepFunctionArn: z.string().optional(),
   lastDeploymentId: z.string().optional(),
 });

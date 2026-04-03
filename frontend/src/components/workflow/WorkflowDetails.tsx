@@ -226,46 +226,46 @@ const WorkflowDetails: React.FC<WorkflowDetailsProps> = ({ workflow: propWorkflo
     setShowDeleteModal(true);
   };
 
+  const [deletionStatus, setDeletionStatus] = useState<string>('');
+
   const confirmDeleteWorkflow = async () => {
     if (!workflow || isDeleting) return;
     
     try {
       setIsDeleting(true);
+      setDeletionStatus('Initiating deletion...');
       
-      // Start deletion and get the deletion response
-      const deletionResponse = await deleteWorkflow(workflow.id);
+      // Start deletion
+      await deleteWorkflow(workflow.id);
       
-      console.log('🔍 Deletion response:', deletionResponse);
-      console.log('🔍 Step 1: Got deletion response');
+      setDeletionStatus('Deleting AWS resources... This may take a few minutes.');
       
-      // Close the delete confirmation modal
-      setShowDeleteModal(false);
-      console.log('🔍 Step 2: Closed delete modal');
+      // Poll workflow status until it's gone or marked as not deployed
+      const maxAttempts = 60; // 5 minutes at 5s intervals
+      for (let i = 0; i < maxAttempts; i++) {
+        await new Promise(resolve => setTimeout(resolve, 5000));
+        try {
+          const wf = await workflowApiService.getWorkflow(workflow.id);
+          if (!wf) break; // Workflow deleted from DB
+          if (wf.deploymentStatus === 'delete_failed') {
+            setDeletionStatus('Stack deletion failed. You may need to delete it manually from the AWS Console.');
+            return;
+          }
+          if (!wf.isDeployed && wf.deploymentStatus !== 'deploying') break; // Undeployed
+          setDeletionStatus(`Deleting AWS resources... (${wf.deploymentStatus || 'in progress'})`);
+        } catch {
+          // 404 or error — workflow is gone
+          break;
+        }
+      }
       
-      // Always open the deployment status modal to show deletion progress
-      // Since WebSocket messages are being received, we should show the UI
-      const deletionId = deletionResponse.deletionId || deletionResponse.workflowId || workflow.id;
-      console.log('🔍 Step 3: Calculated deletion ID:', deletionId);
-      console.log('✅ Opening deletion progress modal with ID:', deletionId);
-      
-      setDeploymentId(deletionId);
-      console.log('🔍 Step 4: Set deployment ID');
-      
-      setShowDeploymentModal(true);
-      console.log('🔍 Step 5: Set show modal to true');
-      
-      // Force a re-render to ensure state updates
-      setTimeout(() => {
-        console.log('🔍 Step 6: Modal state after timeout:', { 
-          showDeploymentModal: true, 
-          deploymentId: deletionId,
-          workflow: !!workflow 
-        });
-      }, 100);
+      setDeletionStatus('Deletion complete!');
+      await new Promise(resolve => setTimeout(resolve, 1000));
+      navigate('/dashboard');
       
     } catch (error) {
       console.error('Failed to delete workflow:', error);
-      // Error handling is done by the DeleteWorkflowModal
+      setDeletionStatus('Deletion failed. Please try again.');
     } finally {
       setIsDeleting(false);
     }
@@ -761,6 +761,7 @@ const WorkflowDetails: React.FC<WorkflowDetailsProps> = ({ workflow: propWorkflo
           onClose={handleCloseDeleteModal}
           onConfirm={confirmDeleteWorkflow}
           isDeleting={isDeleting}
+          deletionStatus={deletionStatus}
         />
       )}
 

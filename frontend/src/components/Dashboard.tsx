@@ -6,6 +6,7 @@ import DeleteWorkflowModal from './workflow/DeleteWorkflowModal';
 import DeploymentStatusModal from './workflow/DeploymentStatusModal';
 import OpenSearchPanel from './workflow/OpenSearchPanel';
 import { useWorkflows } from '../hooks/useWorkflows';
+import { workflowApiService } from '../services/workflowApi';
 import { WorkflowMetadata } from '../types/workflow';
 import './Dashboard.css';
 
@@ -125,31 +126,48 @@ export default function Dashboard({ onSignOut, onEditWorkflow, onViewWorkflow }:
     }
   };
 
+  const [dashboardDeletionStatus, setDashboardDeletionStatus] = useState('');
+
   const confirmDelete = async () => {
     if (!workflowToDelete || isDeleting) return;
     
     try {
       setIsDeleting(true);
       setDeleteError(null);
+      setDashboardDeletionStatus('Initiating deletion...');
       
-      console.log('🚀 Starting deletion from Dashboard');
-      const result = await deleteWorkflow(workflowToDelete.id);
-      console.log('🔍 Dashboard deletion result:', result);
+      await deleteWorkflow(workflowToDelete.id);
       
-      // Close the delete confirmation modal
+      setDashboardDeletionStatus('Deleting AWS resources... This may take a few minutes.');
+      
+      // Poll workflow status until it's gone
+      const maxAttempts = 60;
+      for (let i = 0; i < maxAttempts; i++) {
+        await new Promise(resolve => setTimeout(resolve, 5000));
+        try {
+          const wf = await workflowApiService.getWorkflow(workflowToDelete.id);
+          if (!wf) break;
+          if (wf.deploymentStatus === 'delete_failed') {
+            setDashboardDeletionStatus('Stack deletion failed. You may need to delete it manually from the AWS Console.');
+            return;
+          }
+          if (!wf.isDeployed && wf.deploymentStatus !== 'deploying') break;
+          setDashboardDeletionStatus(`Deleting AWS resources... (${wf.deploymentStatus || 'in progress'})`);
+        } catch {
+          break;
+        }
+      }
+      
+      setDashboardDeletionStatus('Deletion complete!');
+      await new Promise(resolve => setTimeout(resolve, 1000));
       setWorkflowToDelete(null);
-      
-      // Open the deletion progress modal
-      const deletionId = result.deletionId || result.workflowId || workflowToDelete.id;
-      console.log('✅ Opening deletion progress modal with ID:', deletionId);
-      setDeletionId(deletionId);
-      setShowDeletionProgressModal(true);
       
     } catch (error) {
       console.error('❌ Failed to delete workflow:', error);
       setDeleteError(error instanceof Error ? error.message : 'Failed to delete workflow. Please try again.');
     } finally {
       setIsDeleting(false);
+      setDashboardDeletionStatus('');
     }
   };
 
@@ -330,6 +348,7 @@ export default function Dashboard({ onSignOut, onEditWorkflow, onViewWorkflow }:
           onClose={handleCloseDeleteModal}
           onConfirm={confirmDelete}
           isDeleting={isDeleting}
+          deletionStatus={dashboardDeletionStatus}
         />
       )}
 

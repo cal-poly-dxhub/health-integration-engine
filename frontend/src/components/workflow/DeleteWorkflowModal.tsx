@@ -8,6 +8,7 @@ interface DeleteWorkflowModalProps {
   onClose: () => void;
   onConfirm: () => Promise<void>;
   isDeleting?: boolean;
+  deletionStatus?: string;
 }
 
 const DeleteWorkflowModal: React.FC<DeleteWorkflowModalProps> = ({
@@ -16,6 +17,7 @@ const DeleteWorkflowModal: React.FC<DeleteWorkflowModalProps> = ({
   onClose,
   onConfirm,
   isDeleting = false,
+  deletionStatus = '',
 }) => {
   const [confirmationText, setConfirmationText] = useState('');
   const [hasReadWarning, setHasReadWarning] = useState(false);
@@ -197,7 +199,7 @@ const DeleteWorkflowModal: React.FC<DeleteWorkflowModalProps> = ({
             {isDeleting ? (
               <>
                 <div className="spinner"></div>
-                Deleting...
+                {deletionStatus || 'Deleting...'}
               </>
             ) : (
               <>

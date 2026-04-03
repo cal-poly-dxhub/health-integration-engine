@@ -251,7 +251,7 @@ const WorkflowDetails: React.FC<WorkflowDetailsProps> = ({ workflow: propWorkflo
             setDeletionStatus('Stack deletion failed. You may need to delete it manually from the AWS Console.');
             return;
           }
-          if (!wf.isDeployed && wf.deploymentStatus !== 'deploying') break; // Undeployed
+          if (!wf.isDeployed && wf.deploymentStatus !== 'deploying' && wf.deploymentStatus !== 'deleting') break; // Undeployed
           setDeletionStatus(`Deleting AWS resources... (${wf.deploymentStatus || 'in progress'})`);
         } catch {
           // 404 or error — workflow is gone

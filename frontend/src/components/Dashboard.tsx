@@ -151,7 +151,7 @@ export default function Dashboard({ onSignOut, onEditWorkflow, onViewWorkflow }:
             setDashboardDeletionStatus('Stack deletion failed. You may need to delete it manually from the AWS Console.');
             return;
           }
-          if (!wf.isDeployed && wf.deploymentStatus !== 'deploying') break;
+          if (!wf.isDeployed && wf.deploymentStatus !== 'deploying' && wf.deploymentStatus !== 'deleting') break;
           setDashboardDeletionStatus(`Deleting AWS resources... (${wf.deploymentStatus || 'in progress'})`);
         } catch {
           break;

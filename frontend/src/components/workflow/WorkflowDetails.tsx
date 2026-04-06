@@ -235,38 +235,18 @@ const WorkflowDetails: React.FC<WorkflowDetailsProps> = ({ workflow: propWorkflo
       setIsDeleting(true);
       setDeletionStatus('Initiating deletion...');
       
-      // Start deletion
       await deleteWorkflow(workflow.id);
       
-      setDeletionStatus('Deleting AWS resources... This may take a few minutes.');
-      
-      // Poll workflow status until it's gone or marked as not deployed
-      const maxAttempts = 60; // 5 minutes at 5s intervals
-      for (let i = 0; i < maxAttempts; i++) {
-        await new Promise(resolve => setTimeout(resolve, 5000));
-        try {
-          const wf = await workflowApiService.getWorkflow(workflow.id);
-          if (!wf) break; // Workflow deleted from DB
-          if (wf.deploymentStatus === 'delete_failed') {
-            setDeletionStatus('Stack deletion failed. You may need to delete it manually from the AWS Console.');
-            return;
-          }
-          if (!wf.isDeployed && wf.deploymentStatus !== 'deploying' && wf.deploymentStatus !== 'deleting') break; // Undeployed
-          setDeletionStatus(`Deleting AWS resources... (${wf.deploymentStatus || 'in progress'})`);
-        } catch {
-          // 404 or error — workflow is gone
-          break;
-        }
-      }
-      
-      setDeletionStatus('Deletion complete!');
-      await new Promise(resolve => setTimeout(resolve, 1000));
-      navigate('/dashboard');
+      // Close delete confirmation modal and open progress modal
+      setShowDeleteModal(false);
+      setIsDeleting(false);
+      setDeletionStatus('');
+      setDeploymentId(workflow.id);
+      setShowDeploymentModal(true);
       
     } catch (error) {
       console.error('Failed to delete workflow:', error);
       setDeletionStatus('Deletion failed. Please try again.');
-    } finally {
       setIsDeleting(false);
     }
   };

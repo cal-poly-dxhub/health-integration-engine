@@ -258,7 +258,7 @@ const DeploymentStatusModal: React.FC<DeploymentStatusModalProps> = ({
     };
     
     // Enhanced step history tracking with deduplication
-    const currentTime = update.timestamp;
+    const currentTime = update.timestamp && !isNaN(new Date(update.timestamp).getTime()) ? update.timestamp : new Date().toISOString();
     const stepMessage = getStepMessage(detailedStatus, update.message);
     
     console.log('Processing deployment update:', {

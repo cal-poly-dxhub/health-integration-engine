@@ -928,6 +928,28 @@ export class WorkflowBuilderStack extends cdk.Stack {
     );
     
     this.addLambdaIntegration(rolesResource, 'GET', iamRolesLambda, true);
+
+    // GET /vpc/list - List existing VPCs with subnets and security groups
+    const vpcResource = this.api.root.addResource('vpc');
+    const vpcListResource = vpcResource.addResource('list');
+
+    const vpcListLambda = this.createLambdaFunction(
+      'VPCListLambda',
+      'vpc-list-handler',
+      '../lambda-functions/workflow-lambda/dist',
+      'vpcList.handler',
+      {}
+    );
+
+    vpcListLambda.addToRolePolicy(
+      new iam.PolicyStatement({
+        effect: iam.Effect.ALLOW,
+        actions: ['ec2:DescribeVpcs', 'ec2:DescribeSubnets', 'ec2:DescribeSecurityGroups'],
+        resources: ['*'],
+      })
+    );
+
+    this.addLambdaIntegration(vpcListResource, 'GET', vpcListLambda, true);
     
     // POST /opensearch/search - Search OpenSearch Serverless (Python Lambda)
     const opensearchResource = this.api.root.addResource('opensearch');

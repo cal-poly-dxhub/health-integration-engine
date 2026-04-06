@@ -6,7 +6,6 @@ import DeleteWorkflowModal from './workflow/DeleteWorkflowModal';
 import DeploymentStatusModal from './workflow/DeploymentStatusModal';
 import OpenSearchPanel from './workflow/OpenSearchPanel';
 import { useWorkflows } from '../hooks/useWorkflows';
-import { workflowApiService } from '../services/workflowApi';
 import { WorkflowMetadata } from '../types/workflow';
 import './Dashboard.css';
 
@@ -138,34 +137,17 @@ export default function Dashboard({ onSignOut, onEditWorkflow, onViewWorkflow }:
       
       await deleteWorkflow(workflowToDelete.id);
       
-      setDashboardDeletionStatus('Deleting AWS resources... This may take a few minutes.');
-      
-      // Poll workflow status until it's gone
-      const maxAttempts = 60;
-      for (let i = 0; i < maxAttempts; i++) {
-        await new Promise(resolve => setTimeout(resolve, 5000));
-        try {
-          const wf = await workflowApiService.getWorkflow(workflowToDelete.id);
-          if (!wf) break;
-          if (wf.deploymentStatus === 'delete_failed') {
-            setDashboardDeletionStatus('Stack deletion failed. You may need to delete it manually from the AWS Console.');
-            return;
-          }
-          if (!wf.isDeployed && wf.deploymentStatus !== 'deploying' && wf.deploymentStatus !== 'deleting') break;
-          setDashboardDeletionStatus(`Deleting AWS resources... (${wf.deploymentStatus || 'in progress'})`);
-        } catch {
-          break;
-        }
-      }
-      
-      setDashboardDeletionStatus('Deletion complete!');
-      await new Promise(resolve => setTimeout(resolve, 1000));
+      // Close the delete confirmation modal and open the progress modal
+      const workflowId = workflowToDelete.id;
       setWorkflowToDelete(null);
+      setIsDeleting(false);
+      setDashboardDeletionStatus('');
+      setDeletionId(workflowId);
+      setShowDeletionProgressModal(true);
       
     } catch (error) {
       console.error('❌ Failed to delete workflow:', error);
       setDeleteError(error instanceof Error ? error.message : 'Failed to delete workflow. Please try again.');
-    } finally {
       setIsDeleting(false);
       setDashboardDeletionStatus('');
     }

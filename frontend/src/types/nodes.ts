@@ -73,8 +73,15 @@ export interface LambdaNodeConfig {
   description?: string;
   layers?: string[]; // Layer ARNs
   vpcConfig?: {
-    subnetIds: string[];
-    securityGroupIds: string[];
+    mode: 'none' | 'existing' | 'new';
+    existing?: {
+      vpcId: string;
+      subnetIds: string[];
+      securityGroupIds: string[];
+    };
+    new?: {
+      cidrBlock?: string;
+    };
   };
   deadLetterConfig?: {
     targetArn: string;
@@ -156,8 +163,15 @@ export const LambdaNodeConfigSchema = z.object({
   description: z.string().max(256).optional(),
   layers: z.array(z.string()).optional(),
   vpcConfig: z.object({
-    subnetIds: z.array(z.string()),
-    securityGroupIds: z.array(z.string()),
+    mode: z.enum(['none', 'existing', 'new']),
+    existing: z.object({
+      vpcId: z.string(),
+      subnetIds: z.array(z.string()),
+      securityGroupIds: z.array(z.string()),
+    }).optional(),
+    new: z.object({
+      cidrBlock: z.string().optional(),
+    }).optional(),
   }).optional(),
   deadLetterConfig: z.object({
     targetArn: z.string(),

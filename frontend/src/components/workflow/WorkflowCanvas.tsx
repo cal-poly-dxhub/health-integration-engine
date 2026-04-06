@@ -11,7 +11,6 @@ import NodeComponent from './NodeComponent';
 import NodeSidebar from './NodeSidebar';
 import NodeConfigModal from './NodeConfigModal';
 import DeploymentStatusModal from './DeploymentStatusModal';
-import { VpcConfig } from './VpcConfigModal';
 import ConnectionsRenderer from './ConnectionsRenderer';
 import './WorkflowCanvas.css';
 
@@ -386,9 +385,40 @@ const WorkflowCanvasContent: React.FC = () => {
       return;
     }
 
-    // Deploy immediately with no VPC
-    handleDeployWithVpc({ mode: 'none' });
-  }, [workflowName, nodes, connections, isDeploying, workflow, saveWorkflow, hasUnsavedChanges, handleDeployWithVpc]);
+    // Start deployment directly (VPC is configured per-Lambda node)
+    try {
+      setIsDeploying(true);
+
+      const currentWorkflow = {
+        ...workflow,
+        name: workflowName,
+        nodes,
+        connections,
+      };
+
+      const deploymentResponse = await DeploymentService.deployWorkflow({
+        workflowId: workflow.id,
+        workflowData: currentWorkflow,
+        environment: 'development',
+        configuration: {
+          enableLogging: true,
+          enableXRay: false,
+          tags: {
+            DeployedFrom: 'WorkflowBuilder',
+            Environment: 'development',
+          },
+        },
+      });
+
+      setCurrentDeploymentId(deploymentResponse.deploymentId);
+      setDeploymentModalOpen(true);
+    } catch (error) {
+      console.error('Failed to deploy workflow:', error);
+      alert('Failed to start deployment. Please try again.');
+    } finally {
+      setIsDeploying(false);
+    }
+  }, [workflowName, nodes, connections, isDeploying, workflow, saveWorkflow, hasUnsavedChanges]);
 
   const loadLastDeploymentStatus = useCallback(async (deploymentId: string) => {
     try {

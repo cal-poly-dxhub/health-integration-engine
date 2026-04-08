@@ -29,15 +29,11 @@ const NodeConfigModal: React.FC<NodeConfigModalProps> = ({
   const [isFullScreenEditor, setIsFullScreenEditor] = useState(false);
   const [iamRoles, setIamRoles] = useState<IAMRole[]>([]);
   const [loadingRoles, setLoadingRoles] = useState(false);
-  const [availableVpcs, setAvailableVpcs] = useState<any[]>([]);
-  const [loadingVpcs, setLoadingVpcs] = useState(false);
-  const [vpcFetchFailed, setVpcFetchFailed] = useState(false);
 
   // Fetch IAM roles when modal opens
   useEffect(() => {
     if (isOpen && node.type === 'lambda') {
       fetchIAMRoles(node.type);
-      fetchVpcs();
     }
   }, [isOpen, node.type]);
 
@@ -52,28 +48,6 @@ const NodeConfigModal: React.FC<NodeConfigModalProps> = ({
       setIamRoles([]);
     } finally {
       setLoadingRoles(false);
-    }
-  };
-
-  const fetchVpcs = async () => {
-    setLoadingVpcs(true);
-    setVpcFetchFailed(false);
-    try {
-      const response: any = await apiService.get('/vpc/list');
-      // Handle both direct response and wrapped response formats
-      let vpcs = response?.vpcs || response?.data?.vpcs || [];
-      if (typeof response?.body === 'string') {
-        try { vpcs = JSON.parse(response.body).vpcs || []; } catch { /* ignore */ }
-      }
-      console.log('VPC fetch response:', response, 'Parsed VPCs:', vpcs);
-      setAvailableVpcs(vpcs);
-      if (vpcs.length === 0) setVpcFetchFailed(true);
-    } catch (error) {
-      console.error('Failed to fetch VPCs:', error);
-      setVpcFetchFailed(true);
-      setAvailableVpcs([]);
-    } finally {
-      setLoadingVpcs(false);
     }
   };
 
@@ -110,7 +84,6 @@ const NodeConfigModal: React.FC<NodeConfigModalProps> = ({
             iamRole: (node.config as any)?.iamRole?.useExisting && (node.config as any)?.iamRole?.existingRoleArn
               ? (node.config as any).iamRole 
               : { useExisting: false, existingRoleArn: '' },
-            vpcConfig: (node.config as any)?.vpcConfig || { mode: 'none' },
           });
           break;
         default:
@@ -558,188 +531,6 @@ const NodeConfigModal: React.FC<NodeConfigModalProps> = ({
       </div>
 
       {renderIAMRoleSelector('lambda', 'lambda.amazonaws.com')}
-
-      {/* VPC Configuration */}
-      <div style={{ marginTop: '16px', borderTop: '1px solid #e0e0e0', paddingTop: '16px' }}>
-        <label style={{ fontWeight: 600, marginBottom: '8px', display: 'block', fontSize: '0.875rem', color: '#374151' }}>VPC Configuration</label>
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', marginBottom: '12px' }}>
-          {(['none', 'existing', 'new'] as const).map(opt => (
-            <label key={opt} style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer', fontSize: '13px', fontWeight: 400 }}>
-              <input
-                type="radio"
-                name="vpcMode"
-                value={opt}
-                checked={(config.vpcConfig?.mode || 'none') === opt}
-                onChange={() => handleInputChange('vpcConfig', { ...config.vpcConfig, mode: opt })}
-                style={{ margin: 0, padding: 0, width: 'auto' }}
-              />
-              {{ none: 'No VPC', existing: 'Use existing VPC', new: 'Create new VPC' }[opt]}
-            </label>
-          ))}
-        </div>
-
-        {config.vpcConfig?.mode === 'existing' && (
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', padding: '10px', background: '#f8f9fa', borderRadius: '6px' }}>
-            {loadingVpcs ? (
-              <p style={{ fontSize: '13px', color: '#666' }}>Loading VPCs...</p>
-            ) : vpcFetchFailed || availableVpcs.length === 0 ? (
-              <>
-                {vpcFetchFailed && (
-                  <p style={{ fontSize: '12px', color: '#b45309', marginBottom: '4px' }}>Could not load VPCs from AWS. Enter details manually.</p>
-                )}
-                <div>
-                  <label style={{ fontSize: '12px', fontWeight: 500 }}>VPC ID</label>
-                  <input
-                    type="text"
-                    value={config.vpcConfig?.existing?.vpcId || ''}
-                    onChange={e => handleInputChange('vpcConfig', {
-                      ...config.vpcConfig,
-                      existing: { ...config.vpcConfig?.existing, vpcId: e.target.value }
-                    })}
-                    placeholder="vpc-0abc123def456"
-                    style={{ width: '100%', padding: '5px 8px', marginTop: '2px', borderRadius: '4px', border: '1px solid #ccc', fontSize: '13px' }}
-                  />
-                </div>
-                <div>
-                  <label style={{ fontSize: '12px', fontWeight: 500 }}>Subnet IDs (comma-separated)</label>
-                  <input
-                    type="text"
-                    value={config.vpcConfig?.existing?.subnetIds?.join(', ') || ''}
-                    onChange={e => handleInputChange('vpcConfig', {
-                      ...config.vpcConfig,
-                      existing: { ...config.vpcConfig?.existing, subnetIds: e.target.value.split(',').map((s: string) => s.trim()).filter(Boolean) }
-                    })}
-                    placeholder="subnet-abc123, subnet-def456"
-                    style={{ width: '100%', padding: '5px 8px', marginTop: '2px', borderRadius: '4px', border: '1px solid #ccc', fontSize: '13px' }}
-                  />
-                </div>
-                <div>
-                  <label style={{ fontSize: '12px', fontWeight: 500 }}>Security Group IDs (comma-separated)</label>
-                  <input
-                    type="text"
-                    value={config.vpcConfig?.existing?.securityGroupIds?.join(', ') || ''}
-                    onChange={e => handleInputChange('vpcConfig', {
-                      ...config.vpcConfig,
-                      existing: { ...config.vpcConfig?.existing, securityGroupIds: e.target.value.split(',').map((s: string) => s.trim()).filter(Boolean) }
-                    })}
-                    placeholder="sg-abc123"
-                    style={{ width: '100%', padding: '5px 8px', marginTop: '2px', borderRadius: '4px', border: '1px solid #ccc', fontSize: '13px' }}
-                  />
-                </div>
-              </>
-            ) : (
-              <>
-                <div>
-                  <label style={{ fontSize: '12px', fontWeight: 500 }}>VPC</label>
-                  <select
-                    value={config.vpcConfig?.existing?.vpcId || ''}
-                    onChange={e => {
-                      const vpc = availableVpcs.find((v: any) => v.vpcId === e.target.value);
-                      handleInputChange('vpcConfig', {
-                        ...config.vpcConfig,
-                        existing: {
-                          vpcId: e.target.value,
-                          subnetIds: [],
-                          securityGroupIds: [],
-                          _subnets: vpc?.subnets || [],
-                          _securityGroups: vpc?.securityGroups || [],
-                        }
-                      });
-                    }}
-                    style={{ width: '100%', padding: '5px 8px', marginTop: '2px', borderRadius: '4px', border: '1px solid #ccc', fontSize: '13px' }}
-                  >
-                    <option value="">Select a VPC...</option>
-                    {availableVpcs.map((vpc: any) => (
-                      <option key={vpc.vpcId} value={vpc.vpcId}>
-                        {vpc.name ? `${vpc.name} (${vpc.vpcId})` : vpc.vpcId}{vpc.isDefault ? ' — default' : ''} — {vpc.cidrBlock}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-
-                {config.vpcConfig?.existing?.vpcId && (() => {
-                  const selectedVpc = availableVpcs.find((v: any) => v.vpcId === config.vpcConfig?.existing?.vpcId);
-                  const subnets = selectedVpc?.subnets || config.vpcConfig?.existing?._subnets || [];
-                  const securityGroups = selectedVpc?.securityGroups || config.vpcConfig?.existing?._securityGroups || [];
-                  return (
-                    <>
-                      <div>
-                        <label style={{ fontSize: '12px', fontWeight: 500 }}>Subnets</label>
-                        <div style={{ maxHeight: '120px', overflowY: 'auto', marginTop: '2px', border: '1px solid #ccc', borderRadius: '4px', padding: '4px' }}>
-                          {subnets.map((s: any) => (
-                            <label key={s.subnetId} style={{ display: 'flex', alignItems: 'center', gap: '6px', padding: '3px 4px', fontSize: '12px', cursor: 'pointer', fontWeight: 400 }}>
-                              <input
-                                type="checkbox"
-                                checked={config.vpcConfig?.existing?.subnetIds?.includes(s.subnetId) || false}
-                                onChange={e => {
-                                  const current = config.vpcConfig?.existing?.subnetIds || [];
-                                  const updated = e.target.checked
-                                    ? [...current, s.subnetId]
-                                    : current.filter((id: string) => id !== s.subnetId);
-                                  handleInputChange('vpcConfig', {
-                                    ...config.vpcConfig,
-                                    existing: { ...config.vpcConfig?.existing, subnetIds: updated }
-                                  });
-                                }}
-                                style={{ margin: 0, width: 'auto' }}
-                              />
-                              {s.name ? `${s.name} (${s.subnetId})` : s.subnetId} — {s.availabilityZone} — {s.cidrBlock}
-                            </label>
-                          ))}
-                        </div>
-                      </div>
-                      <div>
-                        <label style={{ fontSize: '12px', fontWeight: 500 }}>Security Groups</label>
-                        <div style={{ maxHeight: '120px', overflowY: 'auto', marginTop: '2px', border: '1px solid #ccc', borderRadius: '4px', padding: '4px' }}>
-                          {securityGroups.map((sg: any) => (
-                            <label key={sg.groupId} style={{ display: 'flex', alignItems: 'center', gap: '6px', padding: '3px 4px', fontSize: '12px', cursor: 'pointer', fontWeight: 400 }}>
-                              <input
-                                type="checkbox"
-                                checked={config.vpcConfig?.existing?.securityGroupIds?.includes(sg.groupId) || false}
-                                onChange={e => {
-                                  const current = config.vpcConfig?.existing?.securityGroupIds || [];
-                                  const updated = e.target.checked
-                                    ? [...current, sg.groupId]
-                                    : current.filter((id: string) => id !== sg.groupId);
-                                  handleInputChange('vpcConfig', {
-                                    ...config.vpcConfig,
-                                    existing: { ...config.vpcConfig?.existing, securityGroupIds: updated }
-                                  });
-                                }}
-                                style={{ margin: 0, width: 'auto' }}
-                              />
-                              {sg.name} ({sg.groupId}){sg.description ? ` — ${sg.description}` : ''}
-                            </label>
-                          ))}
-                        </div>
-                      </div>
-                    </>
-                  );
-                })()}
-              </>
-            )}
-          </div>
-        )}
-
-        {config.vpcConfig?.mode === 'new' && (
-          <div style={{ padding: '10px', background: '#f8f9fa', borderRadius: '6px' }}>
-            <label style={{ fontSize: '12px', fontWeight: 500 }}>CIDR Block (optional)</label>
-            <input
-              type="text"
-              value={config.vpcConfig?.new?.cidrBlock || '10.0.0.0/16'}
-              onChange={e => handleInputChange('vpcConfig', {
-                ...config.vpcConfig,
-                new: { cidrBlock: e.target.value.trim() || undefined }
-              })}
-              placeholder="10.0.0.0/16"
-              style={{ width: '100%', padding: '5px 8px', marginTop: '2px', borderRadius: '4px', border: '1px solid #ccc', fontSize: '13px' }}
-            />
-            <p style={{ fontSize: '11px', color: '#666', marginTop: '4px' }}>
-              Creates a VPC with public/private subnets, NAT gateway, and security group.
-            </p>
-          </div>
-        )}
-      </div>
     </div>
   );
 

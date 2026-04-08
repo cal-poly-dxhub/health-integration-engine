@@ -2,8 +2,6 @@ import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { stepFunctionsService, ExecutionHistoryEvent, StepFunctionExecution } from '../../services/stepFunctions';
 import './ExecutionDetails.css';
-import { error } from 'console';
-import { ms } from 'zod/v4/locales';
 
 
 
@@ -43,7 +41,7 @@ const JsonViewer: React.FC<JsonViewerProps> = ({
   data,
   isError = false,
   maxHeight = '300px',
-  showLineNumbers = false
+  showLineNumbers: _showLineNumbers = false
 }) => {
   const [expandedPaths, setExpandedPaths] = useState<Set<string>>(new Set(['root']));
 
@@ -222,7 +220,7 @@ const JsonViewer: React.FC<JsonViewerProps> = ({
   );
 };
 
-const EventDetailsViewer: React.FC<EventDetailsViewerProps> = ({ event }) => {
+const _EventDetailsViewer: React.FC<EventDetailsViewerProps> = ({ event }) => {
   const getEventDetails = () => {
     if (event.stateEnteredEventDetails) return event.stateEnteredEventDetails;
     if (event.stateExitedEventDetails) return event.stateExitedEventDetails;
@@ -342,7 +340,7 @@ const TopPanelEventRow: React.FC<TopPanelEventRowProps> = ({ event, formatDate }
   );
 };
 
-const StepEventRow: React.FC<StepEventRowProps> = ({ event, formatDate, formatDuration }) => {
+const StepEventRow: React.FC<StepEventRowProps> = ({ event, formatDate, formatDuration: _formatDuration }) => {
   const [isExpanded, setIsExpanded] = useState(false);
 
   const getEventIcon = (type: string) => {
@@ -458,7 +456,7 @@ const StepEventRow: React.FC<StepEventRowProps> = ({ event, formatDate, formatDu
   );
 };
 
-const EventRow: React.FC<EventRowProps> = ({ event, formatDate, formatDuration, allEvents }) => {
+const _EventRow: React.FC<EventRowProps> = ({ event, formatDate, formatDuration, allEvents }) => {
   const [isExpanded, setIsExpanded] = useState(false);
 
   const getEventIcon = (type: string) => {
@@ -788,9 +786,9 @@ const ExecutionDetails: React.FC<ExecutionDetailsProps> = ({ execution: propExec
   const [eventSearchFilter, setEventSearchFilter] = useState<string>('');
   const [eventDateFilter, setEventDateFilter] = useState<string>('');
   const [eventTypeFilter, setEventTypeFilter] = useState<string>('');
-  const [selectedEventTypes, setSelectedEventTypes] = useState<Set<string>>(new Set());
-  const [isRefreshing, setIsRefreshing] = useState(false);
-  const [autoRefresh, setAutoRefresh] = useState(false); // Auto-refresh disabled
+  const [selectedEventTypes, _setSelectedEventTypes] = useState<Set<string>>(new Set());
+  const [_isRefreshing, setIsRefreshing] = useState(false);
+  const [_autoRefresh, _setAutoRefresh] = useState(false); // Auto-refresh disabled
   const [activeViewTab, setActiveViewTab] = useState<'overview' | 'input-output' | 'definition' | 'events' | null>(null);
   const [selectedStep, setSelectedStep] = useState<string | null>(null);
   const [activeStepTab, setActiveStepTab] = useState<'input-output' | 'details' | 'definition' | 'events'>('input-output');

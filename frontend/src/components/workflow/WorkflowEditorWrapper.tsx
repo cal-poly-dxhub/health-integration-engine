@@ -3,7 +3,7 @@ import { DndProvider, useDrop } from 'react-dnd';
 import { HTML5Backend } from 'react-dnd-html5-backend';
 import { WorkflowNode, Connection } from '../../types/workflow';
 import { useWorkflow } from '../../hooks/useWorkflows';
-import { DeploymentService, DeploymentStatus } from '../../services/deploymentReal';
+import { DeploymentService } from '../../services/deploymentReal';
 import { autoLayoutWorkflow } from '../../utils/workflowLayout';
 import NodeComponent from './NodeComponent';
 import NodeSidebar from './NodeSidebar';
@@ -44,7 +44,7 @@ const WorkflowEditorWrapper: React.FC<WorkflowEditorWrapperProps> = ({
   const isSavingRefRef = useRef(false);
   const [deploymentModalOpen, setDeploymentModalOpen] = useState(false);
   const [currentDeploymentId, setCurrentDeploymentId] = useState<string | null>(null);
-  const [lastDeploymentStatus, setLastDeploymentStatus] = useState<any>(null);
+  const [_lastDeploymentStatus, setLastDeploymentStatus] = useState<any>(null);
 
   const canvasRef = useRef<HTMLDivElement>(null);
 

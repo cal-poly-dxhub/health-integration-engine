@@ -19,7 +19,7 @@ const NodeComponent: React.FC<NodeComponentProps> = ({
   isSelected,
   isConnecting,
   onSelect,
-  onMove,
+  onMove: _onMove,
   onDelete,
   onStartConnection,
   onCompleteConnection,

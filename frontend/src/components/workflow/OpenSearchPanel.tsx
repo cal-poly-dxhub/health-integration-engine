@@ -88,6 +88,7 @@ const OpenSearchPanel: React.FC<OpenSearchPanelProps> = ({
 
   const clearSearch = () => {
     setSearchParams({
+      searchText: '',
       dataPartnerName: '',
       messageType: '',
       messageControlId: '',

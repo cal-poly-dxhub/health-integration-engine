@@ -308,7 +308,7 @@ const WorkflowDetails: React.FC<WorkflowDetailsProps> = ({ workflow: propWorkflo
     }
   };
 
-  const getStatusColor = (status: string) => {
+  const _getStatusColor = (status: string) => {
     switch (status.toLowerCase()) {
       case 'succeeded':
         return '#10b981';

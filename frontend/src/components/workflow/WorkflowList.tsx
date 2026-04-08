@@ -30,7 +30,7 @@ const WorkflowList: React.FC<WorkflowListProps> = ({
   onViewWorkflow,
   onDeleteWorkflow,
   onDuplicateWorkflow,
-  onViewDeployment,
+  onViewDeployment: _onViewDeployment,
   onRefresh,
   onSignOut,
   isCreating = false,

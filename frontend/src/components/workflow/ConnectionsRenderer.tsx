@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect } from 'react';
 import { WorkflowNode, Connection } from '../../types/workflow';
 
 interface ConnectionsRendererProps {

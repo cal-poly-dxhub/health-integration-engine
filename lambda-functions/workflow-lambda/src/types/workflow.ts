@@ -104,19 +104,6 @@ export interface Connection {
   condition?: string;
 }
 
-// Workflow-level VPC configuration
-export interface WorkflowVpcConfig {
-  mode: 'none' | 'existing' | 'new';
-  existing?: {
-    vpcId: string;
-    subnetIds: string[];
-    securityGroupIds: string[];
-  };
-  new?: {
-    cidrBlock?: string;
-  };
-}
-
 // Main workflow interface
 export interface Workflow {
   id: string;
@@ -125,7 +112,6 @@ export interface Workflow {
   userId: string;
   nodes: WorkflowNode[];
   connections: Connection[];
-  vpcConfig?: WorkflowVpcConfig;
   createdAt: string;
   updatedAt: string;
   version: number;
@@ -146,7 +132,6 @@ export interface WorkflowDynamoDBItem {
   userId: string;
   nodes: WorkflowNode[];
   connections: Connection[];
-  vpcConfig?: WorkflowVpcConfig;
   createdAt: string;
   updatedAt: string;
   version: number;
@@ -174,7 +159,6 @@ export interface WorkflowRequest {
   description?: string;
   nodes: WorkflowNode[];
   connections: Connection[];
-  vpcConfig?: WorkflowVpcConfig;
 }
 
 // Zod validation schemas

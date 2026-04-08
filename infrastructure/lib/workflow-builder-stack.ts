@@ -429,6 +429,7 @@ export class WorkflowBuilderStack extends cdk.Stack {
         AWS_ACCOUNT_ID: this.account,
         LAMBDA_CODE_BUCKET: lambdaCodeBucket.bucketName,
         OPENSEARCH_ENDPOINT: opensearchCollection.attrCollectionEndpoint,
+        VPC_CONFIG: JSON.stringify(PROJECT.vpc || { mode: 'none' }),
       }
     );
 

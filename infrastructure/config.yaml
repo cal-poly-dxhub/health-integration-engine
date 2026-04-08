@@ -89,3 +89,21 @@ lambda:
 # Amplify
 amplify:
   appName: "workflow-builder"
+
+# VPC configuration for deployed workflow Lambdas and OpenSearch
+# This is account-wide — all workflows share the same VPC setting.
+# mode: "none" | "existing" | "new"
+#   none     — Lambdas run without VPC
+#   existing — Use an existing VPC (provide vpcId, subnetIds, securityGroupIds)
+#   new      — CloudFormation creates a shared VPC per workflow stack
+vpc:
+  mode: "none"
+  # existing:
+  #   vpcId: "vpc-0abc123def456"
+  #   subnetIds:
+  #     - "subnet-abc123"
+  #     - "subnet-def456"
+  #   securityGroupIds:
+  #     - "sg-abc123"
+  # new:
+  #   cidrBlock: "10.0.0.0/16"

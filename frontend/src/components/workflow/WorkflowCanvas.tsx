@@ -3,14 +3,13 @@ import React, { useState, useRef, useCallback, useEffect } from 'react';
 import { DndProvider, useDrop } from 'react-dnd';
 import { HTML5Backend } from 'react-dnd-html5-backend';
 import { useParams, useNavigate } from 'react-router-dom';
-import { WorkflowNode, Connection, WorkflowVpcConfig } from '../../types/workflow';
+import { WorkflowNode, Connection } from '../../types/workflow';
 import { useWorkflow } from '../../hooks/useWorkflows';
 import { DeploymentService, DeploymentStatus } from '../../services/deploymentReal';
 import { autoLayoutWorkflow } from '../../utils/workflowLayout';
 import NodeComponent from './NodeComponent';
 import NodeSidebar from './NodeSidebar';
 import NodeConfigModal from './NodeConfigModal';
-import VpcConfigModal from './VpcConfigModal';
 import DeploymentStatusModal from './DeploymentStatusModal';
 import ConnectionsRenderer from './ConnectionsRenderer';
 import './WorkflowCanvas.css';
@@ -43,8 +42,6 @@ const WorkflowCanvasContent: React.FC = () => {
   const [lastDeploymentStatus, setLastDeploymentStatus] = useState<DeploymentStatus | null>(null);
   const [opensearchEnabled, setOpensearchEnabled] = useState(false);
   const [opensearchIndexName, setOpensearchIndexName] = useState('health-messages');
-  const [vpcConfig, setVpcConfig] = useState<WorkflowVpcConfig>({ mode: 'none' });
-  const [vpcModalOpen, setVpcModalOpen] = useState(false);
 
   const buildOpensearchNode = useCallback((): WorkflowNode => ({
     id: 'opensearch-auto',
@@ -97,7 +94,6 @@ const WorkflowCanvasContent: React.FC = () => {
       }
       setNodes(fixedNodes.filter(n => n.type !== 'opensearch'));
       setConnections(workflow.connections || []);
-      setVpcConfig(workflow.vpcConfig || { mode: 'none' });
       setHasUnsavedChanges(false);
       
       // Mark initial load as complete after a brief delay to allow state updates
@@ -298,7 +294,6 @@ const WorkflowCanvasContent: React.FC = () => {
         name: workflowName,
         nodes: saveNodes,
         connections,
-        vpcConfig,
       });
       
       setHasUnsavedChanges(false);
@@ -329,7 +324,6 @@ const WorkflowCanvasContent: React.FC = () => {
           name: workflowName,
           nodes: deploySaveNodes,
           connections,
-          vpcConfig,
         });
         setHasUnsavedChanges(false);
       } finally {
@@ -360,7 +354,6 @@ const WorkflowCanvasContent: React.FC = () => {
         name: workflowName,
         nodes,
         connections,
-        vpcConfig,
       };
 
       const deploymentResponse = await DeploymentService.deployWorkflow({
@@ -593,15 +586,6 @@ const WorkflowCanvasContent: React.FC = () => {
           >
             {isSaving ? 'Saving...' : 'Save'}
           </button>
-          <div className="vpc-toggle">
-            <button
-              className={`toolbar-btn vpc-btn ${vpcConfig.mode !== 'none' ? 'vpc-active' : ''}`}
-              onClick={() => setVpcModalOpen(true)}
-              title="Configure workflow VPC"
-            >
-              🔒 VPC{vpcConfig.mode === 'existing' ? ' (Existing)' : vpcConfig.mode === 'new' ? ' (New)' : ''}
-            </button>
-          </div>
           <div className="opensearch-toggle">
             <label className="opensearch-checkbox" title="Enable OpenSearch indexing for this workflow">
               <input
@@ -841,14 +825,6 @@ const WorkflowCanvasContent: React.FC = () => {
           onSave={handleConfigSave}
         />
       )}
-
-      {/* VPC Configuration Modal */}
-      <VpcConfigModal
-        isOpen={vpcModalOpen}
-        onClose={() => setVpcModalOpen(false)}
-        onSave={(config) => { setVpcConfig(config); setVpcModalOpen(false); setHasUnsavedChanges(true); }}
-        initialConfig={vpcConfig}
-      />
 
       {/* Deployment Status Modal */}
       {deploymentModalOpen && currentDeploymentId && (

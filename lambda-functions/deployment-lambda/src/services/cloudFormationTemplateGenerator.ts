@@ -1,14 +1,33 @@
 import { DeploymentContext } from '../types/deployment';
-import { Workflow, WorkflowVpcConfig } from '../types/workflow';
+import { Workflow } from '../types/workflow';
 import { NodeHandlerRegistry } from './nodeHandlers';
 import { IAMPermissionAnalyzer } from './iamPermissionAnalyzer';
+
+interface VpcConfig {
+  mode: 'none' | 'existing' | 'new';
+  existing?: { vpcId: string; subnetIds: string[]; securityGroupIds: string[] };
+  new?: { cidrBlock?: string };
+}
 
 export class CloudFormationTemplateGenerator {
 
   /**
+   * Read VPC configuration from VPC_CONFIG environment variable (set from config.yaml via CDK)
+   */
+  private static getVpcConfig(): VpcConfig {
+    try {
+      const raw = process.env.VPC_CONFIG;
+      if (!raw) return { mode: 'none' };
+      return JSON.parse(raw) as VpcConfig;
+    } catch {
+      return { mode: 'none' };
+    }
+  }
+
+  /**
    * Generate CloudFormation resources for a single shared workflow VPC
    */
-  private static generateNewVpcResources(vpcConfig: WorkflowVpcConfig): any {
+  private static generateNewVpcResources(vpcConfig: VpcConfig): any {
     const cidr = vpcConfig.new?.cidrBlock || '10.0.0.0/16';
     const octets = cidr.split('/')[0].split('.');
     const base = `${octets[0]}.${octets[1]}`;
@@ -140,7 +159,7 @@ export class CloudFormationTemplateGenerator {
   /**
    * Get VpcConfig property for a Lambda CloudFormation resource based on the workflow-level vpcConfig
    */
-  private static getWorkflowLambdaVpcConfig(vpcConfig?: WorkflowVpcConfig): any | undefined {
+  private static getWorkflowLambdaVpcConfig(vpcConfig?: VpcConfig): any | undefined {
     if (!vpcConfig || vpcConfig.mode === 'none') return undefined;
 
     if (vpcConfig.mode === 'existing') {
@@ -163,11 +182,11 @@ export class CloudFormationTemplateGenerator {
   }
 
   /**
-   * Generate shared VPC resources if the workflow has vpcConfig.mode === 'new'
+   * Generate shared VPC resources if config has mode === 'new'
    */
-  private static generateWorkflowVpcResources(workflow: Workflow): any {
-    const vpcConfig = workflow.vpcConfig;
-    if (!vpcConfig || vpcConfig.mode !== 'new') return {};
+  private static generateWorkflowVpcResources(): any {
+    const vpcConfig = this.getVpcConfig();
+    if (vpcConfig.mode !== 'new') return {};
     return this.generateNewVpcResources(vpcConfig);
   }
 
@@ -347,7 +366,7 @@ export class CloudFormationTemplateGenerator {
 
       Resources: {
         // Shared workflow VPC resources (if workflow has vpcConfig.mode === 'new')
-        ...this.generateWorkflowVpcResources(workflow),
+        ...this.generateWorkflowVpcResources(),
 
         // IAM Role for Step Functions
         StepFunctionsExecutionRole: {
@@ -655,9 +674,9 @@ export class CloudFormationTemplateGenerator {
       // Analyze connected nodes to determine permissions
       const connectedPermissions = this.analyzeLambdaConnectedNodes(lambdaNode, workflow);
       
-      // Lambda execution role — use workflow-level VPC config
-      const vpcConfig = workflow.vpcConfig;
-      const vpcEnabled = vpcConfig?.mode && vpcConfig.mode !== 'none';
+      // Lambda execution role — use account-wide VPC config from env
+      const vpcConfig = this.getVpcConfig();
+      const vpcEnabled = vpcConfig.mode !== 'none';
       const roleProperties: any = {
         RoleName: {
           'Fn::Sub': `Lambda-${truncatedName}-Role-\${WorkflowId}`,
@@ -740,7 +759,7 @@ export class CloudFormationTemplateGenerator {
       };
 
       // Lambda function (without API Gateway trigger)
-      const lambdaVpcConfig = this.getWorkflowLambdaVpcConfig(workflow.vpcConfig);
+      const lambdaVpcConfig = this.getWorkflowLambdaVpcConfig(this.getVpcConfig());
       resources[lambdaFunctionName] = {
         Type: 'AWS::Lambda::Function',
         Properties: {
@@ -1332,8 +1351,8 @@ def handler(event, context):
 
     const resources: any = {};
 
-    const vpcConfig = workflow.vpcConfig;
-    const osVpcEnabled = vpcConfig?.mode && vpcConfig.mode !== 'none';
+    const vpcConfig = this.getVpcConfig();
+    const osVpcEnabled = vpcConfig.mode !== 'none';
 
     // IAM Role for OpenSearch Lambda functions
     resources.OpenSearchLambdaRole = {
@@ -1392,7 +1411,7 @@ def handler(event, context):
         Role: { 'Fn::GetAtt': ['OpenSearchLambdaRole', 'Arn'] },
         Timeout: 60,
         MemorySize: 256,
-        ...(this.getWorkflowLambdaVpcConfig(workflow.vpcConfig) ? { VpcConfig: this.getWorkflowLambdaVpcConfig(workflow.vpcConfig) } : {}),
+        ...(this.getWorkflowLambdaVpcConfig(this.getVpcConfig()) ? { VpcConfig: this.getWorkflowLambdaVpcConfig(this.getVpcConfig()) } : {}),
         Code: {
           ZipFile: this.getOpenSearchIndexerCode(),
         },

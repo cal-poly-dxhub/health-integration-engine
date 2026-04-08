@@ -80,7 +80,6 @@ export const handler = async (
       description: workflowData.description || '',
       nodes: workflowData.nodes || [],
       connections: workflowData.connections || [],
-      vpcConfig: workflowData.vpcConfig,
       stepFunctionDefinition: workflowData.stepFunctionDefinition || {},
       deploymentStatus: existingWorkflow?.deploymentStatus || 'draft',
       isDeployed: existingWorkflow?.isDeployed || false,

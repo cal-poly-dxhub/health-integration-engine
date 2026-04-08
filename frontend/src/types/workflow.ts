@@ -27,19 +27,6 @@ export interface Connection {
   condition?: string; // For conditional connections
 }
 
-// Workflow-level VPC configuration (shared by all Lambdas + OpenSearch in the workflow)
-export interface WorkflowVpcConfig {
-  mode: 'none' | 'existing' | 'new';
-  existing?: {
-    vpcId: string;
-    subnetIds: string[];
-    securityGroupIds: string[];
-  };
-  new?: {
-    cidrBlock?: string; // defaults to 10.0.0.0/16
-  };
-}
-
 // Main workflow interface
 export interface Workflow {
   id: string;
@@ -48,7 +35,6 @@ export interface Workflow {
   userId: string;
   nodes: WorkflowNode[];
   connections: Connection[];
-  vpcConfig?: WorkflowVpcConfig;
   createdAt: string;
   updatedAt: string;
   version: number;
@@ -87,7 +73,6 @@ export interface WorkflowRequest {
   description?: string;
   nodes: WorkflowNode[];
   connections: Connection[];
-  vpcConfig?: WorkflowVpcConfig;
 }
 
 // Zod validation schemas

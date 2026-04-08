@@ -312,46 +312,6 @@ const WorkflowCanvasContent: React.FC = () => {
     }
   }, [workflowName, nodes, connections, isSaving, workflow, saveWorkflow]);
 
-  const handleDeployWithVpc = useCallback(async (vpcConfig: VpcConfig) => {
-    if (isDeploying || !workflow) return;
-
-    try {
-      setIsDeploying(true);
-
-      const currentWorkflow = {
-        ...workflow,
-        name: workflowName,
-        nodes: opensearchEnabled ? [...nodes, buildOpensearchNode()] : nodes,
-        connections,
-      };
-
-      // Start deployment
-      const deploymentResponse = await DeploymentService.deployWorkflow({
-        workflowId: workflow.id,
-        workflowData: currentWorkflow,
-        environment: 'development',
-        configuration: {
-          enableLogging: true,
-          enableXRay: false,
-          tags: {
-            DeployedFrom: 'WorkflowBuilder',
-            Environment: 'development',
-          },
-          vpcConfig,
-        },
-      });
-
-      setCurrentDeploymentId(deploymentResponse.deploymentId);
-      setDeploymentModalOpen(true);
-      
-    } catch (error) {
-      console.error('Failed to deploy workflow:', error);
-      alert('Failed to start deployment. Please try again.');
-    } finally {
-      setIsDeploying(false);
-    }
-  }, [workflowName, nodes, connections, isDeploying, workflow]);
-
   const handleDeploy = useCallback(async () => {
     if (isDeploying || !workflow) return;
     

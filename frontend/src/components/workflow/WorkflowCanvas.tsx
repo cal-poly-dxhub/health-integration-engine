@@ -30,8 +30,8 @@ const WorkflowCanvasContent: React.FC = () => {
     sourceHandle: string;
     mousePosition?: { x: number; y: number };
   } | null>(null);
-  const [canvasOffset] = useState({ x: 0, y: 0 });
-  const [zoom] = useState(1);
+  const [_canvasOffset] = useState({ x: 0, y: 0 });
+  const [_zoom] = useState(1);
   const [isSaving, setIsSaving] = useState(false);
   const [isDeploying, setIsDeploying] = useState(false);
   const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
@@ -311,6 +311,7 @@ const WorkflowCanvasContent: React.FC = () => {
       }, 1000); // Increased to 1 second
     }
   }, [workflowName, nodes, connections, isSaving, workflow, saveWorkflow]);
+
 
   const handleDeploy = useCallback(async () => {
     if (isDeploying || !workflow) return;

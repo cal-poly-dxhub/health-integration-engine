@@ -23,7 +23,7 @@ export interface DeploymentStepUpdate {
 }
 
 export interface WebSocketMessage {
-  type: 'deployment_progress' | 'deployment_step_progress' | 'workflow_deletion_update' | 'error';
+  type: 'deployment_progress' | 'deployment_step_progress' | 'workflow_deletion_update' | 'error' | 'ping';
   deploymentId?: string;
   workflowId?: string;
   userId?: string;

@@ -96,19 +96,6 @@ const DeploymentStatusModal: React.FC<DeploymentStatusModalProps> = ({
     }
   };
 
-  // Helper function to determine deployment phase for deduplication
-  const getDeploymentPhase = (stepName: string): string => {
-    if (stepName.includes('Template Generation') || stepName.includes('template') || stepName.includes('Generated')) return 'template';
-    if (stepName.includes('Template Deployment Started') || stepName.includes('deploying_infrastructure')) return 'deployment_start';
-    if (stepName.includes('Resources being deployed') || stepName.includes('stack_creating')) return 'stack_creating';
-    if (stepName.includes('Resources being updated') || stepName.includes('stack_updating')) return 'stack_updating';
-    if (stepName.includes('CloudFormation') || stepName.includes('stack') || stepName.includes('Updating existing')) return 'cloudformation';
-    if (stepName.includes('AWS resources') || stepName.includes('infrastructure')) return 'infrastructure';
-    if (stepName.includes('Monitoring') || stepName.includes('progress')) return 'monitoring';
-    if (stepName.includes('Finalizing') || stepName.includes('completed')) return 'finalizing';
-    return 'other';
-  };
-
   // Helper function to get step order for chronological sorting
   const getStepOrder = (status: string, stepName: string): number => {
     // EventBridge deployment progress events (new)
@@ -511,26 +498,6 @@ const DeploymentStatusModal: React.FC<DeploymentStatusModalProps> = ({
     }
   };
 
-  const getStepIcon = (step: DeploymentStep) => {
-    switch (step.status) {
-      case 'completed': return '✅';
-      case 'failed': return '❌';
-      case 'in_progress': return '⏳';
-      case 'skipped': return '⏭️';
-      default: return '⏸️';
-    }
-  };
-
-  const getStepStatusColor = (status: string) => {
-    switch (status) {
-      case 'completed': return '#10b981';
-      case 'failed': return '#ef4444';
-      case 'in_progress': return '#3b82f6';
-      case 'skipped': return '#6b7280';
-      default: return '#9ca3af';
-    }
-  };
-
   const getOverallStatusColor = (status: string) => {
     switch (status) {
       case 'completed': return '#10b981';
@@ -643,7 +610,7 @@ const DeploymentStatusModal: React.FC<DeploymentStatusModalProps> = ({
                       <h5>Completed Steps ({completedSteps.length})</h5>
                     </div>
                     <div className="steps-list">
-                      {completedSteps.map((step, index) => (
+                      {completedSteps.map((step) => (
                         <div key={step.id} className="step-item completed">
                           <div className="step-icon">✅</div>
                           <div className="step-content">
@@ -755,7 +722,7 @@ const DeploymentStatusModal: React.FC<DeploymentStatusModalProps> = ({
                       <h5>Currently Running ({runningSteps.length})</h5>
                     </div>
                     <div className="steps-list">
-                      {runningSteps.map((step, index) => (
+                      {runningSteps.map((step) => (
                         <div key={step.id} className={`step-item ${step.status}`}>
                           <div className="step-icon">
                             {step.status === 'in_progress' ? '⏳' : '⏸️'}

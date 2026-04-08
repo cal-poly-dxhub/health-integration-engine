@@ -1415,8 +1415,8 @@ on Type Badges */
     width: 100%;
     justify-content: center;
   }
-}/
-* Update Progress Indicator */
+}
+/* Update Progress Indicator */
 .stat-item.update-progress {
   background: linear-gradient(135deg, #eff6ff 0%, #dbeafe 100%);
   border-color: #3b82f6;
@@ -1529,8 +1529,8 @@ eletion-specific styling */
 
 .loading-state.deletion-loading p {
   color: #7c2d12;
-}/
-* Initializing state styles */
+}
+/* Initializing state styles */
 .no-steps-message {
   padding: 2rem;
   text-align: center;

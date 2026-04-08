@@ -74,17 +74,6 @@ export interface LambdaNodeConfig {
   memorySize?: number;
   description?: string;
   layers?: string[];
-  vpcConfig?: {
-    mode: 'none' | 'existing' | 'new';
-    existing?: {
-      vpcId: string;
-      subnetIds: string[];
-      securityGroupIds: string[];
-    };
-    new?: {
-      cidrBlock?: string;
-    };
-  };
   deadLetterConfig?: {
     targetArn: string;
   };

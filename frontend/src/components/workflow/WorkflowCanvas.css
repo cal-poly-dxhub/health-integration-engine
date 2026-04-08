@@ -98,6 +98,22 @@
   border-color: #cbd5e1;
 }
 
+.vpc-toggle {
+  display: flex;
+  align-items: center;
+}
+
+.vpc-btn {
+  font-size: 0.825rem;
+  white-space: nowrap;
+}
+
+.vpc-btn.vpc-active {
+  background: #dbeafe;
+  border-color: #3b82f6;
+  color: #1d4ed8;
+}
+
 .opensearch-toggle {
   display: flex;
   align-items: center;

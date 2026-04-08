@@ -1,17 +1,18 @@
-import { DeploymentContext, VpcDeploymentConfig } from '../types/deployment';
-import { Workflow } from '../types/workflow';
+import { DeploymentContext } from '../types/deployment';
+import { Workflow, WorkflowVpcConfig } from '../types/workflow';
 import { NodeHandlerRegistry } from './nodeHandlers';
 import { IAMPermissionAnalyzer } from './iamPermissionAnalyzer';
 
 export class CloudFormationTemplateGenerator {
 
   /**
-   * Generate CloudFormation resources for a new VPC scoped to a specific Lambda node
+   * Generate CloudFormation resources for a single shared workflow VPC
    */
-  private static generateNewVpcResources(vpcConfig: VpcDeploymentConfig, prefix: string): any {
+  private static generateNewVpcResources(vpcConfig: WorkflowVpcConfig): any {
     const cidr = vpcConfig.new?.cidrBlock || '10.0.0.0/16';
     const octets = cidr.split('/')[0].split('.');
     const base = `${octets[0]}.${octets[1]}`;
+    const prefix = 'Workflow';
     return {
       [`${prefix}Vpc`]: {
         Type: 'AWS::EC2::VPC',
@@ -20,7 +21,7 @@ export class CloudFormationTemplateGenerator {
           EnableDnsSupport: true,
           EnableDnsHostnames: true,
           Tags: [
-            { Key: 'Name', Value: { 'Fn::Sub': `${prefix}-vpc-\${WorkflowId}` } },
+            { Key: 'Name', Value: { 'Fn::Sub': `workflow-vpc-\${WorkflowId}` } },
             { Key: 'WorkflowId', Value: { Ref: 'WorkflowId' } },
           ],
         },
@@ -31,7 +32,7 @@ export class CloudFormationTemplateGenerator {
           VpcId: { Ref: `${prefix}Vpc` },
           CidrBlock: `${base}.0.0/24`,
           AvailabilityZone: { 'Fn::Select': ['0', { 'Fn::GetAZs': '' }] },
-          Tags: [{ Key: 'Name', Value: { 'Fn::Sub': `${prefix}-private-a-\${WorkflowId}` } }],
+          Tags: [{ Key: 'Name', Value: { 'Fn::Sub': `workflow-private-a-\${WorkflowId}` } }],
         },
       },
       [`${prefix}VpcPrivateSubnetB`]: {
@@ -40,7 +41,7 @@ export class CloudFormationTemplateGenerator {
           VpcId: { Ref: `${prefix}Vpc` },
           CidrBlock: `${base}.1.0/24`,
           AvailabilityZone: { 'Fn::Select': ['1', { 'Fn::GetAZs': '' }] },
-          Tags: [{ Key: 'Name', Value: { 'Fn::Sub': `${prefix}-private-b-\${WorkflowId}` } }],
+          Tags: [{ Key: 'Name', Value: { 'Fn::Sub': `workflow-private-b-\${WorkflowId}` } }],
         },
       },
       [`${prefix}VpcPublicSubnet`]: {
@@ -49,13 +50,13 @@ export class CloudFormationTemplateGenerator {
           VpcId: { Ref: `${prefix}Vpc` },
           CidrBlock: `${base}.2.0/24`,
           AvailabilityZone: { 'Fn::Select': ['0', { 'Fn::GetAZs': '' }] },
-          Tags: [{ Key: 'Name', Value: { 'Fn::Sub': `${prefix}-public-\${WorkflowId}` } }],
+          Tags: [{ Key: 'Name', Value: { 'Fn::Sub': `workflow-public-\${WorkflowId}` } }],
         },
       },
       [`${prefix}VpcIgw`]: {
         Type: 'AWS::EC2::InternetGateway',
         Properties: {
-          Tags: [{ Key: 'Name', Value: { 'Fn::Sub': `${prefix}-igw-\${WorkflowId}` } }],
+          Tags: [{ Key: 'Name', Value: { 'Fn::Sub': `workflow-igw-\${WorkflowId}` } }],
         },
       },
       [`${prefix}VpcIgwAttachment`]: {
@@ -74,7 +75,7 @@ export class CloudFormationTemplateGenerator {
         Properties: {
           AllocationId: { 'Fn::GetAtt': [`${prefix}VpcEip`, 'AllocationId'] },
           SubnetId: { Ref: `${prefix}VpcPublicSubnet` },
-          Tags: [{ Key: 'Name', Value: { 'Fn::Sub': `${prefix}-nat-\${WorkflowId}` } }],
+          Tags: [{ Key: 'Name', Value: { 'Fn::Sub': `workflow-nat-\${WorkflowId}` } }],
         },
         DependsOn: [`${prefix}VpcIgwAttachment`],
       },
@@ -127,53 +128,47 @@ export class CloudFormationTemplateGenerator {
       [`${prefix}VpcSecurityGroup`]: {
         Type: 'AWS::EC2::SecurityGroup',
         Properties: {
-          GroupDescription: { 'Fn::Sub': `Lambda SG for ${prefix} \${WorkflowId}` },
+          GroupDescription: { 'Fn::Sub': `Shared Lambda SG for workflow \${WorkflowId}` },
           VpcId: { Ref: `${prefix}Vpc` },
           SecurityGroupEgress: [{ IpProtocol: '-1', CidrIp: '0.0.0.0/0' }],
-          Tags: [{ Key: 'Name', Value: { 'Fn::Sub': `${prefix}-lambda-sg-\${WorkflowId}` } }],
+          Tags: [{ Key: 'Name', Value: { 'Fn::Sub': `workflow-lambda-sg-\${WorkflowId}` } }],
         },
       },
     };
   }
 
   /**
-   * Get VpcConfig property for a Lambda CloudFormation resource based on the node's own vpcConfig
+   * Get VpcConfig property for a Lambda CloudFormation resource based on the workflow-level vpcConfig
    */
-  private static getLambdaVpcConfig(nodeVpcConfig?: { mode: string; existing?: { vpcId: string; subnetIds: string[]; securityGroupIds: string[] }; new?: { cidrBlock?: string } }, sanitizedName?: string): any | undefined {
-    if (!nodeVpcConfig || nodeVpcConfig.mode === 'none') return undefined;
+  private static getWorkflowLambdaVpcConfig(vpcConfig?: WorkflowVpcConfig): any | undefined {
+    if (!vpcConfig || vpcConfig.mode === 'none') return undefined;
 
-    if (nodeVpcConfig.mode === 'existing') {
+    if (vpcConfig.mode === 'existing') {
       return {
-        SubnetIds: nodeVpcConfig.existing!.subnetIds,
-        SecurityGroupIds: nodeVpcConfig.existing!.securityGroupIds,
+        SubnetIds: vpcConfig.existing!.subnetIds,
+        SecurityGroupIds: vpcConfig.existing!.securityGroupIds,
       };
     }
 
-    // mode === 'new' — reference the per-Lambda VPC resources
-    const prefix = sanitizedName || 'Lambda';
+    // mode === 'new' — reference the shared workflow VPC resources
     return {
       SubnetIds: [
-        { Ref: `${prefix}VpcPrivateSubnetA` },
-        { Ref: `${prefix}VpcPrivateSubnetB` },
+        { Ref: 'WorkflowVpcPrivateSubnetA' },
+        { Ref: 'WorkflowVpcPrivateSubnetB' },
       ],
       SecurityGroupIds: [
-        { Ref: `${prefix}VpcSecurityGroup` },
+        { Ref: 'WorkflowVpcSecurityGroup' },
       ],
     };
   }
+
   /**
-   * Generate VPC resources for all Lambda nodes that have mode 'new'
+   * Generate shared VPC resources if the workflow has vpcConfig.mode === 'new'
    */
-  private static generatePerLambdaVpcResources(workflow: Workflow): any {
-    const resources: any = {};
-    const lambdaNodes = workflow.nodes.filter(n => n.type === 'lambda' && n.config?.vpcConfig?.mode === 'new');
-    for (const node of lambdaNodes) {
-      const functionName = node.config?.functionName || node.name || `Lambda${node.id}`;
-      const sanitized = functionName.replace(/[^a-zA-Z0-9]/g, '');
-      const prefix = sanitized.length > 15 ? sanitized.substring(0, 15) : sanitized;
-      Object.assign(resources, this.generateNewVpcResources(node.config.vpcConfig, prefix));
-    }
-    return resources;
+  private static generateWorkflowVpcResources(workflow: Workflow): any {
+    const vpcConfig = workflow.vpcConfig;
+    if (!vpcConfig || vpcConfig.mode !== 'new') return {};
+    return this.generateNewVpcResources(vpcConfig);
   }
 
   /**
@@ -351,8 +346,8 @@ export class CloudFormationTemplateGenerator {
       },
 
       Resources: {
-        // Per-Lambda VPC resources (generated for each Lambda node with mode 'new')
-        ...this.generatePerLambdaVpcResources(workflow),
+        // Shared workflow VPC resources (if workflow has vpcConfig.mode === 'new')
+        ...this.generateWorkflowVpcResources(workflow),
 
         // IAM Role for Step Functions
         StepFunctionsExecutionRole: {
@@ -660,9 +655,9 @@ export class CloudFormationTemplateGenerator {
       // Analyze connected nodes to determine permissions
       const connectedPermissions = this.analyzeLambdaConnectedNodes(lambdaNode, workflow);
       
-      // Lambda execution role
-      const nodeVpcConfig = lambdaNode.config?.vpcConfig;
-      const vpcEnabled = nodeVpcConfig?.mode && nodeVpcConfig.mode !== 'none';
+      // Lambda execution role — use workflow-level VPC config
+      const vpcConfig = workflow.vpcConfig;
+      const vpcEnabled = vpcConfig?.mode && vpcConfig.mode !== 'none';
       const roleProperties: any = {
         RoleName: {
           'Fn::Sub': `Lambda-${truncatedName}-Role-\${WorkflowId}`,
@@ -745,7 +740,7 @@ export class CloudFormationTemplateGenerator {
       };
 
       // Lambda function (without API Gateway trigger)
-      const lambdaVpcConfig = this.getLambdaVpcConfig(lambdaNode.config?.vpcConfig, truncatedName);
+      const lambdaVpcConfig = this.getWorkflowLambdaVpcConfig(workflow.vpcConfig);
       resources[lambdaFunctionName] = {
         Type: 'AWS::Lambda::Function',
         Properties: {
@@ -1337,7 +1332,8 @@ def handler(event, context):
 
     const resources: any = {};
 
-    const osVpcEnabled = false; // OpenSearch Lambdas do not use per-node VPC config
+    const vpcConfig = workflow.vpcConfig;
+    const osVpcEnabled = vpcConfig?.mode && vpcConfig.mode !== 'none';
 
     // IAM Role for OpenSearch Lambda functions
     resources.OpenSearchLambdaRole = {
@@ -1396,6 +1392,7 @@ def handler(event, context):
         Role: { 'Fn::GetAtt': ['OpenSearchLambdaRole', 'Arn'] },
         Timeout: 60,
         MemorySize: 256,
+        ...(this.getWorkflowLambdaVpcConfig(workflow.vpcConfig) ? { VpcConfig: this.getWorkflowLambdaVpcConfig(workflow.vpcConfig) } : {}),
         Code: {
           ZipFile: this.getOpenSearchIndexerCode(),
         },

@@ -16,6 +16,18 @@ export interface Connection {
   targetHandle: string;
 }
 
+export interface WorkflowVpcConfig {
+  mode: 'none' | 'existing' | 'new';
+  existing?: {
+    vpcId: string;
+    subnetIds: string[];
+    securityGroupIds: string[];
+  };
+  new?: {
+    cidrBlock?: string;
+  };
+}
+
 export interface Workflow {
   id: string;
   name: string;
@@ -23,6 +35,7 @@ export interface Workflow {
   userId: string;
   nodes: WorkflowNode[];
   connections: Connection[];
+  vpcConfig?: WorkflowVpcConfig;
   stepFunctionDefinition?: any;
   createdAt: string;
   updatedAt: string;

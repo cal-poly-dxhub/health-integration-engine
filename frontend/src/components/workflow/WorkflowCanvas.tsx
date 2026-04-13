@@ -587,6 +587,7 @@ const WorkflowCanvasContent: React.FC = () => {
           >
             {isSaving ? 'Saving...' : 'Save'}
           </button>
+          {import.meta.env.VITE_ENABLE_OPENSEARCH !== 'false' && (
           <div className="opensearch-toggle">
             <label className="opensearch-checkbox" title="Enable OpenSearch indexing for this workflow">
               <input
@@ -607,6 +608,7 @@ const WorkflowCanvasContent: React.FC = () => {
               />
             )}
           </div>
+          )}
           <button 
             onClick={handleDeploy}
             className="toolbar-btn deploy-btn"

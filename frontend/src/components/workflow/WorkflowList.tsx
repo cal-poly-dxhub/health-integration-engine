@@ -201,6 +201,7 @@ const WorkflowList: React.FC<WorkflowListProps> = ({
               Sign Out
             </button>
           </div>
+          {import.meta.env.VITE_ENABLE_OPENSEARCH !== 'false' && (
           <button
             className="search-messages-btn"
             onClick={() => setShowGlobalSearch(true)}
@@ -213,6 +214,7 @@ const WorkflowList: React.FC<WorkflowListProps> = ({
             Search Messages
             <kbd className="kbd-shortcut">⌘K</kbd>
           </button>
+          )}
           <button
             onClick={onCreateNew}
             className="create-workflow-btn"
@@ -487,7 +489,7 @@ const WorkflowList: React.FC<WorkflowListProps> = ({
       </div>
 
       {/* Global Search Modal */}
-      {showGlobalSearch && (
+      {showGlobalSearch && import.meta.env.VITE_ENABLE_OPENSEARCH !== 'false' && (
         <div className="global-search-overlay" onClick={() => setShowGlobalSearch(false)}>
           <div className="global-search-modal" onClick={(e) => e.stopPropagation()}>
             <div className="global-search-modal-header">

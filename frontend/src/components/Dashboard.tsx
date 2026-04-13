@@ -264,6 +264,7 @@ export default function Dashboard({ onSignOut, onEditWorkflow, onViewWorkflow }:
                   <span className="tab-count">Message Router APIs</span>
                 </div>
               </button>
+              {import.meta.env.VITE_ENABLE_OPENSEARCH !== 'false' && (
               <button
                 className={`sidebar-tab ${activeTab === 'search' ? 'active' : ''}`}
                 onClick={() => setActiveTab('search')}
@@ -277,6 +278,7 @@ export default function Dashboard({ onSignOut, onEditWorkflow, onViewWorkflow }:
                   <span className="tab-count">OpenSearch</span>
                 </div>
               </button>
+              )}
             </div>
           </div>
 
@@ -309,7 +311,7 @@ export default function Dashboard({ onSignOut, onEditWorkflow, onViewWorkflow }:
               />
             )}
 
-            {activeTab === 'search' && (
+            {activeTab === 'search' && import.meta.env.VITE_ENABLE_OPENSEARCH !== 'false' && (
               <div className="search-tab-content">
                 <div className="search-tab-header">
                   <h2>Message Search</h2>
@@ -400,7 +402,7 @@ export default function Dashboard({ onSignOut, onEditWorkflow, onViewWorkflow }:
       )}
 
       {/* Global Search Modal */}
-      {showGlobalSearch && (
+      {showGlobalSearch && import.meta.env.VITE_ENABLE_OPENSEARCH !== 'false' && (
         <div className="global-search-overlay" onClick={() => setShowGlobalSearch(false)}>
           <div className="global-search-modal" onClick={(e) => e.stopPropagation()}>
             <div className="global-search-modal-header">

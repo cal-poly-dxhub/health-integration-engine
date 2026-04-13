@@ -414,8 +414,11 @@ export class WorkflowBuilderStack extends cdk.Stack {
       ],
     });
 
-    // Create OpenSearch Serverless collection for message indexing
-    const opensearchCollection = this.createOpenSearchServerlessCollection();
+    // Conditionally create OpenSearch Serverless collection
+    const enableOpenSearch = PROJECT.enableOpenSearch !== false;
+    const opensearchCollection = enableOpenSearch
+      ? this.createOpenSearchServerlessCollection()
+      : undefined;
 
     // Create deployment Lambda function
     const deploymentLambda = this.createLambdaFunction(
@@ -428,7 +431,7 @@ export class WorkflowBuilderStack extends cdk.Stack {
         WORKFLOWS_TABLE: this.workflowsTable.tableName,
         AWS_ACCOUNT_ID: this.account,
         LAMBDA_CODE_BUCKET: lambdaCodeBucket.bucketName,
-        OPENSEARCH_ENDPOINT: opensearchCollection.attrCollectionEndpoint,
+        OPENSEARCH_ENDPOINT: opensearchCollection?.attrCollectionEndpoint ?? '',
         VPC_CONFIG: JSON.stringify(PROJECT.vpc || { mode: 'none' }),
       }
     );
@@ -953,6 +956,7 @@ export class WorkflowBuilderStack extends cdk.Stack {
     this.addLambdaIntegration(vpcListResource, 'GET', vpcListLambda, true);
     
     // POST /opensearch/search - Search OpenSearch Serverless (Python Lambda)
+    if (enableOpenSearch && opensearchCollection) {
     const opensearchResource = this.api.root.addResource('opensearch');
     const opensearchSearchResource = opensearchResource.addResource('search');
     
@@ -978,6 +982,7 @@ export class WorkflowBuilderStack extends cdk.Stack {
     );
     
     this.addLambdaIntegration(opensearchSearchResource, 'POST', opensearchSearchLambda, true);
+    }
     
     // GET /workflows - List user's workflows
     const listWorkflowsLambda = this.createLambdaFunction(
@@ -2001,17 +2006,41 @@ export class WorkflowBuilderStack extends cdk.Stack {
       }),
     });
 
-    // Network policy (allow public access for simplicity)
-    const networkPolicy = new cdk.aws_opensearchserverless.CfnSecurityPolicy(this, 'OpenSearchNetworkPolicy', {
-      name: `health-msgs-network-${this.account.slice(-6)}`,
-      type: 'network',
-      policy: JSON.stringify([{
+    // Network policy — respect VPC config
+    const vpcMode = (PROJECT.vpc || { mode: 'none' }).mode;
+    let networkPolicyJson: string;
+
+    if (vpcMode === 'none') {
+      networkPolicyJson = JSON.stringify([{
         Rules: [
           { ResourceType: 'collection', Resource: [`collection/${collectionName}`] },
           { ResourceType: 'dashboard', Resource: [`collection/${collectionName}`] },
         ],
         AllowFromPublic: true,
-      }]),
+      }]);
+    } else {
+      // Create an OpenSearch Serverless VPC endpoint
+      const opensearchVpcEndpoint = new cdk.aws_opensearchserverless.CfnVpcEndpoint(this, 'OpenSearchVpcEndpoint', {
+        name: `health-msgs-vpce-${this.account.slice(-6)}`,
+        vpcId: this.vpc.vpcId,
+        subnetIds: this.vpc.privateSubnets.map(s => s.subnetId),
+        securityGroupIds: [this.lambdaSecurityGroup.securityGroupId],
+      });
+
+      networkPolicyJson = JSON.stringify([{
+        Rules: [
+          { ResourceType: 'collection', Resource: [`collection/${collectionName}`] },
+          { ResourceType: 'dashboard', Resource: [`collection/${collectionName}`] },
+        ],
+        AllowFromPublic: false,
+        SourceVPCEs: [opensearchVpcEndpoint.attrId],
+      }]);
+    }
+
+    const networkPolicy = new cdk.aws_opensearchserverless.CfnSecurityPolicy(this, 'OpenSearchNetworkPolicy', {
+      name: `health-msgs-network-${this.account.slice(-6)}`,
+      type: 'network',
+      policy: networkPolicyJson,
     });
 
     // Data access policy - allow all IAM principals in the account

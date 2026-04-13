@@ -17,6 +17,10 @@ Health Integration Engine is a web application that enables users to create, edi
 
 This project was built to simplify the orchestration of healthcare data processing pipelines — such as HL7 message routing, file transformations, and multi-step integrations — without requiring users to write Step Functions JSON by hand or manage AWS infrastructure directly.
 
+## Architecture Diagram
+
+![Architecture Diagram](docs/architecture-diagram.png)
+
 # Description
 
 ## Tech Stack

@@ -66,6 +66,10 @@ $S3Bucket = ($stackProps | Where-Object { $_.Name -like "FrontendHostingFrontend
 $CloudFrontId = ($stackProps | Where-Object { $_.Name -like "FrontendHostingCloudFrontDistributionId*" }).Value
 $CloudFrontUrl = ($stackProps | Where-Object { $_.Name -like "FrontendHostingCloudFrontUrl*" }).Value
 
+Write-Host "=== Reading config flags ==="
+$configYaml = Get-Content "$RootDir\infrastructure\config.yaml" -Raw
+if ($configYaml -match 'enableOpenSearch:\s*(true|false)') { $EnableOpenSearch = $Matches[1] } else { $EnableOpenSearch = "true" }
+
 Write-Host "=== Updating Frontend .env ==="
 Set-Location "$RootDir\frontend"
 @"
@@ -80,6 +84,7 @@ VITE_WEBSOCKET_URL=$WebSocketUrl
 VITE_NODE_ENV=development
 VITE_ENABLE_DEBUG=true
 VITE_ENABLE_MOCK_DATA=false
+VITE_ENABLE_OPENSEARCH=$EnableOpenSearch
 "@ | Set-Content .env -Encoding UTF8
 
 Write-Host "=== Building Frontend ==="

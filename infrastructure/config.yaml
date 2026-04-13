@@ -97,7 +97,7 @@ amplify:
 #   existing — Use an existing VPC (provide vpcId, subnetIds, securityGroupIds)
 #   new      — CloudFormation creates a shared VPC per workflow stack
 vpc:
-  mode: "none"
+  # mode: "none"
   # existing:
   #   vpcId: "vpc-0abc123def456"
   #   subnetIds:
@@ -105,5 +105,10 @@ vpc:
   #     - "subnet-def456"
   #   securityGroupIds:
   #     - "sg-abc123"
-  # new:
-  #   cidrBlock: "10.0.0.0/16"
+  new:
+    cidrBlock: "10.0.0.0/16"
+
+# OpenSearch Serverless configuration
+# Set to true to deploy an OpenSearch Serverless collection for indexing/search.
+# Set to false to skip OpenSearch deployment entirely (the UI checkbox will be hidden).
+enableOpenSearch: true

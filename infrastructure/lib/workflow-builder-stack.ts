@@ -433,6 +433,12 @@ export class WorkflowBuilderStack extends cdk.Stack {
         LAMBDA_CODE_BUCKET: lambdaCodeBucket.bucketName,
         OPENSEARCH_ENDPOINT: opensearchCollection?.attrCollectionEndpoint ?? '',
         VPC_CONFIG: JSON.stringify(PROJECT.vpc || { mode: 'none' }),
+        // Pass CDK VPC config for OpenSearch indexer (must be in same VPC as OpenSearch endpoint)
+        OPENSEARCH_VPC_CONFIG: JSON.stringify({
+          vpcId: this.vpc.vpcId,
+          subnetIds: this.vpc.privateSubnets.map(s => s.subnetId),
+          securityGroupIds: [this.lambdaSecurityGroup.securityGroupId],
+        }),
       }
     );
 
@@ -967,6 +973,9 @@ export class WorkflowBuilderStack extends cdk.Stack {
       code: lambda.Code.fromInline(this.getOpenSearchSearchCode()),
       timeout: cdk.Duration.seconds(30),
       memorySize: 256,
+      vpc: this.vpc,
+      vpcSubnets: { subnetType: ec2.SubnetType.PRIVATE_WITH_EGRESS },
+      securityGroups: [this.lambdaSecurityGroup],
       environment: {
         OPENSEARCH_ENDPOINT: opensearchCollection.attrCollectionEndpoint,
       },

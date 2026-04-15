@@ -60,6 +60,13 @@ export class WorkflowBuilderStack extends cdk.Stack {
       allowAllOutbound: true,
     });
 
+    // Allow HTTPS inbound from itself so Lambda can reach the OpenSearch VPC endpoint
+    this.lambdaSecurityGroup.addIngressRule(
+      this.lambdaSecurityGroup,
+      ec2.Port.tcp(443),
+      'Allow HTTPS from Lambda to OpenSearch VPC endpoint',
+    );
+
     // Create API Gateway first (needed for Identity Pool permissions)
     this.api = this.createApiGateway();
     

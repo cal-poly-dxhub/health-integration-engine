@@ -313,7 +313,7 @@ export class DeploymentService {
       });
 
       const isolatedNodes = workflow.nodes.filter((node: any) => 
-        node.type !== 'start' && node.type !== 'end' && !connectedNodeIds.has(node.id)
+        node.type !== 'start' && node.type !== 'end' && node.type !== 'opensearch' && !connectedNodeIds.has(node.id)
       );
 
       if (isolatedNodes.length > 0) {

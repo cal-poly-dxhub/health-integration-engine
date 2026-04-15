@@ -316,14 +316,16 @@ const WorkflowCanvasContent: React.FC = () => {
   const handleDeploy = useCallback(async () => {
     if (isDeploying || !workflow) return;
     
+    // Include OpenSearch node if enabled
+    const deployNodes = opensearchEnabled ? [...nodes, buildOpensearchNode()] : nodes;
+    
     // First save the workflow if there are unsaved changes
     if (hasUnsavedChanges) {
       try {
         setIsSaving(true);
-        const deploySaveNodes = opensearchEnabled ? [...nodes, buildOpensearchNode()] : nodes;
         await saveWorkflow({
           name: workflowName,
-          nodes: deploySaveNodes,
+          nodes: deployNodes,
           connections,
         });
         setHasUnsavedChanges(false);
@@ -336,7 +338,7 @@ const WorkflowCanvasContent: React.FC = () => {
     const currentWorkflow = {
       ...workflow,
       name: workflowName,
-      nodes,
+      nodes: deployNodes,
       connections,
     };
 
@@ -349,13 +351,6 @@ const WorkflowCanvasContent: React.FC = () => {
     // Start deployment directly (VPC is configured per-Lambda node)
     try {
       setIsDeploying(true);
-
-      const currentWorkflow = {
-        ...workflow,
-        name: workflowName,
-        nodes,
-        connections,
-      };
 
       const deploymentResponse = await DeploymentService.deployWorkflow({
         workflowId: workflow.id,

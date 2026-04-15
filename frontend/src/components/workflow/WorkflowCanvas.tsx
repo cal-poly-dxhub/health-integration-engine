@@ -90,7 +90,15 @@ const WorkflowCanvasContent: React.FC = () => {
       const osNode = fixedNodes.find(n => n.type === 'opensearch');
       if (osNode) {
         setOpensearchEnabled(true);
-        setOpensearchIndexName((osNode.config as any)?.indexName || 'health-messages');
+        setSavedOpensearchEnabled(true);
+        const indexName = (osNode.config as any)?.indexName || 'health-messages';
+        setOpensearchIndexName(indexName);
+        setSavedOpensearchIndexName(indexName);
+      } else {
+        setOpensearchEnabled(false);
+        setSavedOpensearchEnabled(false);
+        setOpensearchIndexName('health-messages');
+        setSavedOpensearchIndexName('health-messages');
       }
       setNodes(fixedNodes.filter(n => n.type !== 'opensearch'));
       setConnections(workflow.connections || []);
@@ -112,6 +120,8 @@ const WorkflowCanvasContent: React.FC = () => {
   // Mark as having unsaved changes when nodes or connections change
   // But don't mark as unsaved during initial load or when fixing loaded data
   const [isInitialLoad, setIsInitialLoad] = useState(true);
+  const [savedOpensearchEnabled, setSavedOpensearchEnabled] = useState(false);
+  const [savedOpensearchIndexName, setSavedOpensearchIndexName] = useState('health-messages');
   
   useEffect(() => {
     if (workflow && !isInitialLoad && !isSavingRefRef.current && (nodes.length > 0 || connections.length > 0)) {
@@ -124,6 +134,15 @@ const WorkflowCanvasContent: React.FC = () => {
       });
     }
   }, [nodes, connections, workflow, isInitialLoad]);
+
+  // Mark as having unsaved changes when OpenSearch settings differ from saved state
+  useEffect(() => {
+    if (workflow && !isInitialLoad) {
+      if (opensearchEnabled !== savedOpensearchEnabled || opensearchIndexName !== savedOpensearchIndexName) {
+        setHasUnsavedChanges(true);
+      }
+    }
+  }, [opensearchEnabled, opensearchIndexName, savedOpensearchEnabled, savedOpensearchIndexName, workflow, isInitialLoad]);
 
 
 
@@ -297,6 +316,8 @@ const WorkflowCanvasContent: React.FC = () => {
       });
       
       setHasUnsavedChanges(false);
+      setSavedOpensearchEnabled(opensearchEnabled);
+      setSavedOpensearchIndexName(opensearchIndexName);
       console.log('✅ Workflow saved successfully - hasUnsavedChanges set to false');
     } catch (error) {
       console.error('Failed to save workflow:', error);

@@ -412,6 +412,7 @@ export class WorkflowBuilderStack extends cdk.Stack {
       removalPolicy: this.config.environment === 'production' 
         ? cdk.RemovalPolicy.RETAIN 
         : cdk.RemovalPolicy.DESTROY,
+      autoDeleteObjects: this.config.environment !== 'production',
       lifecycleRules: [
         {
           id: 'DeleteOldVersions',

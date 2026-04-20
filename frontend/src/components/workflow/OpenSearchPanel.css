@@ -200,7 +200,7 @@
 }
 
 .results-table .s3-location {
-  max-width: 150px;
+  max-width: 360px;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -225,7 +225,7 @@
 }
 
 .s3-location {
-  max-width: 200px;
+  max-width: 360px;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;

@@ -97,7 +97,7 @@ amplify:
 #   existing — Use an existing VPC (provide vpcId, subnetIds, securityGroupIds)
 #   new      — CloudFormation creates a shared VPC per workflow stack
 vpc:
-  # mode: "none"
+  mode: "new"
   # existing:
   #   vpcId: "vpc-0abc123def456"
   #   subnetIds:

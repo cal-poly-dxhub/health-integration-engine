@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { authService, AuthUser } from '../services/auth';
 import WorkflowList from './workflow/WorkflowList';
 import DeployedWorkflowsList from './workflow/DeployedWorkflowsList';
@@ -16,6 +17,7 @@ interface DashboardProps {
 }
 
 export default function Dashboard({ onSignOut, onEditWorkflow, onViewWorkflow }: DashboardProps) {
+  const navigate = useNavigate();
   const [user, setUser] = useState<AuthUser | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -39,22 +41,18 @@ export default function Dashboard({ onSignOut, onEditWorkflow, onViewWorkflow }:
   const [deleteSuccess, setDeleteSuccess] = useState<string | null>(null);
   const [showDeletionProgressModal, setShowDeletionProgressModal] = useState(false);
   const [deletionId, setDeletionId] = useState<string>('');
-  const [showGlobalSearch, setShowGlobalSearch] = useState(false);
 
-  // Cmd/Ctrl+K to open global search
+  // Cmd/Ctrl+K to open global search page
   useEffect(() => {
     const onKeyDown = (e: KeyboardEvent) => {
       if ((e.metaKey || e.ctrlKey) && e.key === 'k') {
         e.preventDefault();
-        setShowGlobalSearch(prev => !prev);
-      }
-      if (e.key === 'Escape' && showGlobalSearch) {
-        setShowGlobalSearch(false);
+        navigate('/search');
       }
     };
     window.addEventListener('keydown', onKeyDown);
     return () => window.removeEventListener('keydown', onKeyDown);
-  }, [showGlobalSearch]);
+  }, [navigate]);
 
   useEffect(() => {
     const loadUser = async () => {
@@ -215,7 +213,7 @@ export default function Dashboard({ onSignOut, onEditWorkflow, onViewWorkflow }:
             <div className="nav-user-section">
               <button
                 className="nav-search-btn"
-                onClick={() => setShowGlobalSearch(true)}
+                onClick={() => navigate('/search')}
                 title="Search across all workflows (⌘K)"
               >
                 🔍 Search Messages
@@ -401,22 +399,6 @@ export default function Dashboard({ onSignOut, onEditWorkflow, onViewWorkflow }:
         />
       )}
 
-      {/* Global Search Modal */}
-      {showGlobalSearch && import.meta.env.VITE_ENABLE_OPENSEARCH !== 'false' && (
-        <div className="global-search-overlay" onClick={() => setShowGlobalSearch(false)}>
-          <div className="global-search-modal" onClick={(e) => e.stopPropagation()}>
-            <div className="global-search-modal-header">
-              <h2>🔍 Search Across All Workflows</h2>
-              <button className="global-search-close" onClick={() => setShowGlobalSearch(false)} aria-label="Close search">
-                ✕
-              </button>
-            </div>
-            <div className="global-search-modal-body">
-              <OpenSearchPanel />
-            </div>
-          </div>
-        </div>
-      )}
     </div>
   );
 }

@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useMemo } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { WorkflowMetadata } from '../../types/workflow';
-import OpenSearchPanel from './OpenSearchPanel';
 // import WorkflowCard from './WorkflowCard';
 import './WorkflowList.css';
 
@@ -39,22 +39,19 @@ const WorkflowList: React.FC<WorkflowListProps> = ({
   const [sortBy, setSortBy] = useState<'name' | 'created' | 'modified'>('modified');
   const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('desc');
   const [filterStatus, setFilterStatus] = useState<'all' | 'draft' | 'deployed'>('all');
-  const [showGlobalSearch, setShowGlobalSearch] = useState(false);
+  const navigate = useNavigate();
 
-  // Cmd/Ctrl+K to open global search
+  // Cmd/Ctrl+K to open global search page
   useEffect(() => {
     const onKeyDown = (e: KeyboardEvent) => {
       if ((e.metaKey || e.ctrlKey) && e.key === 'k') {
         e.preventDefault();
-        setShowGlobalSearch(prev => !prev);
-      }
-      if (e.key === 'Escape' && showGlobalSearch) {
-        setShowGlobalSearch(false);
+        navigate('/search');
       }
     };
     window.addEventListener('keydown', onKeyDown);
     return () => window.removeEventListener('keydown', onKeyDown);
-  }, [showGlobalSearch]);
+  }, [navigate]);
 
   // Filter and sort workflows
   const filteredAndSortedWorkflows = useMemo(() => {
@@ -204,7 +201,7 @@ const WorkflowList: React.FC<WorkflowListProps> = ({
           {import.meta.env.VITE_ENABLE_OPENSEARCH !== 'false' && (
           <button
             className="search-messages-btn"
-            onClick={() => setShowGlobalSearch(true)}
+            onClick={() => navigate('/search')}
             title="Search across all workflows (⌘K)"
           >
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
@@ -487,23 +484,6 @@ const WorkflowList: React.FC<WorkflowListProps> = ({
           </div>
         )}
       </div>
-
-      {/* Global Search Modal */}
-      {showGlobalSearch && import.meta.env.VITE_ENABLE_OPENSEARCH !== 'false' && (
-        <div className="global-search-overlay" onClick={() => setShowGlobalSearch(false)}>
-          <div className="global-search-modal" onClick={(e) => e.stopPropagation()}>
-            <div className="global-search-modal-header">
-              <h2>🔍 Search Across All Workflows</h2>
-              <button className="global-search-close" onClick={() => setShowGlobalSearch(false)} aria-label="Close search">
-                ✕
-              </button>
-            </div>
-            <div className="global-search-modal-body">
-              <OpenSearchPanel />
-            </div>
-          </div>
-        </div>
-      )}
     </div>
   );
 };

@@ -9,6 +9,7 @@ const path = require('path');
 const HOISTED_DEPS = [
     'zod',
     'jszip',
+    'setimmediate',
     'jsonwebtoken',
     'jwks-rsa',
     'mime-types',

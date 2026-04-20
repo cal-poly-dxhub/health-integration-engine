@@ -25,6 +25,19 @@ export class CloudFormationTemplateGenerator {
   }
 
   /**
+   * Get OpenSearch VPC config (CDK VPC where OpenSearch endpoint lives)
+   */
+  private static getOpenSearchVpcConfig(): { vpcId: string; subnetIds: string[]; securityGroupIds: string[] } | null {
+    try {
+      const raw = process.env.OPENSEARCH_VPC_CONFIG;
+      if (!raw) return null;
+      return JSON.parse(raw);
+    } catch {
+      return null;
+    }
+  }
+
+  /**
    * Generate CloudFormation resources for a single shared workflow VPC
    */
   private static generateNewVpcResources(vpcConfig: VpcConfig): any {
@@ -1351,8 +1364,9 @@ def handler(event, context):
 
     const resources: any = {};
 
-    const vpcConfig = this.getVpcConfig();
-    const osVpcEnabled = vpcConfig.mode !== 'none';
+    // Use OpenSearch-specific VPC config (CDK VPC where OpenSearch endpoint lives)
+    const osVpcConfig = this.getOpenSearchVpcConfig();
+    const osVpcEnabled = !!osVpcConfig;
 
     // IAM Role for OpenSearch Lambda functions
     resources.OpenSearchLambdaRole = {
@@ -1411,7 +1425,7 @@ def handler(event, context):
         Role: { 'Fn::GetAtt': ['OpenSearchLambdaRole', 'Arn'] },
         Timeout: 60,
         MemorySize: 256,
-        ...(this.getWorkflowLambdaVpcConfig(this.getVpcConfig()) ? { VpcConfig: this.getWorkflowLambdaVpcConfig(this.getVpcConfig()) } : {}),
+        ...(osVpcConfig ? { VpcConfig: { SubnetIds: osVpcConfig.subnetIds, SecurityGroupIds: osVpcConfig.securityGroupIds } } : {}),
         Code: {
           ZipFile: this.getOpenSearchIndexerCode(),
         },

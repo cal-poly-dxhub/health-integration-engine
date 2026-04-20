@@ -32,6 +32,7 @@
     "@smithy/signature-v4": "^5.3.10",
     "jsonwebtoken": "^9.0.2",
     "jszip": "^3.10.1",
+    "setimmediate": "^1.0.5",
     "jwks-rsa": "^3.1.0",
     "mime-types": "^2.1.35",
     "zod": "^3.25.76"

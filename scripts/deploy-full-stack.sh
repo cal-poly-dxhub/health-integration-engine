@@ -66,6 +66,9 @@ S3_BUCKET=$(jq -r '.WorkflowBuilderStack | to_entries[] | select(.key | startswi
 CLOUDFRONT_ID=$(jq -r '.WorkflowBuilderStack | to_entries[] | select(.key | startswith("FrontendHostingCloudFrontDistributionId")) | .value' cdk-outputs.json)
 CLOUDFRONT_URL=$(jq -r '.WorkflowBuilderStack | to_entries[] | select(.key | startswith("FrontendHostingCloudFrontUrl")) | .value' cdk-outputs.json)
 
+echo "=== Reading config flags ==="
+ENABLE_OPENSEARCH=$(python3 -c "import yaml; print(str(yaml.safe_load(open('$ROOT_DIR/infrastructure/config.yaml')).get('enableOpenSearch', True)).lower())" 2>/dev/null || echo "true")
+
 echo "=== Updating Frontend .env ==="
 cd "$ROOT_DIR/frontend"
 cat > .env << EOF
@@ -80,6 +83,7 @@ VITE_WEBSOCKET_URL=$WEBSOCKET_URL
 VITE_NODE_ENV=development
 VITE_ENABLE_DEBUG=true
 VITE_ENABLE_MOCK_DATA=false
+VITE_ENABLE_OPENSEARCH=$ENABLE_OPENSEARCH
 EOF
 
 echo "=== Building Frontend ==="

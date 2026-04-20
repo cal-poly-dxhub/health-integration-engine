@@ -26,6 +26,7 @@ fi
 HOISTED_DEPS=(
     "zod"
     "jszip"
+    "setimmediate"
     "jsonwebtoken"
     "jwks-rsa"
     "mime-types"

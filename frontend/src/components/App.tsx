@@ -2,6 +2,7 @@ import { BrowserRouter as Router, Routes, Route, Navigate, useSearchParams } fro
 import { AuthProvider, useAuth } from '../contexts/AuthContext';
 import { authService } from '../services/auth';
 import Dashboard from './Dashboard';
+import GlobalSearchPage from './GlobalSearchPage';
 import WorkflowCanvas from './workflow/WorkflowCanvas';
 import WorkflowDetails from './workflow/WorkflowDetails';
 import SignIn from './auth/SignIn';
@@ -125,6 +126,11 @@ function AppRoutes() {
           <Route path="/workflow/:workflowId" element={
             <ProtectedRoute>
               <WorkflowDetails />
+            </ProtectedRoute>
+          } />
+          <Route path="/search" element={
+            <ProtectedRoute>
+              <GlobalSearchPage />
             </ProtectedRoute>
           } />
           <Route path="/workflow/editor/:workflowId" element={

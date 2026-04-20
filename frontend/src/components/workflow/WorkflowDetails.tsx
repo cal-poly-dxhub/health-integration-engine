@@ -493,12 +493,14 @@ const WorkflowDetails: React.FC<WorkflowDetailsProps> = ({ workflow: propWorkflo
         >
           Definition
         </button>
+        {import.meta.env.VITE_ENABLE_OPENSEARCH !== 'false' && (
         <button
           className={`tab-btn ${activeTab === 'search' ? 'active' : ''}`}
           onClick={() => setActiveTab('search')}
         >
           Message Search
         </button>
+        )}
       </div>
 
       {/* Tab Content */}
@@ -714,7 +716,7 @@ const WorkflowDetails: React.FC<WorkflowDetailsProps> = ({ workflow: propWorkflo
           </div>
         )}
 
-        {activeTab === 'search' && (
+        {activeTab === 'search' && import.meta.env.VITE_ENABLE_OPENSEARCH !== 'false' && (
           <div className="search-tab">
             <OpenSearchPanel 
               workflowId={workflowId} 

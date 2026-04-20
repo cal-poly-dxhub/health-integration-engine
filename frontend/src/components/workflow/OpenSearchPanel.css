@@ -34,6 +34,20 @@
   background: #f9fafb;
 }
 
+.filters-toggle {
+  background: #f3f4f6;
+  border: 1px solid #d1d5db;
+  padding: 6px 12px;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 13px;
+  color: #374151;
+}
+
+.filters-toggle:hover {
+  background: #e5e7eb;
+}
+
 .opensearch-config {
   background: #f9fafb;
   padding: 12px;

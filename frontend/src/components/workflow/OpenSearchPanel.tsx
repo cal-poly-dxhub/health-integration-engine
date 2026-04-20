@@ -42,6 +42,7 @@ const OpenSearchPanel: React.FC<OpenSearchPanelProps> = ({
   const [error, setError] = useState<string | null>(null);
   const [totalHits, setTotalHits] = useState(0);
   const [expandedRows, setExpandedRows] = useState<Set<number>>(new Set());
+  const [filtersVisible, setFiltersVisible] = useState(true);
 
   const toggleRow = (idx: number) => {
     setExpandedRows(prev => {
@@ -104,8 +105,12 @@ const OpenSearchPanel: React.FC<OpenSearchPanelProps> = ({
     <div className="opensearch-panel">
       <div className="opensearch-header">
         <h3>Message Search</h3>
+        <button className="filters-toggle" onClick={() => setFiltersVisible(v => !v)}>
+          {filtersVisible ? 'Hide filters' : 'Show filters'}
+        </button>
       </div>
 
+      {filtersVisible && (
       <div className="search-filters">
         <div className="filter-row">
           <div className="filter-group full-width">
@@ -184,6 +189,7 @@ const OpenSearchPanel: React.FC<OpenSearchPanelProps> = ({
           </div>
         </div>
       </div>
+      )}
 
       {error && (
         <div className="search-error">

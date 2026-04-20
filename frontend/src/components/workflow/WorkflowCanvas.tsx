@@ -90,7 +90,15 @@ const WorkflowCanvasContent: React.FC = () => {
       const osNode = fixedNodes.find(n => n.type === 'opensearch');
       if (osNode) {
         setOpensearchEnabled(true);
-        setOpensearchIndexName((osNode.config as any)?.indexName || 'health-messages');
+        setSavedOpensearchEnabled(true);
+        const indexName = (osNode.config as any)?.indexName || 'health-messages';
+        setOpensearchIndexName(indexName);
+        setSavedOpensearchIndexName(indexName);
+      } else {
+        setOpensearchEnabled(false);
+        setSavedOpensearchEnabled(false);
+        setOpensearchIndexName('health-messages');
+        setSavedOpensearchIndexName('health-messages');
       }
       setNodes(fixedNodes.filter(n => n.type !== 'opensearch'));
       setConnections(workflow.connections || []);
@@ -112,6 +120,8 @@ const WorkflowCanvasContent: React.FC = () => {
   // Mark as having unsaved changes when nodes or connections change
   // But don't mark as unsaved during initial load or when fixing loaded data
   const [isInitialLoad, setIsInitialLoad] = useState(true);
+  const [savedOpensearchEnabled, setSavedOpensearchEnabled] = useState(false);
+  const [savedOpensearchIndexName, setSavedOpensearchIndexName] = useState('health-messages');
   
   useEffect(() => {
     if (workflow && !isInitialLoad && !isSavingRefRef.current && (nodes.length > 0 || connections.length > 0)) {
@@ -124,6 +134,15 @@ const WorkflowCanvasContent: React.FC = () => {
       });
     }
   }, [nodes, connections, workflow, isInitialLoad]);
+
+  // Mark as having unsaved changes when OpenSearch settings differ from saved state
+  useEffect(() => {
+    if (workflow && !isInitialLoad) {
+      if (opensearchEnabled !== savedOpensearchEnabled || opensearchIndexName !== savedOpensearchIndexName) {
+        setHasUnsavedChanges(true);
+      }
+    }
+  }, [opensearchEnabled, opensearchIndexName, savedOpensearchEnabled, savedOpensearchIndexName, workflow, isInitialLoad]);
 
 
 
@@ -297,6 +316,8 @@ const WorkflowCanvasContent: React.FC = () => {
       });
       
       setHasUnsavedChanges(false);
+      setSavedOpensearchEnabled(opensearchEnabled);
+      setSavedOpensearchIndexName(opensearchIndexName);
       console.log('✅ Workflow saved successfully - hasUnsavedChanges set to false');
     } catch (error) {
       console.error('Failed to save workflow:', error);
@@ -316,14 +337,16 @@ const WorkflowCanvasContent: React.FC = () => {
   const handleDeploy = useCallback(async () => {
     if (isDeploying || !workflow) return;
     
+    // Include OpenSearch node if enabled
+    const deployNodes = opensearchEnabled ? [...nodes, buildOpensearchNode()] : nodes;
+    
     // First save the workflow if there are unsaved changes
     if (hasUnsavedChanges) {
       try {
         setIsSaving(true);
-        const deploySaveNodes = opensearchEnabled ? [...nodes, buildOpensearchNode()] : nodes;
         await saveWorkflow({
           name: workflowName,
-          nodes: deploySaveNodes,
+          nodes: deployNodes,
           connections,
         });
         setHasUnsavedChanges(false);
@@ -336,7 +359,7 @@ const WorkflowCanvasContent: React.FC = () => {
     const currentWorkflow = {
       ...workflow,
       name: workflowName,
-      nodes,
+      nodes: deployNodes,
       connections,
     };
 
@@ -349,13 +372,6 @@ const WorkflowCanvasContent: React.FC = () => {
     // Start deployment directly (VPC is configured per-Lambda node)
     try {
       setIsDeploying(true);
-
-      const currentWorkflow = {
-        ...workflow,
-        name: workflowName,
-        nodes,
-        connections,
-      };
 
       const deploymentResponse = await DeploymentService.deployWorkflow({
         workflowId: workflow.id,
@@ -587,6 +603,7 @@ const WorkflowCanvasContent: React.FC = () => {
           >
             {isSaving ? 'Saving...' : 'Save'}
           </button>
+          {import.meta.env.VITE_ENABLE_OPENSEARCH !== 'false' && (
           <div className="opensearch-toggle">
             <label className="opensearch-checkbox" title="Enable OpenSearch indexing for this workflow">
               <input
@@ -607,6 +624,7 @@ const WorkflowCanvasContent: React.FC = () => {
               />
             )}
           </div>
+          )}
           <button 
             onClick={handleDeploy}
             className="toolbar-btn deploy-btn"

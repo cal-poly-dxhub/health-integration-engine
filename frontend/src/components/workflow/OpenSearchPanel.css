@@ -34,6 +34,20 @@
   background: #f9fafb;
 }
 
+.filters-toggle {
+  background: #f3f4f6;
+  border: 1px solid #d1d5db;
+  padding: 6px 12px;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 13px;
+  color: #374151;
+}
+
+.filters-toggle:hover {
+  background: #e5e7eb;
+}
+
 .opensearch-config {
   background: #f9fafb;
   padding: 12px;
@@ -200,7 +214,7 @@
 }
 
 .results-table .s3-location {
-  max-width: 150px;
+  max-width: 360px;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -225,7 +239,7 @@
 }
 
 .s3-location {
-  max-width: 200px;
+  max-width: 360px;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;

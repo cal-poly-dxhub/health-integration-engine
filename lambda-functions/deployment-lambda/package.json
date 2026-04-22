@@ -4,7 +4,8 @@
   "description": "Lambda functions for workflow deployment",
   "main": "dist/index.js",
   "scripts": {
-    "build": "./build.sh",
+    "build": "node build.js",
+    "build:sh": "./build.sh",
     "build:windows": "tsc --skipLibCheck && node scripts/bundle.js",
     "test": "jest",
     "lint": "eslint src/**/*.ts",

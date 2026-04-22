@@ -1895,18 +1895,31 @@ export class WorkflowBuilderStack extends cdk.Stack {
           image: lambda.Runtime.NODEJS_18_X.bundlingImage,
           local: {
             tryBundle(outputDir: string): boolean {
-              // Run the build script locally
               const execSync = require('child_process').execSync;
+              const path = require('path');
+              const fs = require('fs');
               try {
-                execSync('./build.sh', { 
+                // Use node build.js (cross-platform) instead of ./build.sh
+                execSync('node build.js', { 
                   cwd: lambdaPath,
                   stdio: 'inherit'
                 });
-                // Copy dist contents to output
-                execSync(`cp -R dist/* "${outputDir}/"`, {
-                  cwd: lambdaPath,
-                  stdio: 'inherit'
-                });
+                // Copy dist contents to output (cross-platform)
+                const distDir = path.join(lambdaPath, 'dist');
+                const copyRecursive = (src: string, dest: string) => {
+                  const entries = fs.readdirSync(src, { withFileTypes: true });
+                  fs.mkdirSync(dest, { recursive: true });
+                  for (const entry of entries) {
+                    const srcPath = path.join(src, entry.name);
+                    const destPath = path.join(dest, entry.name);
+                    if (entry.isDirectory()) {
+                      copyRecursive(srcPath, destPath);
+                    } else {
+                      fs.copyFileSync(srcPath, destPath);
+                    }
+                  }
+                };
+                copyRecursive(distDir, outputDir);
                 return true;
               } catch (e) {
                 console.error('Local bundling failed:', e);

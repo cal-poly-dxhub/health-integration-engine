@@ -1,70 +1,85 @@
 param(
-    [string]$Profile = "",
-    [string]$Region = "us-east-1"
+  [string]$Profile,
+  [string]$Region = "us-east-1"
 )
 
 $ErrorActionPreference = "Stop"
 
-# Build AWS CLI flags
-$awsArgs = @()
-if ($Profile -ne "") {
-    $awsArgs += "--profile", $Profile
-    $env:AWS_PROFILE = $Profile
-    Write-Host "Using AWS profile: $Profile"
+# Helper to check native command exit codes
+function Assert-ExitCode {
+  param([string]$StepName)
+  if ($LASTEXITCODE -ne 0) {
+    Write-Error "FAILED: $StepName (exit code $LASTEXITCODE)"
+    exit $LASTEXITCODE
+  }
 }
 
-# Set region env vars early so all tools (CDK, AWS CLI) pick it up
-$env:CDK_DEFAULT_REGION = $Region
-$env:AWS_DEFAULT_REGION = $Region
-$env:AWS_REGION = $Region
-Write-Host "Using region: $Region"
-
-$RootDir = (Resolve-Path "$PSScriptRoot\..").Path
-
+$ScriptDir = Split-Path -Parent $MyInvocation.MyCommand.Path
+$RootDir = Split-Path -Parent $ScriptDir
 Set-Location $RootDir
+
+# Build AWS CLI args for profile/region
+$AwsArgs = @("--region", $Region)
+$CdkArgs = @("deploy", "--require-approval", "never", "--outputs-file", "cdk-outputs.json")
+if ($Profile) {
+  $AwsArgs += @("--profile", $Profile)
+  $CdkArgs += @("--profile", $Profile)
+  Write-Host "Using AWS profile: $Profile"
+}
+Write-Host "Using region: $Region"
 
 Write-Host "=== Installing Dependencies ==="
 npm run install:all
-if ($LASTEXITCODE -ne 0) { throw "install:all failed" }
+Assert-ExitCode "npm install:all"
 
 Write-Host "=== Building Lambda Functions ==="
 Set-Location "$RootDir\lambda-functions\workflow-lambda"
-npm install; if ($LASTEXITCODE -ne 0) { throw "workflow-lambda install failed" }
-npm run build; if ($LASTEXITCODE -ne 0) { throw "workflow-lambda build failed" }
+npm install
+Assert-ExitCode "workflow-lambda npm install"
+npm run build
+Assert-ExitCode "workflow-lambda build"
 
 Set-Location "$RootDir\lambda-functions\deployment-lambda"
-npm run build; if ($LASTEXITCODE -ne 0) { throw "deployment-lambda build failed" }
+npm run build
+Assert-ExitCode "deployment-lambda build"
 
 Set-Location "$RootDir\lambda-functions\websocket-lambda"
-npm install; if ($LASTEXITCODE -ne 0) { throw "websocket-lambda install failed" }
-npm run build; if ($LASTEXITCODE -ne 0) { throw "websocket-lambda build failed" }
+npm install
+Assert-ExitCode "websocket-lambda npm install"
+npm run build
+Assert-ExitCode "websocket-lambda build"
+
+Set-Location $RootDir
 
 Write-Host "=== Installing Infrastructure Dependencies ==="
 Set-Location "$RootDir\infrastructure"
-npm install; if ($LASTEXITCODE -ne 0) { throw "infrastructure install failed" }
+npm install
+Assert-ExitCode "infrastructure npm install"
+Set-Location $RootDir
 
 Write-Host "=== Deploying CDK Infrastructure ==="
 Set-Location "$RootDir\infrastructure"
-Remove-Item -Recurse -Force "cdk.out" -ErrorAction SilentlyContinue
-$cdkCmd = "npx cdk deploy --require-approval never --outputs-file cdk-outputs.json $($awsArgs -join ' ')"
-Invoke-Expression $cdkCmd
-if ($LASTEXITCODE -ne 0) { throw "CDK deploy failed" }
+$env:CDK_DEFAULT_REGION = $Region
+if ($Profile) {
+  $env:AWS_PROFILE = $Profile
+}
+npx cdk @CdkArgs
+Assert-ExitCode "CDK deploy"
 
 Write-Host "=== Extracting CDK Outputs ==="
-$outputs = Get-Content cdk-outputs.json | ConvertFrom-Json
-$stack = $outputs.WorkflowBuilderStack
+$CdkOutputs = Get-Content cdk-outputs.json | ConvertFrom-Json
+$Stack = $CdkOutputs.WorkflowBuilderStack
 
-$ApiUrl = $stack.ApiGatewayUrl
-$UserPoolId = $stack.UserPoolId
-$UserPoolClientId = $stack.UserPoolClientId
-$IdentityPoolId = $stack.IdentityPoolId
-$CognitoDomain = $stack.CognitoDomain
-$WebSocketUrl = $stack.WebSocketApiUrl
+$ApiUrl = $Stack.ApiGatewayUrl
+$UserPoolId = $Stack.UserPoolId
+$UserPoolClientId = $Stack.UserPoolClientId
+$IdentityPoolId = $Stack.IdentityPoolId
+$CognitoDomain = $Stack.CognitoDomain
+$WebSocketUrl = $Stack.WebSocketApiUrl
 
-$stackProps = $stack.PSObject.Properties
-$S3Bucket = ($stackProps | Where-Object { $_.Name -like "FrontendHostingFrontendBucketName*" }).Value
-$CloudFrontId = ($stackProps | Where-Object { $_.Name -like "FrontendHostingCloudFrontDistributionId*" }).Value
-$CloudFrontUrl = ($stackProps | Where-Object { $_.Name -like "FrontendHostingCloudFrontUrl*" }).Value
+$S3Bucket = ($Stack.PSObject.Properties | Where-Object { $_.Name -like "FrontendHostingFrontendBucketName*" }).Value
+$CloudFrontId = ($Stack.PSObject.Properties | Where-Object { $_.Name -like "FrontendHostingCloudFrontDistributionId*" }).Value
+$CloudFrontUrl = ($Stack.PSObject.Properties | Where-Object { $_.Name -like "FrontendHostingCloudFrontUrl*" }).Value
 
 Write-Host "=== Reading config flags ==="
 $configYaml = Get-Content "$RootDir\infrastructure\config.yaml" -Raw
@@ -84,19 +99,19 @@ VITE_WEBSOCKET_URL=$WebSocketUrl
 VITE_NODE_ENV=development
 VITE_ENABLE_DEBUG=true
 VITE_ENABLE_MOCK_DATA=false
-VITE_ENABLE_OPENSEARCH=$EnableOpenSearch
-"@ | Set-Content .env -Encoding UTF8
+"@ | Out-File -FilePath .env -Encoding utf8
 
 Write-Host "=== Building Frontend ==="
-npm run build; if ($LASTEXITCODE -ne 0) { throw "Frontend build failed" }
+npm run build
+Assert-ExitCode "frontend build"
 
 Write-Host "=== Deploying to S3 ==="
-aws s3 sync dist/ "s3://$S3Bucket/" --delete --region $Region @awsArgs
-if ($LASTEXITCODE -ne 0) { throw "S3 sync failed" }
+aws s3 sync dist/ "s3://$S3Bucket/" --delete @AwsArgs
+Assert-ExitCode "S3 sync"
 
 Write-Host "=== Invalidating CloudFront Cache ==="
-aws cloudfront create-invalidation --distribution-id $CloudFrontId --paths "/*" @awsArgs
-if ($LASTEXITCODE -ne 0) { throw "CloudFront invalidation failed" }
+aws cloudfront create-invalidation --distribution-id $CloudFrontId --paths "/*" @AwsArgs
+Assert-ExitCode "CloudFront invalidation"
 
 Write-Host ""
 Write-Host "=== Deployment Complete ==="

@@ -1627,6 +1627,8 @@ const ExecutionDetails: React.FC<ExecutionDetailsProps> = ({ execution: propExec
         setNewExecutionInput('{}');
         // Load the new execution in place to stay on execution details
         await loadExecutionDetails(result.executionArn);
+        // Start polling for status updates
+        startPolling(result.executionArn);
       }
     } catch (err) {
       console.error('Failed to start new execution:', err);
@@ -1656,20 +1658,21 @@ const ExecutionDetails: React.FC<ExecutionDetailsProps> = ({ execution: propExec
     }
   };
 
-  const startPolling = () => {
+  const startPolling = (arn?: string) => {
+    const executionArn = arn || execution?.executionArn;
+    if (!executionArn) return;
+
     // Clear any existing polling
     if (pollingInterval) {
       clearInterval(pollingInterval);
     }
-    
+
     // Poll every 2 seconds while execution is running
     const interval = setInterval(async () => {
-      if (!execution?.executionArn) return;
-      
       try {
         const [executionData, historyData] = await Promise.all([
-          stepFunctionsService.describeExecution(execution.executionArn),
-          stepFunctionsService.getExecutionHistory(execution.executionArn)
+          stepFunctionsService.describeExecution(executionArn),
+          stepFunctionsService.getExecutionHistory(executionArn)
         ]);
         
         if (executionData) {

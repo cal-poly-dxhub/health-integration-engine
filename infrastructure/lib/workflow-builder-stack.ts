@@ -2263,8 +2263,9 @@ def build_query(params, config):
 
     const provider = new cr.Provider(this, 'VpcCleanupProvider', {
       onEventHandler: cleanupLambda,
-      // Provider waits up to 2h via async signal from CFN; our handler runs
-      // synchronously under 15 min, which is fine for onEvent-only providers.
+      // onEvent-only provider: the handler must complete within its Lambda
+      // timeout (15 min). If cleanup needs longer we'd add an isCompleteHandler
+      // to enable the async pattern (up to totalTimeout, default 30 min, max 2h).
     });
 
     const customResource = new cdk.CustomResource(this, 'VpcCleanupResource', {

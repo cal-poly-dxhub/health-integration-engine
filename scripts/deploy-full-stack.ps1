@@ -1,9 +1,27 @@
 param(
     [string]$Profile = "",
-    [string]$Region = "us-east-1"
+    [string]$Region = ""
 )
 
 $ErrorActionPreference = "Stop"
+
+$RootDir = (Resolve-Path "$PSScriptRoot\..").Path
+
+# Read region from config.yaml (if set)
+$ConfigYaml = Get-Content "$RootDir\infrastructure\config.yaml" -Raw
+$ConfigRegion = if ($ConfigYaml -match '(?m)^region:\s*["'']?([a-z0-9-]+)') { $Matches[1] } else { "" }
+
+# Resolve region: config + CLI must match if both set; else config > CLI > profile > error
+if ($Region -ne "" -and $ConfigRegion -ne "" -and $Region -ne $ConfigRegion) {
+    throw "Region mismatch. config.yaml: $ConfigRegion, -Region: $Region"
+}
+if ($Region -eq "") { $Region = $ConfigRegion }
+if ($Region -eq "") {
+    $Region = if ($Profile -ne "") { (aws configure get region --profile $Profile 2>$null) } else { (aws configure get region 2>$null) }
+}
+if ([string]::IsNullOrWhiteSpace($Region)) {
+    throw "Region is required. Set in config.yaml, pass -Region, or configure your AWS profile."
+}
 
 # Build AWS CLI flags
 $awsArgs = @()
@@ -18,8 +36,6 @@ $env:CDK_DEFAULT_REGION = $Region
 $env:AWS_DEFAULT_REGION = $Region
 $env:AWS_REGION = $Region
 Write-Host "Using region: $Region"
-
-$RootDir = (Resolve-Path "$PSScriptRoot\..").Path
 
 Set-Location $RootDir
 

@@ -6,7 +6,8 @@ const path = require('path');
 
 // Configuration
 const AWS_PROFILE = process.env.AWS_PROFILE;
-const REGION = process.env.AWS_REGION || 'us-east-1';
+const REGION = process.env.AWS_REGION;
+if (!REGION) { console.error('❌ AWS_REGION environment variable is required'); process.exit(1); }
 
 // Build AWS CLI command prefix
 const awsCmd = AWS_PROFILE ? `aws --profile ${AWS_PROFILE}` : 'aws';

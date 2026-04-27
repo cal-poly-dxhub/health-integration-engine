@@ -28,7 +28,7 @@ async function generateEnvironmentConfig(environment, backendOutputs) {
         cognitoIdentityPoolId: '',
         cognitoDomain: '',
         websocketUrl: '',
-        region: 'us-east-1',
+        region: process.env.AWS_REGION,
         customVariables: {}
     };
     // Merge with backend outputs

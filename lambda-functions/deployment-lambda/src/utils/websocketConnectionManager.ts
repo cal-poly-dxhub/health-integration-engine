@@ -37,7 +37,7 @@ export class WebSocketConnectionManager {
 
   constructor(
     websocketEndpoint: string,
-    region: string = 'us-east-1',
+    region: string = process.env.AWS_REGION!,
     tableName: string = 'WebSocketConnections'
   ) {
     const client = new DynamoDBClient({ region });

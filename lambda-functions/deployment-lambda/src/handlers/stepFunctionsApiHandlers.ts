@@ -12,7 +12,7 @@ import {
 } from '@aws-sdk/client-sfn';
 import { extractUserIdFromEvent, createAuthErrorResponse, createSuccessHeaders } from '../utils/auth';
 
-const sfnClient = new SFNClient({ region: process.env.AWS_REGION || 'us-east-1' });
+const sfnClient = new SFNClient({});
 
 /**
  * List executions for a state machine

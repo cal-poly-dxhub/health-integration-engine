@@ -141,7 +141,7 @@ export class EnvironmentConfigManager {
       apiGatewayUrl: envContent.REACT_APP_API_GATEWAY_URL || '',
       cognitoUserPoolId: envContent.REACT_APP_COGNITO_USER_POOL_ID || '',
       cognitoClientId: envContent.REACT_APP_COGNITO_CLIENT_ID || '',
-      region: envContent.REACT_APP_AWS_REGION || 'us-east-1',
+      region: envContent.REACT_APP_AWS_REGION || process.env.AWS_REGION!,
       customVariables: {}
     };
 
@@ -193,7 +193,7 @@ export class EnvironmentConfigManager {
       apiGatewayUrl: '',
       cognitoUserPoolId: '',
       cognitoClientId: '',
-      region: 'us-east-1',
+      region: process.env.AWS_REGION!,
       customVariables: {}
     };
   }

@@ -180,7 +180,7 @@ function parseStackOutputs(outputs: CloudFormationOutput[]): BackendOutputs {
   // Set default region if not found in outputs
   if (!backendOutputs.region) {
     const awsConfig = getAWSConfig();
-    backendOutputs.region = awsConfig.region || 'us-east-1';
+    backendOutputs.region = awsConfig.region || process.env.AWS_REGION;
   }
   
   return backendOutputs;

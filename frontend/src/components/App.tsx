@@ -11,12 +11,12 @@ import ConfirmSignUp from './auth/ConfirmSignUp';
 import ForgotPassword from './auth/ForgotPassword';
 import './Dashboard.css';
 
-// Auth configuration from environment variables with fallbacks for local development
+// Auth configuration from environment variables (set by deploy-full-stack script)
 const authConfig = {
-  region: import.meta.env.VITE_AWS_REGION || 'us-east-1',
-  userPoolId: import.meta.env.VITE_COGNITO_USER_POOL_ID || 'us-east-1_yVAz9QziX',
-  userPoolClientId: import.meta.env.VITE_COGNITO_USER_POOL_CLIENT_ID || 'cj5mu2gksbdjjftoap4qc7tpf',
-  identityPoolId: import.meta.env.VITE_COGNITO_IDENTITY_POOL_ID || 'us-east-1:174768ab-687d-4038-bd5e-d24bfbe86d8a',
+  region: import.meta.env.VITE_AWS_REGION,
+  userPoolId: import.meta.env.VITE_COGNITO_USER_POOL_ID,
+  userPoolClientId: import.meta.env.VITE_COGNITO_USER_POOL_CLIENT_ID,
+  identityPoolId: import.meta.env.VITE_COGNITO_IDENTITY_POOL_ID,
 };
 
 // Wrapper component to read email from URL params

@@ -260,9 +260,11 @@ export class DeploymentService {
 
     // Complete deployment
     deployment.status = 'completed';
-    deployment.stepFunctionArn = shouldUseRealAPI() 
-      ? `arn:aws:states:us-east-1:123456789012:stateMachine:workflow-${deployment.workflowId}-StateMachine`
-      : `arn:aws:states:us-east-1:123456789012:stateMachine:workflow-${deployment.workflowId}-StateMachine-MOCK`;
+    const region = import.meta.env.VITE_AWS_REGION;
+    if (!region) { throw new Error('VITE_AWS_REGION is not configured'); }
+    deployment.stepFunctionArn = shouldUseRealAPI()
+      ? `arn:aws:states:${region}:123456789012:stateMachine:workflow-${deployment.workflowId}-StateMachine`
+      : `arn:aws:states:${region}:123456789012:stateMachine:workflow-${deployment.workflowId}-StateMachine-MOCK`;
     deployment.updatedAt = new Date().toISOString();
 
     mockDeployments.set(deploymentId, deployment);

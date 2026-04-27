@@ -40,7 +40,7 @@ const initializeAuth = async () => {
     const { authService } = await import('./services/auth');
     
     authService.configure({
-      region: import.meta.env.VITE_AWS_REGION || 'us-east-1',
+      region: import.meta.env.VITE_AWS_REGION,
       userPoolId: import.meta.env.VITE_COGNITO_USER_POOL_ID,
       userPoolClientId: import.meta.env.VITE_COGNITO_USER_POOL_CLIENT_ID,
       identityPoolId: import.meta.env.VITE_COGNITO_IDENTITY_POOL_ID,

@@ -47,7 +47,7 @@ export class WebSocketBroadcaster {
 
   constructor(
     websocketEndpoint: string,
-    region: string = 'us-east-1',
+    region: string = process.env.AWS_REGION!,
     tableName: string = 'WebSocketConnections'
   ) {
     this.apiGatewayManagement = new ApiGatewayManagementApiClient({

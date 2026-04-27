@@ -11,13 +11,17 @@ import { NodeHandlerRegistry, NodeHandler } from './index';
  */
 export const snsHandler: NodeHandler = (node, nextState) => {
   const snsConfig = node.config as any;
-  
+
+  if (!snsConfig?.topicArn) {
+    throw new Error(`SNS node "${node.name}" is missing required config: topicArn`);
+  }
+
   return {
     Type: 'Task',
     Resource: 'arn:aws:states:::sns:publish',
     Comment: `SNS publish: ${node.name}`,
     Parameters: {
-      TopicArn: snsConfig?.topicArn || 'arn:aws:sns:us-east-1:123456789012:default-topic',
+      TopicArn: snsConfig.topicArn,
       Message: snsConfig?.message || 'Default notification message',
       ...(snsConfig?.subject && { Subject: snsConfig.subject }),
       ...(snsConfig?.messageAttributes && { MessageAttributes: snsConfig.messageAttributes }),

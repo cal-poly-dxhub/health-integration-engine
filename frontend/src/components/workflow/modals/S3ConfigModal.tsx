@@ -22,7 +22,7 @@ const S3ConfigModal: React.FC<S3ConfigModalProps> = ({
     bucketName: '',
     objectKey: '',
     operation: 'read',
-    region: 'us-west-2',
+    region: import.meta.env.VITE_AWS_REGION || '',
     triggerOnUpload: true,
     folderPrefix: '',
     ...initialConfig,

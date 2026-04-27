@@ -28,7 +28,7 @@ export class DeploymentRollbackService {
   private region: string;
 
   constructor(region?: string, websocketEndpoint?: string) {
-    this.region = region || process.env.AWS_REGION || 'us-east-1';
+    this.region = region || process.env.AWS_REGION!;
     const wsEndpoint = websocketEndpoint || process.env.WEBSOCKET_ENDPOINT || '';
     
     this.s3Service = new S3UploadService(this.region);

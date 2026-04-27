@@ -6,7 +6,8 @@ const path = require('path');
 
 // Configuration
 const BUCKET_NAME = process.env.S3_BUCKET_NAME || `message-router-frontend-${Date.now()}`;
-const REGION = process.env.AWS_REGION || 'us-east-1';
+const REGION = process.env.AWS_REGION;
+if (!REGION) { console.error('❌ AWS_REGION environment variable is required'); process.exit(1); }
 const DISTRIBUTION_ID = process.env.CLOUDFRONT_DISTRIBUTION_ID;
 const AWS_PROFILE = process.env.AWS_PROFILE;
 

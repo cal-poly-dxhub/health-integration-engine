@@ -58,7 +58,7 @@ export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayPr
     const credentials = await fromEnv()();
     const signer = new SignatureV4({
       service: 'aoss',
-      region: process.env.AWS_REGION || 'us-west-2',
+      region: process.env.AWS_REGION!,
       credentials,
       sha256: Sha256,
     });

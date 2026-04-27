@@ -18,7 +18,7 @@ export class S3UploadService {
 
   constructor(region?: string) {
     this.s3 = new S3Client({
-      region: region || process.env.AWS_REGION || 'us-east-1'
+      region: region || process.env.AWS_REGION
     });
   }
 
@@ -474,7 +474,7 @@ export class S3UploadService {
       };
       
       // Add location constraint for regions other than us-east-1
-      const bucketRegion = region || process.env.AWS_REGION || 'us-east-1';
+      const bucketRegion = region || process.env.AWS_REGION!;
       if (bucketRegion !== 'us-east-1') {
         createParams.CreateBucketConfiguration = {
           LocationConstraint: bucketRegion

@@ -55,7 +55,7 @@ export interface StackConfig {
 export const getConfig = (environment: string = 'development'): StackConfig => {
   const baseConfig: StackConfig = {
     environment: environment as 'development' | 'staging' | 'production',
-    region: process.env.CDK_DEFAULT_REGION || 'us-west-2',
+    region: process.env.CDK_DEFAULT_REGION || process.env.AWS_REGION!,
     account: process.env.CDK_DEFAULT_ACCOUNT,
     
     cognito: {

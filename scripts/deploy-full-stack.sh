@@ -17,18 +17,27 @@ while [[ $# -gt 0 ]]; do
   esac
 done
 
-# Resolve region: CLI param > AWS profile > error
-if [ -z "$REGION" ]; then
-  if [ -n "$PROFILE" ]; then
-    REGION=$(aws configure get region --profile "$PROFILE" 2>/dev/null || true)
-  else
-    REGION=$(aws configure get region 2>/dev/null || true)
-  fi
-fi
-if [ -z "$REGION" ]; then
-  echo "Error: Region is required. Pass --region or configure it in your AWS profile."
+# Read region from config.yaml (if set)
+CONFIG_REGION=$(python3 -c "import yaml; print(yaml.safe_load(open('$ROOT_DIR/infrastructure/config.yaml')).get('region') or '')" 2>/dev/null || echo "")
+
+# Resolve region: config + CLI must match if both set; else config > CLI > profile > error
+if [ -n "$REGION" ] && [ -n "$CONFIG_REGION" ] && [ "$REGION" != "$CONFIG_REGION" ]; then
+  echo "Error: Region mismatch. config.yaml: $CONFIG_REGION, --region: $REGION"
   exit 1
 fi
+[ -z "$REGION" ] && REGION="$CONFIG_REGION"
+if [ -z "$REGION" ]; then
+  REGION=$(aws configure get region ${PROFILE:+--profile "$PROFILE"} 2>/dev/null || true)
+fi
+if [ -z "$REGION" ]; then
+  echo "Error: Region is required. Set in config.yaml, pass --region, or configure your AWS profile."
+  exit 1
+fi
+
+# Export region so all child processes (CDK, npm scripts, AWS SDK) pick it up
+export AWS_REGION="$REGION"
+export AWS_DEFAULT_REGION="$REGION"
+export CDK_DEFAULT_REGION="$REGION"
 
 # Build AWS CLI flags
 AWS_FLAGS="--region $REGION"
@@ -36,6 +45,7 @@ CDK_FLAGS=""
 if [ -n "$PROFILE" ]; then
   AWS_FLAGS="$AWS_FLAGS --profile $PROFILE"
   CDK_FLAGS="--profile $PROFILE"
+  export AWS_PROFILE="$PROFILE"
 fi
 
 echo "=== Deploying with Region=$REGION ${PROFILE:+Profile=$PROFILE} ==="

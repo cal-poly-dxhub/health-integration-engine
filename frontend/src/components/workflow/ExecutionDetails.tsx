@@ -1625,8 +1625,8 @@ const ExecutionDetails: React.FC<ExecutionDetailsProps> = ({ execution: propExec
       if (result?.executionArn) {
         setShowNewExecutionModal(false);
         setNewExecutionInput('{}');
-        // Navigate to the new execution
-        navigate(`/execution/${encodeURIComponent(result.executionArn)}`);
+        // Load the new execution in place to stay on execution details
+        await loadExecutionDetails(result.executionArn);
       }
     } catch (err) {
       console.error('Failed to start new execution:', err);

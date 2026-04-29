@@ -7,9 +7,11 @@ import {
 import { paginateListStacks } from '@aws-sdk/client-cloudformation';
 import {
   DeleteNetworkInterfaceCommand,
-  DescribeNetworkInterfacesCommand,
+  DescribeNetworkInterfacesCommandInput,
   EC2Client,
+  NetworkInterface,
 } from '@aws-sdk/client-ec2';
+import { paginateDescribeNetworkInterfaces } from '@aws-sdk/client-ec2';
 
 /**
  * CloudFormation Custom Resource handler (for use with `cr.Provider`) that,
@@ -113,36 +115,37 @@ export const handler = async (event: any): Promise<{ PhysicalResourceId: string 
   }
 
   // Step B: drain Lambda ENIs from the parent subnets/SG.
+  const eniFilters: DescribeNetworkInterfacesCommandInput = {
+    Filters: [
+      { Name: 'group-id', Values: [sgId] },
+      ...(subnetIds.length ? [{ Name: 'subnet-id', Values: subnetIds }] : []),
+    ],
+  };
+
+  const listENIs = async (): Promise<NetworkInterface[]> => {
+    const enis: NetworkInterface[] = [];
+    for await (const page of paginateDescribeNetworkInterfaces({ client: ec2 }, eniFilters)) {
+      enis.push(...(page.NetworkInterfaces || []));
+    }
+    return enis;
+  };
+
   while (Date.now() < deadline) {
-    const { NetworkInterfaces = [] } = await ec2.send(
-      new DescribeNetworkInterfacesCommand({
-        Filters: [
-          { Name: 'group-id', Values: [sgId] },
-          ...(subnetIds.length ? [{ Name: 'subnet-id', Values: subnetIds }] : []),
-        ],
-      }),
-    );
-    if (NetworkInterfaces.length === 0) break;
-    for (const eni of NetworkInterfaces) {
+    const enis = await listENIs();
+    if (enis.length === 0) break;
+    for (const eni of enis) {
       if (eni.Status === 'available' && eni.NetworkInterfaceId) {
         await ec2
           .send(new DeleteNetworkInterfaceCommand({ NetworkInterfaceId: eni.NetworkInterfaceId }))
           .catch((e) => console.log(`delete ENI ${eni.NetworkInterfaceId} failed: ${e}`));
       }
     }
-    await sleep(30_000);
+    await sleep(10_000);
   }
 
   // If ENIs are still attached at deadline, fail loudly so CFN does not
   // proceed to delete the VPC (which would then fail with a dependency error).
-  const { NetworkInterfaces: remaining = [] } = await ec2.send(
-    new DescribeNetworkInterfacesCommand({
-      Filters: [
-        { Name: 'group-id', Values: [sgId] },
-        ...(subnetIds.length ? [{ Name: 'subnet-id', Values: subnetIds }] : []),
-      ],
-    }),
-  );
+  const remaining = await listENIs();
   if (remaining.length > 0) {
     throw new Error(
       `Timed out with ${remaining.length} ENI(s) still attached to SG ${sgId}; VPC deletion would fail`,

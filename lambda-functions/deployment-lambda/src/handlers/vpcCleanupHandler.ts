@@ -2,9 +2,9 @@ import {
   CloudFormationClient,
   DeleteStackCommand,
   DescribeStacksCommand,
-  ListStacksCommand,
   StackStatus,
 } from '@aws-sdk/client-cloudformation';
+import { paginateListStacks } from '@aws-sdk/client-cloudformation';
 import {
   DeleteNetworkInterfaceCommand,
   DescribeNetworkInterfacesCommand,
@@ -66,14 +66,25 @@ export const handler = async (event: any): Promise<{ PhysicalResourceId: string 
     StackStatus.CREATE_FAILED,
     StackStatus.DELETE_FAILED,
   ];
-  const summaries = await cfn.send(new ListStacksCommand({ StackStatusFilter: active }));
-  const children = (summaries.StackSummaries || []).filter(
+  const allSummaries = [];
+  for await (const page of paginateListStacks({ client: cfn }, { StackStatusFilter: active })) {
+    allSummaries.push(...(page.StackSummaries || []));
+  }
+
+  const children = allSummaries.filter(
     (s) => s.StackName?.startsWith(prefix) && s.StackId !== parentStackId,
   );
-  console.log(`🧹 deleting ${children.length} child stacks`);
-  await Promise.all(
-    children.map((s) => cfn.send(new DeleteStackCommand({ StackName: s.StackName! }))),
-  );
+  console.log(`deleting ${children.length} child stacks`);
+
+  // Batch deletes to avoid CloudFormation API throttling.
+  const BATCH_SIZE = 5;
+  for (let i = 0; i < children.length; i += BATCH_SIZE) {
+    await Promise.all(
+      children.slice(i, i + BATCH_SIZE).map((s) =>
+        cfn.send(new DeleteStackCommand({ StackName: s.StackName! })),
+      ),
+    );
+  }
 
   const deadline = Date.now() + HANDLER_DEADLINE_MS;
   const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));

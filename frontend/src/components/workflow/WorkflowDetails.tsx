@@ -44,6 +44,11 @@ const WorkflowDetails: React.FC<WorkflowDetailsProps> = ({ workflow: propWorkflo
   const tableRef = useRef<HTMLTableElement>(null);
   const [colWidthsInitialized, setColWidthsInitialized] = useState(false);
 
+  // Multi-select re-execution state
+  const [selectedExecutions, setSelectedExecutions] = useState<Set<string>>(new Set());
+  const [showBatchConfirmModal, setShowBatchConfirmModal] = useState(false);
+  const [batchProgress, setBatchProgress] = useState<{ total: number; completed: number; failed: number; running: boolean }>({ total: 0, completed: 0, failed: 0, running: false });
+
   // Convert percentage widths to pixels on mount so resizing is stable
   useEffect(() => {
     const table = tableRef.current;
@@ -281,6 +286,65 @@ const WorkflowDetails: React.FC<WorkflowDetailsProps> = ({ workflow: propWorkflo
     }
   };
 
+  const toggleExecutionSelection = (executionArn: string) => {
+    setSelectedExecutions(prev => {
+      const next = new Set(prev);
+      if (next.has(executionArn)) {
+        next.delete(executionArn);
+      } else {
+        next.add(executionArn);
+      }
+      return next;
+    });
+  };
+
+  const toggleSelectAll = () => {
+    if (selectedExecutions.size === filteredExecutions.length) {
+      setSelectedExecutions(new Set());
+    } else {
+      setSelectedExecutions(new Set(filteredExecutions.map(e => e.executionArn)));
+    }
+  };
+
+  const handleBatchNewExecution = async () => {
+    if (!workflow?.stepFunctionArn || selectedExecutions.size === 0) return;
+
+    setShowBatchConfirmModal(false);
+    const selected = Array.from(selectedExecutions);
+    setBatchProgress({ total: selected.length, completed: 0, failed: 0, running: true });
+
+    const BATCH_SIZE = 25;
+    for (let i = 0; i < selected.length; i++) {
+      // Pause 1 second between batches of 25
+      if (i > 0 && i % BATCH_SIZE === 0) {
+        await new Promise(resolve => setTimeout(resolve, 1000));
+      }
+
+      try {
+        // Get original input from the execution
+        const details = await stepFunctionsService.describeExecution(selected[i]);
+        const input = details?.input || '{}';
+
+        await stepFunctionsService.startExecution(
+          workflow.stepFunctionArn,
+          `reexec-${Date.now()}-${crypto.randomUUID().slice(0, 8)}`,
+          input
+        );
+        setBatchProgress(prev => ({ ...prev, completed: prev.completed + 1 }));
+      } catch (err) {
+        console.error('Failed to re-execute:', selected[i], err);
+        setBatchProgress(prev => ({ ...prev, failed: prev.failed + 1 }));
+      }
+    }
+
+    setBatchProgress(prev => ({ ...prev, running: false }));
+    setSelectedExecutions(new Set());
+    // Refresh execution list
+    if (workflow.stepFunctionArn) {
+      await loadExecutions(workflow.stepFunctionArn);
+    }
+  };
+
   const formatDate = (dateString: string | undefined | null) => {
     if (!dateString) {
       console.log('formatDate: No date string provided:', dateString);
@@ -510,7 +574,17 @@ const WorkflowDetails: React.FC<WorkflowDetailsProps> = ({ workflow: propWorkflo
           <div className="executions-tab">
             <div className="executions-header">
               <h3>Executions ({filteredExecutions.length}{filteredExecutions.length !== executions.length ? ` of ${executions.length}` : ''})</h3>
-              {workflow?.stepFunctionArn && (
+              <div className="executions-header-actions">
+                {selectedExecutions.size > 0 && (
+                  <button
+                    onClick={() => setShowBatchConfirmModal(true)}
+                    className="btn-primary batch-execution-btn"
+                    disabled={batchProgress.running}
+                  >
+                    New execution ({selectedExecutions.size} selected)
+                  </button>
+                )}
+                {workflow?.stepFunctionArn && (
                 <button 
                   onClick={handleRefreshExecutions}
                   className="btn-secondary refresh-btn"
@@ -526,6 +600,7 @@ const WorkflowDetails: React.FC<WorkflowDetailsProps> = ({ workflow: propWorkflo
                   {executionsLoading ? 'Refreshing...' : 'Refresh'}
                 </button>
               )}
+              </div>
             </div>
 
             {executionsLoading ? (
@@ -545,6 +620,7 @@ const WorkflowDetails: React.FC<WorkflowDetailsProps> = ({ workflow: propWorkflo
               <div className="executions-table-container">
                 <table className="executions-table" ref={tableRef}>
                   <colgroup>
+                    <col style={{ width: '40px' }} />
                     <col style={{ width: '25%' }} />
                     <col style={{ width: '12%' }} />
                     <col style={{ width: '18%' }} />
@@ -554,12 +630,19 @@ const WorkflowDetails: React.FC<WorkflowDetailsProps> = ({ workflow: propWorkflo
                   </colgroup>
                   <thead>
                     <tr>
+                      <th className="checkbox-col">
+                        <input
+                          type="checkbox"
+                          checked={filteredExecutions.length > 0 && selectedExecutions.size === filteredExecutions.length}
+                          onChange={toggleSelectAll}
+                        />
+                      </th>
                       {['Name', 'Status', 'Start Time', 'End Time', 'Duration', 'Error'].map((label, i) => (
                         <th key={label}>
                           {label}
                           <span
                             className="col-resize-handle"
-                            onMouseDown={(e) => handleResizeStart(i, e)}
+                            onMouseDown={(e) => handleResizeStart(i + 1, e)}
                           />
                         </th>
                       ))}
@@ -567,6 +650,7 @@ const WorkflowDetails: React.FC<WorkflowDetailsProps> = ({ workflow: propWorkflo
                   </thead>
                   <tbody>
                     <tr className="executions-filter-row">
+                      <td></td>
                       <td>
                         <input
                           type="text"
@@ -627,7 +711,14 @@ const WorkflowDetails: React.FC<WorkflowDetailsProps> = ({ workflow: propWorkflo
                       }
                       
                       return (
-                        <tr key={execution.executionArn} className="execution-row">
+                        <tr key={execution.executionArn} className={`execution-row ${selectedExecutions.has(execution.executionArn) ? 'selected' : ''}`}>
+                          <td className="checkbox-col">
+                            <input
+                              type="checkbox"
+                              checked={selectedExecutions.has(execution.executionArn)}
+                              onChange={() => toggleExecutionSelection(execution.executionArn)}
+                            />
+                          </td>
                           <td className="execution-name">
                             <button 
                               className="execution-link"
@@ -726,6 +817,37 @@ const WorkflowDetails: React.FC<WorkflowDetailsProps> = ({ workflow: propWorkflo
           </div>
         )}
       </div>
+
+      {/* Batch Re-execution Confirmation Modal */}
+      {showBatchConfirmModal && (
+        <div className="modal-overlay" onClick={() => setShowBatchConfirmModal(false)}>
+          <div className="modal-content batch-confirm-modal" onClick={e => e.stopPropagation()}>
+            <div className="modal-header">
+              <h3>Confirm batch re-execution</h3>
+              <button className="modal-close" onClick={() => setShowBatchConfirmModal(false)}>&times;</button>
+            </div>
+            <div className="modal-body">
+              <p>Start new execution for <strong>{selectedExecutions.size}</strong> selected item{selectedExecutions.size > 1 ? 's' : ''}?</p>
+              <p className="batch-confirm-note">Each new execution will use the original execution's input.</p>
+              {selectedExecutions.size > 25 && (
+                <p className="batch-confirm-note">Executions will be processed in batches of 25 to avoid rate limiting.</p>
+              )}
+            </div>
+            <div className="modal-footer">
+              <button className="btn btn-secondary" onClick={() => setShowBatchConfirmModal(false)}>Cancel</button>
+              <button className="btn btn-primary" onClick={handleBatchNewExecution}>Start executions</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Batch Progress Indicator */}
+      {batchProgress.running && (
+        <div className="batch-progress-bar">
+          <span>Re-executing: {batchProgress.completed + batchProgress.failed} / {batchProgress.total}</span>
+          {batchProgress.failed > 0 && <span className="batch-failed"> ({batchProgress.failed} failed)</span>}
+        </div>
+      )}
 
       {/* Delete Workflow Modal */}
       {showDeleteModal && workflow && (

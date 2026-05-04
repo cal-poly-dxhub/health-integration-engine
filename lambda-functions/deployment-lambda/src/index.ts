@@ -7,6 +7,7 @@ export { handler as getWorkflow } from './handlers/getWorkflow';
 export { handler as listWorkflows } from './handlers/listWorkflows';
 export { handler as saveWorkflow } from './handlers/saveWorkflow';
 export { handler as deleteWorkflow } from './handlers/deleteWorkflow';
+export { handler as vpcCleanup } from './handlers/vpcCleanupHandler';
 export { handler as opensearchSearch } from './handlers/opensearchSearch';
 
 // Frontend deployment handlers

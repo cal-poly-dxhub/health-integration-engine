@@ -190,7 +190,7 @@ export const getDefaultNodeConfig = (nodeType: string): NodeConfig | undefined =
         type: 's3',
         operation: 'read',
         bucketName: '',
-        region: 'us-east-1',
+        region: import.meta.env.VITE_AWS_REGION || '',
         encryption: {
           enabled: false,
         },

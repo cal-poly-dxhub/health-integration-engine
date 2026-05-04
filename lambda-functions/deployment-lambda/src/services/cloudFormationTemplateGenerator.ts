@@ -213,7 +213,7 @@ export class CloudFormationTemplateGenerator {
     return {
       bucketName: s3Node.config.bucketName,
       folderPrefix: s3Node.config.folderPrefix,
-      region: s3Node.config.region || 'us-west-2',
+      region: s3Node.config.region || process.env.AWS_REGION!,
     };
   }
 
@@ -1146,7 +1146,7 @@ export class CloudFormationTemplateGenerator {
   private static async uploadCodeToS3(zipBuffer: Buffer, bucketName: string, s3Key: string): Promise<void> {
     try {
       const { S3Client, PutObjectCommand } = await import('@aws-sdk/client-s3');
-      const s3Client = new S3Client({ region: process.env.AWS_REGION || 'us-east-1' });
+      const s3Client = new S3Client({});
       
       // Upload ZIP file to S3 (bucket is pre-created by CDK)
       await s3Client.send(new PutObjectCommand({
@@ -1491,7 +1491,7 @@ def lambda_handler(event, context):
     parsed = urlparse(url)
     session = boto3.Session()
     creds = session.get_credentials().get_frozen_credentials()
-    region = os.environ.get('AWS_REGION', 'us-west-2')
+    region = os.environ['AWS_REGION']
     
     headers = {
         'Content-Type': 'application/json',

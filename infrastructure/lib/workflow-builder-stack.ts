@@ -12,6 +12,7 @@ import * as stepfunctions from 'aws-cdk-lib/aws-stepfunctions';
 import * as events from 'aws-cdk-lib/aws-events';
 import * as targets from 'aws-cdk-lib/aws-events-targets';
 import * as s3 from 'aws-cdk-lib/aws-s3';
+import * as cr from 'aws-cdk-lib/custom-resources';
 import * as fs from 'fs';
 import { Construct } from 'constructs';
 import { getConfig, StackConfig, PROJECT } from './config';
@@ -66,6 +67,10 @@ export class WorkflowBuilderStack extends cdk.Stack {
       ec2.Port.tcp(443),
       'Allow HTTPS from Lambda to OpenSearch VPC endpoint',
     );
+
+    // VPC stack-deletion cleanup: tears down child workflow stacks and drains
+    // leftover Lambda ENIs on parent VPC subnets/SG so CFN can delete VPC cleanly.
+    this.createVpcCleanupCustomResource();
 
     // Create API Gateway first (needed for Identity Pool permissions)
     this.api = this.createApiGateway();
@@ -2161,7 +2166,7 @@ def lambda_handler(event, context):
         parsed = urlparse(url)
         session = boto3.Session()
         creds = session.get_credentials().get_frozen_credentials()
-        region = session.region_name or 'us-west-2'
+        region = os.environ['AWS_REGION']
         
         headers = {'Content-Type': 'application/json', 'Host': parsed.netloc, 'x-amz-content-sha256': body_hash}
         request = AWSRequest(method='POST', url=url, data=data, headers=headers)
@@ -2208,5 +2213,84 @@ def build_query(params, config):
     
     return {'query': {'bool': {'must': must if must else [{'match_all': {}}], 'filter': filters}}, 'size': 100}
 `.trim();
+  }
+
+  /**
+   * Create the VPC-cleanup Custom Resource. On stack Delete it deletes all child
+   * workflow stacks and drains leftover Lambda ENIs from the parent VPC so CFN
+   * can then delete the VPC / subnets / SG cleanly.
+   */
+  private createVpcCleanupCustomResource(): void {
+    // NOTE: cleanup Lambda must NOT run in the VPC it is trying to clean.
+    const cleanupLambda = new lambda.Function(this, 'VpcCleanupLambda', {
+      functionName: 'workflow-builder-vpc-cleanup',
+      runtime: lambda.Runtime.NODEJS_18_X,
+      handler: 'index.vpcCleanup',
+      code: lambda.Code.fromAsset('../lambda-functions/deployment-lambda/dist'),
+      timeout: cdk.Duration.minutes(15),
+      memorySize: 256,
+      environment: {
+        CHILD_STACK_PREFIX: 'workflow-',
+        SUBNET_IDS: this.vpc.privateSubnets.map((s) => s.subnetId).join(','),
+        SECURITY_GROUP_ID: this.lambdaSecurityGroup.securityGroupId,
+      },
+    });
+
+    cleanupLambda.addToRolePolicy(
+      new iam.PolicyStatement({
+        effect: iam.Effect.ALLOW,
+        actions: [
+          'cloudformation:ListStacks',
+          'cloudformation:DescribeStacks',
+          'cloudformation:DeleteStack',
+          'ec2:DescribeNetworkInterfaces',
+          'ec2:DeleteNetworkInterface',
+        ],
+        resources: ['*'],
+      }),
+    );
+    // Allow cleanup to tear down resources inside child workflow stacks.
+    cleanupLambda.addToRolePolicy(
+      new iam.PolicyStatement({
+        effect: iam.Effect.ALLOW,
+        actions: [
+          'lambda:DeleteFunction',
+          'lambda:GetFunction',
+          'iam:DeleteRole',
+          'iam:DeleteRolePolicy',
+          'iam:DetachRolePolicy',
+          'iam:ListRolePolicies',
+          'iam:ListAttachedRolePolicies',
+          'logs:DeleteLogGroup',
+          'logs:DescribeLogGroups',
+          'states:DeleteStateMachine',
+          'states:DescribeStateMachine',
+          'states:ListStateMachines',
+          'events:RemoveTargets',
+          'events:DeleteRule',
+          'events:ListTargetsByRule',
+        ],
+        resources: ['*'],
+      }),
+    );
+
+    const provider = new cr.Provider(this, 'VpcCleanupProvider', {
+      onEventHandler: cleanupLambda,
+      // onEvent-only provider: the handler must complete within its Lambda
+      // timeout (15 min). If cleanup needs longer we'd add an isCompleteHandler
+      // to enable the async pattern (up to totalTimeout, default 30 min, max 2h).
+    });
+
+    const customResource = new cdk.CustomResource(this, 'VpcCleanupResource', {
+      serviceToken: provider.serviceToken,
+    });
+
+    // The CR references the VPC's subnet IDs and SG ID via env vars, so CFN
+    // already sees the CR as dependent on the VPC/SG. On delete, CFN removes
+    // dependents first, so the CR runs before VPC/SG teardown. No explicit
+    // addDependency is needed — and adding one would create a cycle because
+    // the Provider framework's Lambda itself transitively depends on IAM and
+    // other stack resources that reference the VPC.
+    void customResource;
   }
 }

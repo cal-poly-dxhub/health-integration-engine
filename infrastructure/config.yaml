@@ -97,13 +97,14 @@ amplify:
 #   existing — Provide your VPC. Parent Lambdas, OpenSearch, and all child workflow Lambdas run in it. No new VPC created.
 #   new      — CDK creates exactly one shared VPC. Parent Lambdas, OpenSearch, and all child workflow Lambdas run in it.
 vpc:
-  mode: "existing"
+  mode: "none"
   existing:
-    vpcId: "vpc-0625bb7817d72045f"
+    vpcId: "vpc-0abc123def456"
     subnetIds:
-      - "subnet-0170fb77d447d9ed9"
+      - "subnet-abc123"
+      - "subnet-def456"
     securityGroupIds:
-      - "sg-0a9f46ee9028b57d0"
+      - "sg-abc123"
   new:
     cidrBlock: "10.0.0.0/16"
 

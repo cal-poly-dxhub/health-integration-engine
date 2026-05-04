@@ -19,7 +19,7 @@ export class DeploymentNotificationService {
 
   constructor(
     websocketEndpoint: string,
-    region: string = 'us-east-1'
+    region: string = process.env.AWS_REGION!
   ) {
     this.region = region;
     this.websocketService = new WebSocketService(websocketEndpoint, region);

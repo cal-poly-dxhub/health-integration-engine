@@ -12,7 +12,7 @@ const sfnClient = new SFNClient({ region: process.env.AWS_REGION });
 const WORKFLOWS_TABLE = process.env.WORKFLOWS_TABLE || 'WorkflowBuilder-Workflows';
 
 // Construct deletion state machine ARN dynamically
-const AWS_REGION = process.env.AWS_REGION || 'us-east-1';
+const AWS_REGION = process.env.AWS_REGION;
 const AWS_ACCOUNT_ID = process.env.AWS_ACCOUNT_ID;
 const DELETION_STATE_MACHINE_ARN = `arn:aws:states:${AWS_REGION}:${AWS_ACCOUNT_ID}:stateMachine:workflow-builder-deletion`;
 

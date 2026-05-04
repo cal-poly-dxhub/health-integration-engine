@@ -292,7 +292,7 @@ export class FrontendInfrastructureTemplate {
                 // Origin shield for production
                 OriginShield: environment === 'production' ? {
                   Enabled: true,
-                  OriginShieldRegion: 'us-east-1'
+                  OriginShieldRegion: process.env.AWS_REGION!
                 } : { Ref: 'AWS::NoValue' }
               }],
               

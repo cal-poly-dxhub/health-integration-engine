@@ -19,7 +19,7 @@ interface WorkflowDetailsProps {
 const WorkflowDetails: React.FC<WorkflowDetailsProps> = ({ workflow: propWorkflow }) => {
   const { workflowId } = useParams<{ workflowId: string }>();
   const navigate = useNavigate();
-  const [searchParams] = useSearchParams();
+  const [searchParams, setSearchParams] = useSearchParams();
   const executionParam = searchParams.get('execution');
   const { workflows, getWorkflow, deleteWorkflow } = useWorkflows();
   const [activeTab, setActiveTab] = useState<'executions' | 'definition' | 'search'>('executions');
@@ -200,6 +200,7 @@ const WorkflowDetails: React.FC<WorkflowDetailsProps> = ({ workflow: propWorkflo
       if (exec) {
         setSelectedExecution(exec);
         setActiveTab('executions');
+        setSearchParams({}, { replace: true });
       }
     }
   }, [executionParam, executions]);

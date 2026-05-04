@@ -228,7 +228,8 @@ export class EnvironmentIsolationChecker {
 
     try {
       // Check AWS region consistency
-      const awsRegion = process.env.AWS_DEFAULT_REGION || process.env.AWS_REGION || 'us-east-1';
+      const awsRegion = process.env.AWS_DEFAULT_REGION || process.env.AWS_REGION;
+      if (!awsRegion) { throw new Error('AWS_REGION or AWS_DEFAULT_REGION must be set'); }
       
       // Validate region is appropriate for environment
       const productionRegions = ['us-east-1', 'us-west-2'];

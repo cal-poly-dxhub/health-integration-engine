@@ -33,7 +33,7 @@ async function performComprehensiveValidation(environment) {
         suggestions.push('Or set AWS_ACCESS_KEY_ID and AWS_SECRET_ACCESS_KEY environment variables');
     }
     if (!awsConfig.region) {
-        warnings.push('AWS region is not configured, using default us-east-1');
+        warnings.push('AWS region is not configured');
         suggestions.push('Set AWS region using: aws configure set region <your-region>');
     }
     // Step 3: Check backend deployment

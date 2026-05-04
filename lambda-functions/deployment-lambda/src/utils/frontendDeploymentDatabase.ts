@@ -30,7 +30,7 @@ export class FrontendDeploymentDatabase {
 
   constructor(region?: string) {
     const client = new DynamoDBClient({
-      region: region || process.env.AWS_REGION || 'us-east-1'
+      region: region || process.env.AWS_REGION
     });
     this.dynamoDB = DynamoDBDocumentClient.from(client);
     this.tableName = process.env.DYNAMODB_TABLE_NAME!;
@@ -64,7 +64,7 @@ export class FrontendDeploymentDatabase {
         apiGatewayUrl: '',
         cognitoUserPoolId: '',
         cognitoClientId: '',
-        region: process.env.AWS_REGION || 'us-east-1',
+        region: process.env.AWS_REGION!,
         customVariables: {}
       },
       createdAt: status.createdAt,

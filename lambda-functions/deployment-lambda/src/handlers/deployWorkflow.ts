@@ -587,7 +587,7 @@ async function createCodeZipBuffer(code: string, lambdaNode: any): Promise<Buffe
  */
 async function uploadToS3(buffer: Buffer, bucketName: string, s3Key: string): Promise<void> {
   const { S3Client, PutObjectCommand } = await import('@aws-sdk/client-s3');
-  const s3Client = new S3Client({ region: process.env.AWS_REGION || 'us-east-1' });
+  const s3Client = new S3Client({});
   
   await s3Client.send(new PutObjectCommand({
     Bucket: bucketName,

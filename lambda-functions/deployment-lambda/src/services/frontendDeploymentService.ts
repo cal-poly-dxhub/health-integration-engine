@@ -35,7 +35,7 @@ export class FrontendDeploymentService {
   private region: string;
 
   constructor(region?: string, websocketEndpoint?: string) {
-    this.region = region || process.env.AWS_REGION || 'us-east-1';
+    this.region = region || process.env.AWS_REGION!;
     const wsEndpoint = websocketEndpoint || process.env.WEBSOCKET_ENDPOINT || '';
     
     this.configManager = new EnvironmentConfigManager();
@@ -378,7 +378,7 @@ export class FrontendDeploymentService {
   ): Promise<void> {
     const uploadConfig: S3UploadConfig = {
       bucketName,
-      region: process.env.AWS_REGION || 'us-east-1',
+      region: process.env.AWS_REGION!,
       serverSideEncryption: 'AES256',
       storageClass: 'STANDARD'
     };
@@ -665,7 +665,7 @@ export class FrontendDeploymentService {
   ): Promise<void> {
     const uploadConfig: S3UploadConfig = {
       bucketName,
-      region: process.env.AWS_REGION || 'us-east-1',
+      region: process.env.AWS_REGION!,
       serverSideEncryption: 'AES256',
       storageClass: 'STANDARD'
     };

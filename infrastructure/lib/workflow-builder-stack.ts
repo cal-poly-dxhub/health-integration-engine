@@ -12,6 +12,7 @@ import * as stepfunctions from 'aws-cdk-lib/aws-stepfunctions';
 import * as events from 'aws-cdk-lib/aws-events';
 import * as targets from 'aws-cdk-lib/aws-events-targets';
 import * as s3 from 'aws-cdk-lib/aws-s3';
+import * as cr from 'aws-cdk-lib/custom-resources';
 import * as fs from 'fs';
 import { Construct } from 'constructs';
 import { getConfig, StackConfig, PROJECT } from './config';
@@ -64,6 +65,10 @@ export class WorkflowBuilderStack extends cdk.Stack {
       this.vpc = undefined;
       this.lambdaSecurityGroup = undefined;
     }
+
+    // VPC stack-deletion cleanup: tears down child workflow stacks and drains
+    // leftover Lambda ENIs on parent VPC subnets/SG so CFN can delete VPC cleanly.
+    this.createVpcCleanupCustomResource();
 
     // Create API Gateway first (needed for Identity Pool permissions)
     this.api = this.createApiGateway();
@@ -2168,7 +2173,7 @@ def lambda_handler(event, context):
         parsed = urlparse(url)
         session = boto3.Session()
         creds = session.get_credentials().get_frozen_credentials()
-        region = session.region_name or 'us-west-2'
+        region = os.environ['AWS_REGION']
         
         headers = {'Content-Type': 'application/json', 'Host': parsed.netloc, 'x-amz-content-sha256': body_hash}
         request = AWSRequest(method='POST', url=url, data=data, headers=headers)

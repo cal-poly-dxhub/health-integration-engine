@@ -15,7 +15,7 @@ export class WebSocketNotificationService {
       service.endpoint = websocketEndpoint;
       service.client = new ApiGatewayManagementApiClient({
         endpoint: websocketEndpoint,
-        region: process.env.AWS_REGION || 'us-east-1',
+        region: process.env.AWS_REGION,
       });
     }
     

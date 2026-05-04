@@ -29,6 +29,10 @@ export class WorkflowBuilderStack extends cdk.Stack {
   public readonly frontendHosting: FrontendHosting;
   private readonly vpc: ec2.IVpc | undefined;
   private readonly lambdaSecurityGroup: ec2.ISecurityGroup | undefined;
+  private readonly lambdaVpcProps: { vpc: ec2.IVpc; vpcSubnets: ec2.SubnetSelection; securityGroups: ec2.ISecurityGroup[] } | {};
+  private readonly vpcConfigEnv: Record<string, string>;
+  private readonly resolvedSubnetIds: string[];
+  private readonly resolvedSecurityGroupIds: string[];
 
   constructor(scope: Construct, id: string, props?: cdk.StackProps) {
     super(scope, id, props);
@@ -58,12 +62,40 @@ export class WorkflowBuilderStack extends cdk.Stack {
       });
       sg.addIngressRule(sg, ec2.Port.tcp(443), 'Allow HTTPS from Lambda to OpenSearch VPC endpoint');
       this.lambdaSecurityGroup = sg;
+      this.resolvedSubnetIds = newVpc.selectSubnets({ subnetType: ec2.SubnetType.PRIVATE_WITH_EGRESS }).subnetIds;
+      this.resolvedSecurityGroupIds = [sg.securityGroupId];
     } else if (vpcMode === 'existing') {
-      this.vpc = ec2.Vpc.fromLookup(this, 'ImportedVpc', { vpcId: PROJECT.vpc.existing.vpcId });
-      this.lambdaSecurityGroup = ec2.SecurityGroup.fromSecurityGroupId(this, 'ImportedSG', PROJECT.vpc.existing.securityGroupIds[0]);
+      const existingConfig = PROJECT.vpc?.existing;
+      if (!existingConfig?.vpcId || !existingConfig?.subnetIds?.length || !existingConfig?.securityGroupIds?.length) {
+        throw new Error('vpc.mode is "existing" but vpc.existing.vpcId, subnetIds, or securityGroupIds are missing or empty in config.yaml');
+      }
+      this.vpc = ec2.Vpc.fromLookup(this, 'ImportedVpc', { vpcId: existingConfig.vpcId });
+      this.lambdaSecurityGroup = ec2.SecurityGroup.fromSecurityGroupId(this, 'ImportedSG', existingConfig.securityGroupIds[0]);
+      this.resolvedSubnetIds = existingConfig.subnetIds;
+      this.resolvedSecurityGroupIds = existingConfig.securityGroupIds;
     } else {
       this.vpc = undefined;
       this.lambdaSecurityGroup = undefined;
+      this.resolvedSubnetIds = [];
+      this.resolvedSecurityGroupIds = [];
+    }
+
+    // Pre-compute VPC props for Lambda functions and env vars
+    if (this.vpc) {
+      this.lambdaVpcProps = {
+        vpc: this.vpc,
+        vpcSubnets: vpcMode === 'existing'
+          ? { subnets: this.resolvedSubnetIds.map(id => ec2.Subnet.fromSubnetId(this, `ImportedSubnet-${id}`, id)) }
+          : { subnetType: ec2.SubnetType.PRIVATE_WITH_EGRESS },
+        securityGroups: [this.lambdaSecurityGroup!],
+      };
+      this.vpcConfigEnv = {
+        VPC_CONFIG: JSON.stringify({ mode: 'existing', existing: { vpcId: this.vpc.vpcId, subnetIds: this.resolvedSubnetIds, securityGroupIds: this.resolvedSecurityGroupIds } }),
+        OPENSEARCH_VPC_CONFIG: JSON.stringify({ vpcId: this.vpc.vpcId, subnetIds: this.resolvedSubnetIds, securityGroupIds: this.resolvedSecurityGroupIds }),
+      };
+    } else {
+      this.lambdaVpcProps = {};
+      this.vpcConfigEnv = { VPC_CONFIG: JSON.stringify({ mode: 'none' }) };
     }
 
     // VPC stack-deletion cleanup: tears down child workflow stacks and drains
@@ -443,18 +475,7 @@ export class WorkflowBuilderStack extends cdk.Stack {
         AWS_ACCOUNT_ID: this.account,
         LAMBDA_CODE_BUCKET: lambdaCodeBucket.bucketName,
         OPENSEARCH_ENDPOINT: opensearchCollection?.attrCollectionEndpoint ?? '',
-        VPC_CONFIG: JSON.stringify(
-          this.vpc
-            ? { mode: 'existing', existing: { vpcId: this.vpc.vpcId, subnetIds: this.vpc.selectSubnets({ subnetType: ec2.SubnetType.PRIVATE_WITH_EGRESS }).subnetIds, securityGroupIds: [this.lambdaSecurityGroup!.securityGroupId] } }
-            : { mode: 'none' }
-        ),
-        ...(this.vpc ? {
-          OPENSEARCH_VPC_CONFIG: JSON.stringify({
-            vpcId: this.vpc.vpcId,
-            subnetIds: this.vpc.selectSubnets({ subnetType: ec2.SubnetType.PRIVATE_WITH_EGRESS }).subnetIds,
-            securityGroupIds: [this.lambdaSecurityGroup!.securityGroupId],
-          }),
-        } : {}),
+        ...this.vpcConfigEnv,
       }
     );
 
@@ -989,11 +1010,7 @@ export class WorkflowBuilderStack extends cdk.Stack {
       code: lambda.Code.fromInline(this.getOpenSearchSearchCode()),
       timeout: cdk.Duration.seconds(30),
       memorySize: 256,
-      ...(this.vpc ? {
-        vpc: this.vpc,
-        vpcSubnets: { subnetType: ec2.SubnetType.PRIVATE_WITH_EGRESS },
-        securityGroups: [this.lambdaSecurityGroup!],
-      } : {}),
+      ...this.lambdaVpcProps,
       environment: {
         OPENSEARCH_ENDPOINT: opensearchCollection.attrCollectionEndpoint,
       },
@@ -1957,11 +1974,7 @@ export class WorkflowBuilderStack extends cdk.Stack {
       code,
       timeout: cdk.Duration.minutes(5),
       memorySize: 256,
-      ...(this.vpc ? {
-        vpc: this.vpc,
-        vpcSubnets: { subnetType: ec2.SubnetType.PRIVATE_WITH_EGRESS },
-        securityGroups: [this.lambdaSecurityGroup!],
-      } : {}),
+      ...this.lambdaVpcProps,
       environment: {
         NODE_ENV: 'production',
         USER_POOL_ID: this.userPool.userPoolId,
@@ -2065,8 +2078,8 @@ export class WorkflowBuilderStack extends cdk.Stack {
       const opensearchVpcEndpoint = new cdk.aws_opensearchserverless.CfnVpcEndpoint(this, 'OpenSearchVpcEndpoint', {
         name: `health-msgs-vpce-${this.account.slice(-6)}`,
         vpcId: this.vpc!.vpcId,
-        subnetIds: this.vpc!.selectSubnets({ subnetType: ec2.SubnetType.PRIVATE_WITH_EGRESS }).subnetIds,
-        securityGroupIds: [this.lambdaSecurityGroup!.securityGroupId],
+        subnetIds: this.resolvedSubnetIds,
+        securityGroupIds: this.resolvedSecurityGroupIds,
       });
 
       networkPolicyJson = JSON.stringify([{

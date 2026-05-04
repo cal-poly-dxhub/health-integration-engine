@@ -44,9 +44,13 @@ export class CloudFormationTemplateGenerator {
     if (!vpcConfig || vpcConfig.mode === 'none') return undefined;
 
     if (vpcConfig.mode === 'existing') {
+      if (!vpcConfig.existing?.subnetIds?.length || !vpcConfig.existing?.securityGroupIds?.length) {
+        console.error('VPC mode is "existing" but subnetIds or securityGroupIds are missing. Falling back to no VPC.');
+        return undefined;
+      }
       return {
-        SubnetIds: vpcConfig.existing!.subnetIds,
-        SecurityGroupIds: vpcConfig.existing!.securityGroupIds,
+        SubnetIds: vpcConfig.existing.subnetIds,
+        SecurityGroupIds: vpcConfig.existing.securityGroupIds,
       };
     }
 

@@ -8,7 +8,7 @@ export class S3EventBridgeService {
 
   constructor(region?: string) {
     this.s3 = new S3Client({
-      region: region || process.env.AWS_REGION || 'us-west-2',
+      region: region || process.env.AWS_REGION,
     });
   }
 

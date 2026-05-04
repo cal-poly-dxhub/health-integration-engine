@@ -431,7 +431,7 @@ program
   .option('-e, --env <environment>', 'Target environment (development, staging, production)', 'production')
   .option('-b, --bucket <bucketName>', 'S3 bucket name (defaults to workflow-builder-frontend-{env}-{accountId})')
   .option('-d, --distribution <distributionId>', 'CloudFront distribution ID for cache invalidation')
-  .option('-r, --region <region>', 'AWS region (defaults to configured region or us-east-1)')
+  .option('-r, --region <region>', 'AWS region (defaults to configured AWS region)')
   .option('-v, --verbose', 'Enable verbose logging')
   .action(async (options: any) => {
     const deployer = new DirectFrontendDeployer({

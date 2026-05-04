@@ -39,7 +39,7 @@ export class CloudFrontService {
   private cloudWatch: CloudWatchClient;
 
   constructor(region?: string) {
-    const awsRegion = region || process.env.AWS_REGION || 'us-east-1';
+    const awsRegion = region || process.env.AWS_REGION;
     this.cloudFront = new CloudFrontClient({
       region: awsRegion
     });

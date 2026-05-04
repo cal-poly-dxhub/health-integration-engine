@@ -6,12 +6,13 @@ const path = require('path');
 
 // Configuration
 const AWS_PROFILE = process.env.AWS_PROFILE;
-const REGION = process.env.AWS_REGION || 'us-east-1';
+const REGION = process.env.AWS_REGION;
+if (!REGION) { console.error('ERROR: AWS_REGION environment variable is required'); process.exit(1); }
 
 // Build AWS CLI command prefix
 const awsCmd = AWS_PROFILE ? `aws --profile ${AWS_PROFILE}` : 'aws';
 
-console.log('🔧 Fixing CloudFront distribution to use S3 website endpoint...');
+console.log('Fixing CloudFront distribution to use S3 website endpoint...');
 
 try {
   // Read deployment info to get distribution ID and bucket name
@@ -32,7 +33,7 @@ try {
   console.log(`Bucket Name: ${bucketName}`);
   
   // Step 1: Configure S3 bucket for static website hosting
-  console.log('\n🪣 Configuring S3 bucket for static website hosting...');
+  console.log('\nConfiguring S3 bucket for static website hosting...');
   
   // Configure website hosting
   const websiteConfig = {
@@ -73,7 +74,7 @@ try {
   
   try {
     execSync(`${awsCmd} s3api put-bucket-policy --bucket ${bucketName} --policy file://${policyFile}`, { stdio: 'inherit' });
-    console.log('✅ S3 static website hosting configured');
+    console.log('OK: S3 static website hosting configured');
   } finally {
     if (fs.existsSync(policyFile)) {
       fs.unlinkSync(policyFile);
@@ -81,7 +82,7 @@ try {
   }
   
   // Step 2: Get current CloudFront distribution configuration
-  console.log('\n☁️ Updating CloudFront distribution...');
+  console.log('\nUpdating CloudFront distribution...');
   
   const distResult = execSync(`${awsCmd} cloudfront get-distribution-config --id ${distributionId}`, { encoding: 'utf8' });
   const distData = JSON.parse(distResult);
@@ -89,8 +90,7 @@ try {
   const etag = distData.ETag;
   
   // Update origin to use S3 website endpoint
-  const s3WebsiteEndpoint = REGION === 'us-east-1' 
-    ? `${bucketName}.s3-website-us-east-1.amazonaws.com`
+  const s3WebsiteEndpoint = REGION === 'us-east-1'? `${bucketName}.s3-website-us-east-1.amazonaws.com`
     : `${bucketName}.s3-website-${REGION}.amazonaws.com`;
   
   config.Origins.Items[0] = {
@@ -99,8 +99,7 @@ try {
     CustomOriginConfig: {
       HTTPPort: 80,
       HTTPSPort: 443,
-      OriginProtocolPolicy: 'http-only'
-    }
+      OriginProtocolPolicy: 'http-only'}
   };
   
   // Update default cache behavior to use new origin
@@ -112,7 +111,7 @@ try {
   
   try {
     execSync(`${awsCmd} cloudfront update-distribution --id ${distributionId} --distribution-config file://${updatedConfigFile} --if-match ${etag}`, { stdio: 'inherit' });
-    console.log('✅ CloudFront distribution updated to use S3 website endpoint');
+    console.log('OK: CloudFront distribution updated to use S3 website endpoint');
   } finally {
     if (fs.existsSync(updatedConfigFile)) {
       fs.unlinkSync(updatedConfigFile);
@@ -120,24 +119,24 @@ try {
   }
   
   // Step 3: Invalidate CloudFront cache
-  console.log('\n🔄 Invalidating CloudFront cache...');
+  console.log('\nInvalidating CloudFront cache...');
   try {
     execSync(`${awsCmd} cloudfront create-invalidation --distribution-id ${distributionId} --paths "/*"`, { stdio: 'inherit' });
-    console.log('✅ Cache invalidation created');
+    console.log('OK: Cache invalidation created');
   } catch (error) {
-    console.warn('⚠️ Cache invalidation failed, but fix continues...');
+    console.warn('WARN: Cache invalidation failed, but fix continues...');
   }
   
   // Step 4: Display results
-  console.log('\n🎉 CloudFront fix completed successfully!');
-  console.log('📋 Updated Configuration:');
-  console.log(`   S3 Bucket: ${bucketName} (now configured for static website hosting)`);
-  console.log(`   S3 Website URL: http://${s3WebsiteEndpoint}`);
-  console.log(`   CloudFront URL: https://${deploymentInfo.distributionDomain}`);
-  console.log('\n💡 Next steps:');
-  console.log('   1. Test S3 website URL immediately (should work now)');
-  console.log('   2. Wait 5-10 minutes for CloudFront update to propagate');
-  console.log('   3. Test CloudFront URL (should work after propagation)');
+  console.log('\nCloudFront fix completed successfully!');
+  console.log('Updated Configuration:');
+  console.log(`S3 Bucket: ${bucketName} (now configured for static website hosting)`);
+  console.log(`S3 Website URL: http://${s3WebsiteEndpoint}`);
+  console.log(`CloudFront URL: https://${deploymentInfo.distributionDomain}`);
+  console.log('\nNext steps:');
+  console.log('1. Test S3 website URL immediately (should work now)');
+  console.log('2. Wait 5-10 minutes for CloudFront update to propagate');
+  console.log('3. Test CloudFront URL (should work after propagation)');
   
   // Update deployment info
   deploymentInfo.s3WebsiteUrl = `http://${s3WebsiteEndpoint}`;
@@ -145,10 +144,10 @@ try {
   deploymentInfo.deploymentType = 's3-website-cloudfront-fixed';
   
   fs.writeFileSync(deploymentInfoPath, JSON.stringify(deploymentInfo, null, 2));
-  console.log('   4. Deployment info updated');
+  console.log('4. Deployment info updated');
   
 } catch (error) {
-  console.error('\n❌ CloudFront fix failed!');
+  console.error('\nERROR: CloudFront fix failed!');
   console.error('Error:', error.message);
   process.exit(1);
 }

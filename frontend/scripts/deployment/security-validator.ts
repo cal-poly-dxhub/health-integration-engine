@@ -184,7 +184,8 @@ export class SecurityValidator {
 
     try {
       // Check AWS region
-      const awsRegion = process.env.AWS_DEFAULT_REGION || process.env.AWS_REGION || 'us-east-1';
+      const awsRegion = process.env.AWS_DEFAULT_REGION || process.env.AWS_REGION;
+      if (!awsRegion) { throw new Error('AWS_REGION or AWS_DEFAULT_REGION must be set'); }
       
       if (!config.allowedRegions.includes(awsRegion)) {
         result.errors.push(`Region ${awsRegion} is not allowed for ${environment} environment. Allowed regions: ${config.allowedRegions.join(', ')}`);

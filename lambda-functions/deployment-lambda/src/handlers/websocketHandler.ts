@@ -259,7 +259,7 @@ export class WebSocketHandler {
  * Lambda function handlers
  */
 const websocketEndpoint = process.env.WEBSOCKET_ENDPOINT || '';
-const region = process.env.AWS_REGION || 'us-east-1';
+const region = process.env.AWS_REGION!;
 const handler = new WebSocketHandler(websocketEndpoint, region);
 
 /**

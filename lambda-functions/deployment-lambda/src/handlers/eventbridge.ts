@@ -714,7 +714,7 @@ class EventBridgeHandler {
  * Lambda function handler for EventBridge events
  */
 const websocketEndpoint = process.env.WEBSOCKET_ENDPOINT || '';
-const region = process.env.AWS_REGION || 'us-east-1';
+const region = process.env.AWS_REGION!;
 const eventBridgeHandlerInstance = new EventBridgeHandler(websocketEndpoint, region);
 
 /**

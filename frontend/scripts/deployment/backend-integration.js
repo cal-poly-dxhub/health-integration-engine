@@ -100,7 +100,7 @@ function parseStackOutputs(outputs) {
     }
     // Set default region if not found in outputs
     if (!backendOutputs.region) {
-        backendOutputs.region = 'us-east-1';
+        backendOutputs.region = process.env.AWS_REGION;
     }
     return backendOutputs;
 }

@@ -1,21 +1,42 @@
 param(
-  [string]$Profile,
-  [string]$Region = "us-east-1"
+    [string]$Profile = "",
+    [string]$Region = ""
 )
 
 $ErrorActionPreference = "Stop"
 
-# Helper to check native command exit codes
-function Assert-ExitCode {
-  param([string]$StepName)
-  if ($LASTEXITCODE -ne 0) {
-    Write-Error "FAILED: $StepName (exit code $LASTEXITCODE)"
-    exit $LASTEXITCODE
-  }
+$RootDir = (Resolve-Path "$PSScriptRoot\..").Path
+
+# Read region from config.yaml (if set)
+$ConfigYaml = Get-Content "$RootDir\infrastructure\config.yaml" -Raw
+$ConfigRegion = if ($ConfigYaml -match '(?m)^region:\s*["'']?([a-z0-9-]+)') { $Matches[1] } else { "" }
+
+# Resolve region: config + CLI must match if both set; else config > CLI > profile > error
+if ($Region -ne "" -and $ConfigRegion -ne "" -and $Region -ne $ConfigRegion) {
+    throw "Region mismatch. config.yaml: $ConfigRegion, -Region: $Region"
+}
+if ($Region -eq "") { $Region = $ConfigRegion }
+if ($Region -eq "") {
+    $Region = if ($Profile -ne "") { (aws configure get region --profile $Profile 2>$null) } else { (aws configure get region 2>$null) }
+}
+if ([string]::IsNullOrWhiteSpace($Region)) {
+    throw "Region is required. Set in config.yaml, pass -Region, or configure your AWS profile."
 }
 
-$ScriptDir = Split-Path -Parent $MyInvocation.MyCommand.Path
-$RootDir = Split-Path -Parent $ScriptDir
+# Build AWS CLI flags
+$awsArgs = @()
+if ($Profile -ne "") {
+    $awsArgs += "--profile", $Profile
+    $env:AWS_PROFILE = $Profile
+    Write-Host "Using AWS profile: $Profile"
+}
+
+# Set region env vars early so all tools (CDK, AWS CLI) pick it up
+$env:CDK_DEFAULT_REGION = $Region
+$env:AWS_DEFAULT_REGION = $Region
+$env:AWS_REGION = $Region
+Write-Host "Using region: $Region"
+
 Set-Location $RootDir
 
 # Build AWS CLI args for profile/region

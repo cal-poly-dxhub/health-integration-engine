@@ -61,7 +61,7 @@ async function performComprehensiveValidation(environment: string): Promise<Vali
   }
   
   if (!awsConfig.region) {
-    warnings.push('AWS region is not configured, using default us-east-1');
+    warnings.push('AWS region is not configured');
     suggestions.push('Set AWS region using: aws configure set region <your-region>');
   }
   

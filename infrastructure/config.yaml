@@ -96,20 +96,20 @@ amplify:
 # VPC configuration for deployed workflow Lambdas and OpenSearch
 # This is account-wide — all workflows share the same VPC setting.
 # mode: "none" | "existing" | "new"
-#   none     — Lambdas run without VPC
-#   existing — Use an existing VPC (provide vpcId, subnetIds, securityGroupIds)
-#   new      — CloudFormation creates a shared VPC per workflow stack
+#   none     — No VPC created. Lambdas run without VPC. OpenSearch uses public endpoint.
+#   existing — Provide your VPC. Parent Lambdas, OpenSearch, and all child workflow Lambdas run in it. No new VPC created.
+#   new      — CDK creates exactly one shared VPC. Parent Lambdas, OpenSearch, and all child workflow Lambdas run in it.
 vpc:
   mode: "none"
-  # existing:
-  #   vpcId: "vpc-0abc123def456"
-  #   subnetIds:
-  #     - "subnet-abc123"
-  #     - "subnet-def456"
-  #   securityGroupIds:
-  #     - "sg-abc123"
-  # new:
-  #   cidrBlock: "10.0.0.0/16"
+  existing:
+    vpcId: "vpc-0abc123def456"
+    subnetIds:
+      - "subnet-abc123"
+      - "subnet-def456"
+    securityGroupIds:
+      - "sg-abc123"
+  new:
+    cidrBlock: "10.0.0.0/16"
 
 # OpenSearch Serverless configuration
 # Set to true to deploy an OpenSearch Serverless collection for indexing/search.

@@ -38,169 +38,30 @@ export class CloudFormationTemplateGenerator {
   }
 
   /**
-   * Generate CloudFormation resources for a single shared workflow VPC
-   */
-  private static generateNewVpcResources(vpcConfig: VpcConfig): any {
-    const cidr = vpcConfig.new?.cidrBlock || '10.0.0.0/16';
-    const octets = cidr.split('/')[0].split('.');
-    const base = `${octets[0]}.${octets[1]}`;
-    const prefix = 'Workflow';
-    return {
-      [`${prefix}Vpc`]: {
-        Type: 'AWS::EC2::VPC',
-        Properties: {
-          CidrBlock: cidr,
-          EnableDnsSupport: true,
-          EnableDnsHostnames: true,
-          Tags: [
-            { Key: 'Name', Value: { 'Fn::Sub': `workflow-vpc-\${WorkflowId}` } },
-            { Key: 'WorkflowId', Value: { Ref: 'WorkflowId' } },
-          ],
-        },
-      },
-      [`${prefix}VpcPrivateSubnetA`]: {
-        Type: 'AWS::EC2::Subnet',
-        Properties: {
-          VpcId: { Ref: `${prefix}Vpc` },
-          CidrBlock: `${base}.0.0/24`,
-          AvailabilityZone: { 'Fn::Select': ['0', { 'Fn::GetAZs': '' }] },
-          Tags: [{ Key: 'Name', Value: { 'Fn::Sub': `workflow-private-a-\${WorkflowId}` } }],
-        },
-      },
-      [`${prefix}VpcPrivateSubnetB`]: {
-        Type: 'AWS::EC2::Subnet',
-        Properties: {
-          VpcId: { Ref: `${prefix}Vpc` },
-          CidrBlock: `${base}.1.0/24`,
-          AvailabilityZone: { 'Fn::Select': ['1', { 'Fn::GetAZs': '' }] },
-          Tags: [{ Key: 'Name', Value: { 'Fn::Sub': `workflow-private-b-\${WorkflowId}` } }],
-        },
-      },
-      [`${prefix}VpcPublicSubnet`]: {
-        Type: 'AWS::EC2::Subnet',
-        Properties: {
-          VpcId: { Ref: `${prefix}Vpc` },
-          CidrBlock: `${base}.2.0/24`,
-          AvailabilityZone: { 'Fn::Select': ['0', { 'Fn::GetAZs': '' }] },
-          Tags: [{ Key: 'Name', Value: { 'Fn::Sub': `workflow-public-\${WorkflowId}` } }],
-        },
-      },
-      [`${prefix}VpcIgw`]: {
-        Type: 'AWS::EC2::InternetGateway',
-        Properties: {
-          Tags: [{ Key: 'Name', Value: { 'Fn::Sub': `workflow-igw-\${WorkflowId}` } }],
-        },
-      },
-      [`${prefix}VpcIgwAttachment`]: {
-        Type: 'AWS::EC2::VPCGatewayAttachment',
-        Properties: {
-          VpcId: { Ref: `${prefix}Vpc` },
-          InternetGatewayId: { Ref: `${prefix}VpcIgw` },
-        },
-      },
-      [`${prefix}VpcEip`]: {
-        Type: 'AWS::EC2::EIP',
-        Properties: { Domain: 'vpc' },
-      },
-      [`${prefix}VpcNatGateway`]: {
-        Type: 'AWS::EC2::NatGateway',
-        Properties: {
-          AllocationId: { 'Fn::GetAtt': [`${prefix}VpcEip`, 'AllocationId'] },
-          SubnetId: { Ref: `${prefix}VpcPublicSubnet` },
-          Tags: [{ Key: 'Name', Value: { 'Fn::Sub': `workflow-nat-\${WorkflowId}` } }],
-        },
-        DependsOn: [`${prefix}VpcIgwAttachment`],
-      },
-      [`${prefix}VpcPublicRouteTable`]: {
-        Type: 'AWS::EC2::RouteTable',
-        Properties: { VpcId: { Ref: `${prefix}Vpc` } },
-      },
-      [`${prefix}VpcPublicRoute`]: {
-        Type: 'AWS::EC2::Route',
-        Properties: {
-          RouteTableId: { Ref: `${prefix}VpcPublicRouteTable` },
-          DestinationCidrBlock: '0.0.0.0/0',
-          GatewayId: { Ref: `${prefix}VpcIgw` },
-        },
-        DependsOn: [`${prefix}VpcIgwAttachment`],
-      },
-      [`${prefix}VpcPublicSubnetRtAssoc`]: {
-        Type: 'AWS::EC2::SubnetRouteTableAssociation',
-        Properties: {
-          SubnetId: { Ref: `${prefix}VpcPublicSubnet` },
-          RouteTableId: { Ref: `${prefix}VpcPublicRouteTable` },
-        },
-      },
-      [`${prefix}VpcPrivateRouteTable`]: {
-        Type: 'AWS::EC2::RouteTable',
-        Properties: { VpcId: { Ref: `${prefix}Vpc` } },
-      },
-      [`${prefix}VpcPrivateRoute`]: {
-        Type: 'AWS::EC2::Route',
-        Properties: {
-          RouteTableId: { Ref: `${prefix}VpcPrivateRouteTable` },
-          DestinationCidrBlock: '0.0.0.0/0',
-          NatGatewayId: { Ref: `${prefix}VpcNatGateway` },
-        },
-      },
-      [`${prefix}VpcPrivateSubnetARtAssoc`]: {
-        Type: 'AWS::EC2::SubnetRouteTableAssociation',
-        Properties: {
-          SubnetId: { Ref: `${prefix}VpcPrivateSubnetA` },
-          RouteTableId: { Ref: `${prefix}VpcPrivateRouteTable` },
-        },
-      },
-      [`${prefix}VpcPrivateSubnetBRtAssoc`]: {
-        Type: 'AWS::EC2::SubnetRouteTableAssociation',
-        Properties: {
-          SubnetId: { Ref: `${prefix}VpcPrivateSubnetB` },
-          RouteTableId: { Ref: `${prefix}VpcPrivateRouteTable` },
-        },
-      },
-      [`${prefix}VpcSecurityGroup`]: {
-        Type: 'AWS::EC2::SecurityGroup',
-        Properties: {
-          GroupDescription: { 'Fn::Sub': `Shared Lambda SG for workflow \${WorkflowId}` },
-          VpcId: { Ref: `${prefix}Vpc` },
-          SecurityGroupEgress: [{ IpProtocol: '-1', CidrIp: '0.0.0.0/0' }],
-          Tags: [{ Key: 'Name', Value: { 'Fn::Sub': `workflow-lambda-sg-\${WorkflowId}` } }],
-        },
-      },
-    };
-  }
-
-  /**
    * Get VpcConfig property for a Lambda CloudFormation resource based on the workflow-level vpcConfig
    */
   private static getWorkflowLambdaVpcConfig(vpcConfig?: VpcConfig): any | undefined {
     if (!vpcConfig || vpcConfig.mode === 'none') return undefined;
 
     if (vpcConfig.mode === 'existing') {
+      if (!vpcConfig.existing?.subnetIds?.length || !vpcConfig.existing?.securityGroupIds?.length) {
+        console.error('VPC mode is "existing" but subnetIds or securityGroupIds are missing. Falling back to no VPC.');
+        return undefined;
+      }
       return {
-        SubnetIds: vpcConfig.existing!.subnetIds,
-        SecurityGroupIds: vpcConfig.existing!.securityGroupIds,
+        SubnetIds: vpcConfig.existing.subnetIds,
+        SecurityGroupIds: vpcConfig.existing.securityGroupIds,
       };
     }
 
-    // mode === 'new' — reference the shared workflow VPC resources
-    return {
-      SubnetIds: [
-        { Ref: 'WorkflowVpcPrivateSubnetA' },
-        { Ref: 'WorkflowVpcPrivateSubnetB' },
-      ],
-      SecurityGroupIds: [
-        { Ref: 'WorkflowVpcSecurityGroup' },
-      ],
-    };
+    return undefined;
   }
 
   /**
-   * Generate shared VPC resources if config has mode === 'new'
+   * Child stacks never create VPC resources — they use the parent's VPC via mode: "existing"
    */
   private static generateWorkflowVpcResources(): any {
-    const vpcConfig = this.getVpcConfig();
-    if (vpcConfig.mode !== 'new') return {};
-    return this.generateNewVpcResources(vpcConfig);
+    return {};
   }
 
   /**

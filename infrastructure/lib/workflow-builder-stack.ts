@@ -27,8 +27,12 @@ export class WorkflowBuilderStack extends cdk.Stack {
   private readonly config: StackConfig;
   private workflowsTable: dynamodb.Table;
   public readonly frontendHosting: FrontendHosting;
-  private readonly vpc: ec2.Vpc;
-  private readonly lambdaSecurityGroup: ec2.SecurityGroup;
+  private readonly vpc: ec2.IVpc | undefined;
+  private readonly lambdaSecurityGroup: ec2.ISecurityGroup | undefined;
+  private readonly lambdaVpcProps: { vpc: ec2.IVpc; vpcSubnets: ec2.SubnetSelection; securityGroups: ec2.ISecurityGroup[] } | {};
+  private readonly vpcConfigEnv: Record<string, string>;
+  private readonly resolvedSubnetIds: string[];
+  private readonly resolvedSecurityGroupIds: string[];
 
   constructor(scope: Construct, id: string, props?: cdk.StackProps) {
     super(scope, id, props);
@@ -36,37 +40,63 @@ export class WorkflowBuilderStack extends cdk.Stack {
     // Load configuration based on environment
     this.config = getConfig(process.env.NODE_ENV || 'development');
 
-    // Create VPC with NAT Gateway for Lambda functions
-    this.vpc = new ec2.Vpc(this, 'LambdaVpc', {
-      maxAzs: 2,
-      natGateways: 1,
-      subnetConfiguration: [
-        { name: 'public', subnetType: ec2.SubnetType.PUBLIC, cidrMask: 24 },
-        { name: 'private', subnetType: ec2.SubnetType.PRIVATE_WITH_EGRESS, cidrMask: 24 },
-      ],
-    });
+    // Conditionally create/import VPC based on config
+    const vpcMode = (PROJECT.vpc || { mode: 'none' }).mode;
 
-    // Free gateway endpoints for DynamoDB and S3
-    this.vpc.addGatewayEndpoint('DynamoDbEndpoint', {
-      service: ec2.GatewayVpcEndpointAwsService.DYNAMODB,
-    });
-    this.vpc.addGatewayEndpoint('S3Endpoint', {
-      service: ec2.GatewayVpcEndpointAwsService.S3,
-    });
+    if (vpcMode === 'new') {
+      const newVpc = new ec2.Vpc(this, 'LambdaVpc', {
+        maxAzs: 2,
+        natGateways: 1,
+        subnetConfiguration: [
+          { name: 'public', subnetType: ec2.SubnetType.PUBLIC, cidrMask: 24 },
+          { name: 'private', subnetType: ec2.SubnetType.PRIVATE_WITH_EGRESS, cidrMask: 24 },
+        ],
+      });
+      newVpc.addGatewayEndpoint('DynamoDbEndpoint', { service: ec2.GatewayVpcEndpointAwsService.DYNAMODB });
+      newVpc.addGatewayEndpoint('S3Endpoint', { service: ec2.GatewayVpcEndpointAwsService.S3 });
+      this.vpc = newVpc;
+      const sg = new ec2.SecurityGroup(this, 'LambdaSecurityGroup', {
+        vpc: newVpc,
+        description: 'Security group for Lambda functions in VPC',
+        allowAllOutbound: true,
+      });
+      sg.addIngressRule(sg, ec2.Port.tcp(443), 'Allow HTTPS from Lambda to OpenSearch VPC endpoint');
+      this.lambdaSecurityGroup = sg;
+      this.resolvedSubnetIds = newVpc.selectSubnets({ subnetType: ec2.SubnetType.PRIVATE_WITH_EGRESS }).subnetIds;
+      this.resolvedSecurityGroupIds = [sg.securityGroupId];
+    } else if (vpcMode === 'existing') {
+      const existingConfig = PROJECT.vpc?.existing;
+      if (!existingConfig?.vpcId || !existingConfig?.subnetIds?.length || !existingConfig?.securityGroupIds?.length) {
+        throw new Error('vpc.mode is "existing" but vpc.existing.vpcId, subnetIds, or securityGroupIds are missing or empty in config.yaml');
+      }
+      this.vpc = ec2.Vpc.fromLookup(this, 'ImportedVpc', { vpcId: existingConfig.vpcId });
+      this.lambdaSecurityGroup = ec2.SecurityGroup.fromSecurityGroupId(this, 'ImportedSG', existingConfig.securityGroupIds[0]);
+      this.resolvedSubnetIds = existingConfig.subnetIds;
+      this.resolvedSecurityGroupIds = existingConfig.securityGroupIds;
+    } else {
+      this.vpc = undefined;
+      this.lambdaSecurityGroup = undefined;
+      this.resolvedSubnetIds = [];
+      this.resolvedSecurityGroupIds = [];
+    }
 
-    // Security group for Lambda functions
-    this.lambdaSecurityGroup = new ec2.SecurityGroup(this, 'LambdaSecurityGroup', {
-      vpc: this.vpc,
-      description: 'Security group for Lambda functions in VPC',
-      allowAllOutbound: true,
-    });
-
-    // Allow HTTPS inbound from itself so Lambda can reach the OpenSearch VPC endpoint
-    this.lambdaSecurityGroup.addIngressRule(
-      this.lambdaSecurityGroup,
-      ec2.Port.tcp(443),
-      'Allow HTTPS from Lambda to OpenSearch VPC endpoint',
-    );
+    // Pre-compute VPC props for Lambda functions and env vars
+    if (this.vpc) {
+      this.lambdaVpcProps = {
+        vpc: this.vpc,
+        vpcSubnets: vpcMode === 'existing'
+          ? { subnets: this.resolvedSubnetIds.map(id => ec2.Subnet.fromSubnetId(this, `ImportedSubnet-${id}`, id)) }
+          : { subnetType: ec2.SubnetType.PRIVATE_WITH_EGRESS },
+        securityGroups: [this.lambdaSecurityGroup!],
+      };
+      this.vpcConfigEnv = {
+        VPC_CONFIG: JSON.stringify({ mode: 'existing', existing: { vpcId: this.vpc.vpcId, subnetIds: this.resolvedSubnetIds, securityGroupIds: this.resolvedSecurityGroupIds } }),
+        OPENSEARCH_VPC_CONFIG: JSON.stringify({ vpcId: this.vpc.vpcId, subnetIds: this.resolvedSubnetIds, securityGroupIds: this.resolvedSecurityGroupIds }),
+      };
+    } else {
+      this.lambdaVpcProps = {};
+      this.vpcConfigEnv = { VPC_CONFIG: JSON.stringify({ mode: 'none' }) };
+    }
 
     // VPC stack-deletion cleanup: tears down child workflow stacks and drains
     // leftover Lambda ENIs on parent VPC subnets/SG so CFN can delete VPC cleanly.
@@ -445,13 +475,7 @@ export class WorkflowBuilderStack extends cdk.Stack {
         AWS_ACCOUNT_ID: this.account,
         LAMBDA_CODE_BUCKET: lambdaCodeBucket.bucketName,
         OPENSEARCH_ENDPOINT: opensearchCollection?.attrCollectionEndpoint ?? '',
-        VPC_CONFIG: JSON.stringify(PROJECT.vpc || { mode: 'none' }),
-        // Pass CDK VPC config for OpenSearch indexer (must be in same VPC as OpenSearch endpoint)
-        OPENSEARCH_VPC_CONFIG: JSON.stringify({
-          vpcId: this.vpc.vpcId,
-          subnetIds: this.vpc.privateSubnets.map(s => s.subnetId),
-          securityGroupIds: [this.lambdaSecurityGroup.securityGroupId],
-        }),
+        ...this.vpcConfigEnv,
       }
     );
 
@@ -986,9 +1010,7 @@ export class WorkflowBuilderStack extends cdk.Stack {
       code: lambda.Code.fromInline(this.getOpenSearchSearchCode()),
       timeout: cdk.Duration.seconds(30),
       memorySize: 256,
-      vpc: this.vpc,
-      vpcSubnets: { subnetType: ec2.SubnetType.PRIVATE_WITH_EGRESS },
-      securityGroups: [this.lambdaSecurityGroup],
+      ...this.lambdaVpcProps,
       environment: {
         OPENSEARCH_ENDPOINT: opensearchCollection.attrCollectionEndpoint,
       },
@@ -1952,9 +1974,7 @@ export class WorkflowBuilderStack extends cdk.Stack {
       code,
       timeout: cdk.Duration.minutes(5),
       memorySize: 256,
-      vpc: this.vpc,
-      vpcSubnets: { subnetType: ec2.SubnetType.PRIVATE_WITH_EGRESS },
-      securityGroups: [this.lambdaSecurityGroup],
+      ...this.lambdaVpcProps,
       environment: {
         NODE_ENV: 'production',
         USER_POOL_ID: this.userPool.userPoolId,
@@ -2057,9 +2077,9 @@ export class WorkflowBuilderStack extends cdk.Stack {
       // Create an OpenSearch Serverless VPC endpoint
       const opensearchVpcEndpoint = new cdk.aws_opensearchserverless.CfnVpcEndpoint(this, 'OpenSearchVpcEndpoint', {
         name: `health-msgs-vpce-${this.account.slice(-6)}`,
-        vpcId: this.vpc.vpcId,
-        subnetIds: this.vpc.privateSubnets.map(s => s.subnetId),
-        securityGroupIds: [this.lambdaSecurityGroup.securityGroupId],
+        vpcId: this.vpc!.vpcId,
+        subnetIds: this.resolvedSubnetIds,
+        securityGroupIds: this.resolvedSecurityGroupIds,
       });
 
       networkPolicyJson = JSON.stringify([{
@@ -2215,82 +2235,4 @@ def build_query(params, config):
 `.trim();
   }
 
-  /**
-   * Create the VPC-cleanup Custom Resource. On stack Delete it deletes all child
-   * workflow stacks and drains leftover Lambda ENIs from the parent VPC so CFN
-   * can then delete the VPC / subnets / SG cleanly.
-   */
-  private createVpcCleanupCustomResource(): void {
-    // NOTE: cleanup Lambda must NOT run in the VPC it is trying to clean.
-    const cleanupLambda = new lambda.Function(this, 'VpcCleanupLambda', {
-      functionName: 'workflow-builder-vpc-cleanup',
-      runtime: lambda.Runtime.NODEJS_18_X,
-      handler: 'index.vpcCleanup',
-      code: lambda.Code.fromAsset('../lambda-functions/deployment-lambda/dist'),
-      timeout: cdk.Duration.minutes(15),
-      memorySize: 256,
-      environment: {
-        CHILD_STACK_PREFIX: 'workflow-',
-        SUBNET_IDS: this.vpc.privateSubnets.map((s) => s.subnetId).join(','),
-        SECURITY_GROUP_ID: this.lambdaSecurityGroup.securityGroupId,
-      },
-    });
-
-    cleanupLambda.addToRolePolicy(
-      new iam.PolicyStatement({
-        effect: iam.Effect.ALLOW,
-        actions: [
-          'cloudformation:ListStacks',
-          'cloudformation:DescribeStacks',
-          'cloudformation:DeleteStack',
-          'ec2:DescribeNetworkInterfaces',
-          'ec2:DeleteNetworkInterface',
-        ],
-        resources: ['*'],
-      }),
-    );
-    // Allow cleanup to tear down resources inside child workflow stacks.
-    cleanupLambda.addToRolePolicy(
-      new iam.PolicyStatement({
-        effect: iam.Effect.ALLOW,
-        actions: [
-          'lambda:DeleteFunction',
-          'lambda:GetFunction',
-          'iam:DeleteRole',
-          'iam:DeleteRolePolicy',
-          'iam:DetachRolePolicy',
-          'iam:ListRolePolicies',
-          'iam:ListAttachedRolePolicies',
-          'logs:DeleteLogGroup',
-          'logs:DescribeLogGroups',
-          'states:DeleteStateMachine',
-          'states:DescribeStateMachine',
-          'states:ListStateMachines',
-          'events:RemoveTargets',
-          'events:DeleteRule',
-          'events:ListTargetsByRule',
-        ],
-        resources: ['*'],
-      }),
-    );
-
-    const provider = new cr.Provider(this, 'VpcCleanupProvider', {
-      onEventHandler: cleanupLambda,
-      // onEvent-only provider: the handler must complete within its Lambda
-      // timeout (15 min). If cleanup needs longer we'd add an isCompleteHandler
-      // to enable the async pattern (up to totalTimeout, default 30 min, max 2h).
-    });
-
-    const customResource = new cdk.CustomResource(this, 'VpcCleanupResource', {
-      serviceToken: provider.serviceToken,
-    });
-
-    // The CR references the VPC's subnet IDs and SG ID via env vars, so CFN
-    // already sees the CR as dependent on the VPC/SG. On delete, CFN removes
-    // dependents first, so the CR runs before VPC/SG teardown. No explicit
-    // addDependency is needed — and adding one would create a cycle because
-    // the Provider framework's Lambda itself transitively depends on IAM and
-    // other stack resources that reference the VPC.
-    void customResource;
-  }
 }

@@ -14,6 +14,13 @@ interface WorkflowDetailsProps {
   workflow?: Workflow;
 }
 
+interface BatchProgress {
+  total: number;
+  completed: number;
+  failed: number;
+  running: boolean;
+}
+
 
 
 const WorkflowDetails: React.FC<WorkflowDetailsProps> = ({ workflow: propWorkflow }) => {
@@ -47,7 +54,7 @@ const WorkflowDetails: React.FC<WorkflowDetailsProps> = ({ workflow: propWorkflo
   // Multi-select re-execution state
   const [selectedExecutions, setSelectedExecutions] = useState<Set<string>>(new Set());
   const [showBatchConfirmModal, setShowBatchConfirmModal] = useState(false);
-  const [batchProgress, setBatchProgress] = useState<{ total: number; completed: number; failed: number; running: boolean }>({ total: 0, completed: 0, failed: 0, running: false });
+  const [batchProgress, setBatchProgress] = useState<BatchProgress>({ total: 0, completed: 0, failed: 0, running: false });
 
   // Convert percentage widths to pixels on mount so resizing is stable
   useEffect(() => {

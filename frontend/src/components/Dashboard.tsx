@@ -6,6 +6,7 @@ import DeployedWorkflowsList from './workflow/DeployedWorkflowsList';
 import DeleteWorkflowModal from './workflow/DeleteWorkflowModal';
 import DeploymentStatusModal from './workflow/DeploymentStatusModal';
 import OpenSearchPanel from './workflow/OpenSearchPanel';
+import LayerManagement from './workflow/LayerManagement';
 import { useWorkflows } from '../hooks/useWorkflows';
 import { WorkflowMetadata } from '../types/workflow';
 import './Dashboard.css';
@@ -35,7 +36,7 @@ export default function Dashboard({ onSignOut, onEditWorkflow, onViewWorkflow }:
   const [workflowToDelete, setWorkflowToDelete] = useState<WorkflowMetadata | null>(null);
   const [isDeleting, setIsDeleting] = useState(false);
   const [isCreating, setIsCreating] = useState(false);
-  const [activeTab, setActiveTab] = useState<'workflows' | 'deployed' | 'search'>('workflows');
+  const [activeTab, setActiveTab] = useState<'workflows' | 'deployed' | 'search' | 'layers'>('workflows');
   const [deleteError, setDeleteError] = useState<string | null>(null);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [deleteSuccess, setDeleteSuccess] = useState<string | null>(null);
@@ -262,6 +263,19 @@ export default function Dashboard({ onSignOut, onEditWorkflow, onViewWorkflow }:
                   <span className="tab-count">Message Router APIs</span>
                 </div>
               </button>
+              <button
+                className={`sidebar-tab ${activeTab === 'layers' ? 'active' : ''}`}
+                onClick={() => setActiveTab('layers')}
+              >
+                <div className="tab-icon-wrapper">
+                  <span className="tab-icon">📦</span>
+                </div>
+                <div className="tab-content-wrapper">
+                  <span className="tab-title">Lambda Layers</span>
+                  <span className="tab-description">Manage shared libraries</span>
+                  <span className="tab-count">Reusable packages</span>
+                </div>
+              </button>
               {import.meta.env.VITE_ENABLE_OPENSEARCH !== 'false' && (
               <button
                 className={`sidebar-tab ${activeTab === 'search' ? 'active' : ''}`}
@@ -296,6 +310,7 @@ export default function Dashboard({ onSignOut, onEditWorkflow, onViewWorkflow }:
                 onSignOut={onSignOut}
                 isCreating={isCreating}
                 onViewWorkflow={handleViewWorkflow}
+                onManageLayers={() => setActiveTab('layers')}
               />
             )}
             
@@ -307,6 +322,10 @@ export default function Dashboard({ onSignOut, onEditWorkflow, onViewWorkflow }:
                 onRefresh={refreshWorkflows}
                 onViewWorkflow={handleViewWorkflow}
               />
+            )}
+
+            {activeTab === 'layers' && (
+              <LayerManagement />
             )}
 
             {activeTab === 'search' && import.meta.env.VITE_ENABLE_OPENSEARCH !== 'false' && (

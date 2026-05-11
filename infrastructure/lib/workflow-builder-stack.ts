@@ -439,8 +439,8 @@ export class WorkflowBuilderStack extends cdk.Stack {
       versioned: true,
       encryption: s3.BucketEncryption.S3_MANAGED,
       blockPublicAccess: s3.BlockPublicAccess.BLOCK_ALL,
-      removalPolicy: this.config.environment === 'production' 
-        ? cdk.RemovalPolicy.RETAIN 
+      removalPolicy: this.config.environment === 'production'
+        ? cdk.RemovalPolicy.RETAIN
         : cdk.RemovalPolicy.DESTROY,
       autoDeleteObjects: this.config.environment !== 'production',
       lifecycleRules: [
@@ -448,6 +448,15 @@ export class WorkflowBuilderStack extends cdk.Stack {
           id: 'DeleteOldVersions',
           enabled: true,
           noncurrentVersionExpiration: cdk.Duration.days(30),
+        },
+      ],
+      cors: [
+        {
+          allowedMethods: [s3.HttpMethods.PUT],
+          allowedOrigins: ['*'],
+          allowedHeaders: ['*'],
+          exposedHeaders: ['ETag'],
+          maxAge: 3000,
         },
       ],
     });
@@ -603,6 +612,7 @@ export class WorkflowBuilderStack extends cdk.Stack {
           'lambda:UpdateFunctionConfiguration',
           'lambda:DeleteFunction',
           'lambda:GetFunction',
+          'lambda:GetLayerVersion',
           'lambda:TagResource',
           'lambda:UntagResource',
           // EC2/VPC permissions for CloudFormation to create VPC resources and attach Lambdas to VPCs
@@ -992,7 +1002,49 @@ export class WorkflowBuilderStack extends cdk.Stack {
     );
 
     this.addLambdaIntegration(vpcListResource, 'GET', vpcListLambda, true);
-    
+
+    // Layer management endpoints
+    const layersResource = this.api.root.addResource('layers');
+    const layerIdResource = layersResource.addResource('{layerId}');
+    const layerUploadUrlResource = layersResource.addResource('upload-url');
+
+    const layerLambda = this.createLambdaFunction(
+      'LayerLambda',
+      'workflow-builder-layer-handler',
+      '../lambda-functions/deployment-lambda/dist',
+      'index.layerHandler',
+      {
+        WORKFLOWS_TABLE: this.workflowsTable.tableName,
+        LAMBDA_CODE_BUCKET: lambdaCodeBucket.bucketName,
+        AWS_ACCOUNT_ID: this.account,
+        USER_POOL_ID: this.userPool.userPoolId,
+        USER_POOL_CLIENT_ID: this.userPoolClient.userPoolClientId,
+      }
+    );
+
+    this.workflowsTable.grantReadWriteData(layerLambda);
+    lambdaCodeBucket.grantReadWrite(layerLambda);
+
+    layerLambda.addToRolePolicy(
+      new iam.PolicyStatement({
+        effect: iam.Effect.ALLOW,
+        actions: [
+          'lambda:PublishLayerVersion',
+          'lambda:DeleteLayerVersion',
+          'lambda:GetLayerVersion',
+          'lambda:ListFunctions',
+          'lambda:GetFunctionConfiguration',
+          'lambda:UpdateFunctionConfiguration',
+        ],
+        resources: ['*'],
+      })
+    );
+
+    this.addLambdaIntegration(layersResource, 'GET', layerLambda, true);
+    this.addLambdaIntegration(layersResource, 'POST', layerLambda, true);
+    this.addLambdaIntegration(layerUploadUrlResource, 'POST', layerLambda, true);
+    this.addLambdaIntegration(layerIdResource, 'DELETE', layerLambda, true);
+
     // POST /opensearch/search - Search OpenSearch Serverless (Python Lambda)
     if (enableOpenSearch && opensearchCollection) {
     const opensearchResource = this.api.root.addResource('opensearch');
@@ -1246,6 +1298,7 @@ export class WorkflowBuilderStack extends cdk.Stack {
               actions: [
                 'lambda:InvokeFunction',
                 'lambda:GetFunction',
+                'lambda:GetLayerVersion',
                 'lambda:ListFunctions',
                 'lambda:CreateFunction',
                 'lambda:DeleteFunction',

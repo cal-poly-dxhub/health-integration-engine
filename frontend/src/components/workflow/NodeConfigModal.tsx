@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { WorkflowNode } from '../../types/workflow';
 import apiService from '../../services/api';
+import { layerApiService, LayerMetadata } from '../../services/layerApi';
 import './NodeConfigModal.css';
 
 interface NodeConfigModalProps {
@@ -29,11 +30,14 @@ const NodeConfigModal: React.FC<NodeConfigModalProps> = ({
   const [isFullScreenEditor, setIsFullScreenEditor] = useState(false);
   const [iamRoles, setIamRoles] = useState<IAMRole[]>([]);
   const [loadingRoles, setLoadingRoles] = useState(false);
+  const [availableLayers, setAvailableLayers] = useState<LayerMetadata[]>([]);
+  const [loadingLayers, setLoadingLayers] = useState(false);
 
   // Fetch IAM roles when modal opens
   useEffect(() => {
     if (isOpen && node.type === 'lambda') {
       fetchIAMRoles(node.type);
+      fetchLayers();
     }
   }, [isOpen, node.type]);
 
@@ -48,6 +52,19 @@ const NodeConfigModal: React.FC<NodeConfigModalProps> = ({
       setIamRoles([]);
     } finally {
       setLoadingRoles(false);
+    }
+  };
+
+  const fetchLayers = async () => {
+    setLoadingLayers(true);
+    try {
+      const layers = await layerApiService.listLayers();
+      setAvailableLayers(layers);
+    } catch (error) {
+      console.error('Failed to fetch layers:', error);
+      setAvailableLayers([]);
+    } finally {
+      setLoadingLayers(false);
     }
   };
 
@@ -84,6 +101,7 @@ const NodeConfigModal: React.FC<NodeConfigModalProps> = ({
             iamRole: (node.config as any)?.iamRole?.useExisting && (node.config as any)?.iamRole?.existingRoleArn
               ? (node.config as any).iamRole 
               : { useExisting: false, existingRoleArn: '' },
+            layers: (node.config as any)?.layers || [],
           });
           break;
         default:
@@ -123,7 +141,7 @@ const NodeConfigModal: React.FC<NodeConfigModalProps> = ({
     }
   };
 
-  const handleInputChange = (field: string, value: string | number) => {
+  const handleInputChange = (field: string, value: any) => {
     setConfig((prev: any) => ({ ...prev, [field]: value }));
     // Clear error when user starts typing
     if (errors[field]) {
@@ -528,6 +546,54 @@ const NodeConfigModal: React.FC<NodeConfigModalProps> = ({
           />
         </div>
         {errors.code && <span className="error-text">{errors.code}</span>}
+      </div>
+
+      {/* Layer Selector */}
+      <div className="form-group" style={{ marginTop: '20px', paddingTop: '20px', borderTop: '1px solid #e0e0e0' }}>
+        <label>
+          Lambda Layers {loadingLayers && <span style={{ color: '#666' }}>(Loading...)</span>}
+        </label>
+        {(() => {
+          const selectedRuntime = config.runtime || '';
+          const compatibleLayers = availableLayers.filter(
+            layer => layer.compatibleRuntimes.includes(selectedRuntime)
+          );
+          const selectedLayers: string[] = config.layers || [];
+
+          if (!selectedRuntime) {
+            return <small style={{ color: '#666' }}>Select a runtime first to see compatible layers.</small>;
+          }
+
+          if (compatibleLayers.length === 0 && !loadingLayers) {
+            return <small style={{ color: '#666' }}>No layers available for {selectedRuntime}. Create one from the Layers tab.</small>;
+          }
+
+          return (
+            <div className="layer-select-list">
+              {compatibleLayers.map(layer => (
+                <label key={layer.id} style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '6px', cursor: 'pointer' }}>
+                  <input
+                    type="checkbox"
+                    style={{ width: 'auto' }}
+                    checked={selectedLayers.includes(layer.layerVersionArn)}
+                    onChange={(e) => {
+                      const newLayers = e.target.checked
+                        ? [...selectedLayers, layer.layerVersionArn]
+                        : selectedLayers.filter((arn: string) => arn !== layer.layerVersionArn);
+                      handleInputChange('layers', newLayers);
+                    }}
+                  />
+                  <span>{layer.name} <small style={{ color: '#666' }}>(v{layer.version})</small></span>
+                </label>
+              ))}
+              {selectedLayers.length > 0 && (
+                <small style={{ display: 'block', marginTop: '8px', color: '#666' }}>
+                  {selectedLayers.length}/5 layers selected (AWS limit: 5)
+                </small>
+              )}
+            </div>
+          );
+        })()}
       </div>
 
       {renderIAMRoleSelector('lambda', 'lambda.amazonaws.com')}

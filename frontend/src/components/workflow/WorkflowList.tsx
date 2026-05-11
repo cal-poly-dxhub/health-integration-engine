@@ -18,6 +18,7 @@ interface WorkflowListProps {
   onRefresh?: () => void;
   onSignOut?: () => void;
   isCreating?: boolean;
+  onManageLayers?: () => void;
 }
 
 const WorkflowList: React.FC<WorkflowListProps> = ({
@@ -34,6 +35,7 @@ const WorkflowList: React.FC<WorkflowListProps> = ({
   onRefresh,
   onSignOut,
   isCreating = false,
+  onManageLayers,
 }) => {
   const [searchTerm, setSearchTerm] = useState('');
   const [sortBy, setSortBy] = useState<'name' | 'created' | 'modified'>('modified');
@@ -210,6 +212,20 @@ const WorkflowList: React.FC<WorkflowListProps> = ({
             </svg>
             Search Messages
             <kbd className="kbd-shortcut">⌘K</kbd>
+          </button>
+          )}
+          {onManageLayers && (
+          <button
+            className="search-messages-btn"
+            onClick={onManageLayers}
+            title="Manage Lambda Layers"
+          >
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+              <rect x="2" y="4" width="20" height="5" rx="1" />
+              <rect x="2" y="10" width="20" height="5" rx="1" />
+              <rect x="2" y="16" width="20" height="5" rx="1" />
+            </svg>
+            Layers
           </button>
           )}
           <button

@@ -28,6 +28,9 @@ export {
   redriveExecution
 } from './handlers/stepFunctionsApiHandlers';
 
+// Layer handlers
+export { handler as layerHandler } from './handlers/layerHandler';
+
 // EventBridge handlers
 export { eventBridgeHandler } from './handlers/eventbridge';
 

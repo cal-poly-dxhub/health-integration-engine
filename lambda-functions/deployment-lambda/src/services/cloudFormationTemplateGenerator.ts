@@ -646,6 +646,7 @@ export class CloudFormationTemplateGenerator {
           Description: `Lambda function for workflow node: ${nodeName}`,
           Timeout: lambdaNode.config?.timeout || 30,
           MemorySize: lambdaNode.config?.memorySize || 128,
+          ...(lambdaNode.config?.layers?.length ? { Layers: lambdaNode.config.layers } : {}),
           ...(lambdaVpcConfig ? { VpcConfig: lambdaVpcConfig } : {}),
           Environment: {
             Variables: {

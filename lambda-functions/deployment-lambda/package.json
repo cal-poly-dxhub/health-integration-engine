@@ -31,12 +31,13 @@
     "@aws-sdk/credential-providers": "^3.1001.0",
     "@aws-sdk/lib-dynamodb": "^3.907.0",
     "@aws-sdk/lib-storage": "^3.907.0",
+    "@aws-sdk/s3-request-presigner": "^3.1045.0",
     "@smithy/signature-v4": "^5.3.10",
     "jsonwebtoken": "^9.0.2",
     "jszip": "^3.10.1",
-    "setimmediate": "^1.0.5",
     "jwks-rsa": "^3.1.0",
     "mime-types": "^2.1.35",
+    "setimmediate": "^1.0.5",
     "zod": "^3.25.76"
   },
   "devDependencies": {

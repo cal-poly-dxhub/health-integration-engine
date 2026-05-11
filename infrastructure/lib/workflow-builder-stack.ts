@@ -12,7 +12,6 @@ import * as stepfunctions from 'aws-cdk-lib/aws-stepfunctions';
 import * as events from 'aws-cdk-lib/aws-events';
 import * as targets from 'aws-cdk-lib/aws-events-targets';
 import * as s3 from 'aws-cdk-lib/aws-s3';
-import * as cr from 'aws-cdk-lib/custom-resources';
 import * as fs from 'fs';
 import { Construct } from 'constructs';
 import { getConfig, StackConfig, PROJECT } from './config';
@@ -97,10 +96,6 @@ export class WorkflowBuilderStack extends cdk.Stack {
       this.lambdaVpcProps = {};
       this.vpcConfigEnv = { VPC_CONFIG: JSON.stringify({ mode: 'none' }) };
     }
-
-    // VPC stack-deletion cleanup: tears down child workflow stacks and drains
-    // leftover Lambda ENIs on parent VPC subnets/SG so CFN can delete VPC cleanly.
-    this.createVpcCleanupCustomResource();
 
     // Create API Gateway first (needed for Identity Pool permissions)
     this.api = this.createApiGateway();

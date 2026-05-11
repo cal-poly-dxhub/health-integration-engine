@@ -1015,3 +1015,72 @@
   background: rgba(255, 255, 255, 0.25);
   border-color: rgba(255, 255, 255, 0.5);
 }
+
+/* Multi-select batch re-execution */
+.executions-header-actions {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+}
+
+.batch-execution-btn {
+  padding: 0.5rem 1rem;
+  background: #2563eb;
+  color: #fff;
+  border: none;
+  border-radius: 6px;
+  font-size: 0.875rem;
+  font-weight: 500;
+  cursor: pointer;
+}
+
+.batch-execution-btn:hover {
+  background: #1d4ed8;
+}
+
+.batch-execution-btn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.checkbox-col {
+  width: 40px;
+  text-align: center;
+}
+
+.checkbox-col input[type="checkbox"] {
+  cursor: pointer;
+  width: 16px;
+  height: 16px;
+}
+
+.execution-row.selected {
+  background-color: #eff6ff;
+}
+
+.batch-confirm-modal {
+  max-width: 440px;
+}
+
+.batch-confirm-note {
+  color: #64748b;
+  font-size: 0.875rem;
+  margin-top: 0.5rem;
+}
+
+.batch-progress-bar {
+  position: fixed;
+  bottom: 1rem;
+  right: 1rem;
+  background: #1e293b;
+  color: #fff;
+  padding: 0.75rem 1.25rem;
+  border-radius: 8px;
+  font-size: 0.875rem;
+  z-index: 1000;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+}
+
+.batch-progress-bar .batch-failed {
+  color: #fca5a5;
+}

@@ -2091,6 +2091,7 @@ export class WorkflowBuilderStack extends cdk.Stack {
       name: `health-msgs-network-${this.account.slice(-6)}`,
       type: 'network',
       policy: networkPolicyJson,
+      description: `Network policy updated ${Date.now()}`,
     });
 
     // Data access policy - allow all IAM principals in the account

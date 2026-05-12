@@ -2,6 +2,13 @@ import React, { useState, useEffect } from 'react';
 import { WorkflowNode } from '../../types/workflow';
 import apiService from '../../services/api';
 import { layerApiService, LayerMetadata } from '../../services/layerApi';
+import {
+  LAMBDA_RUNTIMES,
+  LAMBDA_ARCHITECTURES,
+  DEFAULT_LAMBDA_RUNTIME,
+  DEFAULT_LAMBDA_ARCHITECTURE,
+  MAX_LAMBDA_LAYERS,
+} from '../../constants/lambdaRuntimes';
 import './NodeConfigModal.css';
 
 interface NodeConfigModalProps {
@@ -94,12 +101,13 @@ const NodeConfigModal: React.FC<NodeConfigModalProps> = ({
         case 'lambda':
           setConfig({
             functionName: (node.config as any)?.functionName || '',
-            runtime: (node.config as any)?.runtime || 'nodejs18.x',
+            runtime: (node.config as any)?.runtime || DEFAULT_LAMBDA_RUNTIME,
+            architecture: (node.config as any)?.architecture || DEFAULT_LAMBDA_ARCHITECTURE,
             code: (node.config as any)?.code || '// Your Lambda function code here\nexports.handler = async (event) => {\n    // TODO: implement\n    return {\n        statusCode: 200,\n        body: JSON.stringify("Hello from Lambda!")\n    };\n};',
             timeout: (node.config as any)?.timeout || 30,
             memory: (node.config as any)?.memory || 128,
             iamRole: (node.config as any)?.iamRole?.useExisting && (node.config as any)?.iamRole?.existingRoleArn
-              ? (node.config as any).iamRole 
+              ? (node.config as any).iamRole
               : { useExisting: false, existingRoleArn: '' },
             layers: (node.config as any)?.layers || [],
           });
@@ -371,24 +379,31 @@ const NodeConfigModal: React.FC<NodeConfigModalProps> = ({
         {errors.functionName && <span className="error-text">{errors.functionName}</span>}
       </div>
 
-      <div className="form-group">
-        <label htmlFor="runtime">Runtime</label>
-        <select
-          id="runtime"
-          value={config.runtime || 'python3.12'}
-          onChange={(e) => handleInputChange('runtime', e.target.value)}
-        >
-          <option value="nodejs18.x">Node.js 18.x</option>
-          <option value="nodejs16.x">Node.js 16.x</option>
-          <option value="python3.13">Python 3.13</option>
-          <option value="python3.12">Python 3.12</option>
-          <option value="python3.11">Python 3.11</option>
-          <option value="python3.10">Python 3.10</option>
-          <option value="python3.9">Python 3.9</option>
-          <option value="python3.8">Python 3.8</option>
-          <option value="java11">Java 11</option>
-          <option value="dotnet6">C# (.NET 6)</option>
-        </select>
+      <div className="form-row">
+        <div className="form-group">
+          <label htmlFor="runtime">Runtime</label>
+          <select
+            id="runtime"
+            value={config.runtime || DEFAULT_LAMBDA_RUNTIME}
+            onChange={(e) => handleInputChange('runtime', e.target.value)}
+          >
+            {LAMBDA_RUNTIMES.map(rt => (
+              <option key={rt.value} value={rt.value}>{rt.label}</option>
+            ))}
+          </select>
+        </div>
+        <div className="form-group">
+          <label htmlFor="architecture">Architecture</label>
+          <select
+            id="architecture"
+            value={config.architecture || DEFAULT_LAMBDA_ARCHITECTURE}
+            onChange={(e) => handleInputChange('architecture', e.target.value)}
+          >
+            {LAMBDA_ARCHITECTURES.map(arch => (
+              <option key={arch} value={arch}>{arch}</option>
+            ))}
+          </select>
+        </div>
       </div>
 
       <div className="form-row">
@@ -555,42 +570,62 @@ const NodeConfigModal: React.FC<NodeConfigModalProps> = ({
         </label>
         {(() => {
           const selectedRuntime = config.runtime || '';
-          const compatibleLayers = availableLayers.filter(
-            layer => layer.compatibleRuntimes.includes(selectedRuntime)
+          const selectedArchitecture = config.architecture || DEFAULT_LAMBDA_ARCHITECTURE;
+          const compatibleLayers = availableLayers.filter(layer =>
+            layer.compatibleRuntimes.includes(selectedRuntime) &&
+            (layer.compatibleArchitectures || []).includes(selectedArchitecture)
           );
           const selectedLayers: string[] = config.layers || [];
+          const atCap = selectedLayers.length >= MAX_LAMBDA_LAYERS;
 
           if (!selectedRuntime) {
             return <small style={{ color: '#666' }}>Select a runtime first to see compatible layers.</small>;
           }
 
           if (compatibleLayers.length === 0 && !loadingLayers) {
-            return <small style={{ color: '#666' }}>No layers available for {selectedRuntime}. Create one from the Layers tab.</small>;
+            return (
+              <small style={{ color: '#666' }}>
+                No layers available for {selectedRuntime} / {selectedArchitecture}. Create one from the Layers tab.
+              </small>
+            );
           }
 
           return (
             <div className="layer-select-list">
-              {compatibleLayers.map(layer => (
-                <label key={layer.id} style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '6px', cursor: 'pointer' }}>
-                  <input
-                    type="checkbox"
-                    style={{ width: 'auto' }}
-                    checked={selectedLayers.includes(layer.layerVersionArn)}
-                    onChange={(e) => {
-                      const newLayers = e.target.checked
-                        ? [...selectedLayers, layer.layerVersionArn]
-                        : selectedLayers.filter((arn: string) => arn !== layer.layerVersionArn);
-                      handleInputChange('layers', newLayers);
+              {compatibleLayers.map(layer => {
+                const checked = selectedLayers.includes(layer.layerVersionArn);
+                const disabled = !checked && atCap;
+                return (
+                  <label
+                    key={layer.id}
+                    style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '8px',
+                      marginBottom: '6px',
+                      cursor: disabled ? 'not-allowed' : 'pointer',
+                      opacity: disabled ? 0.5 : 1,
                     }}
-                  />
-                  <span>{layer.name} <small style={{ color: '#666' }}>(v{layer.version})</small></span>
-                </label>
-              ))}
-              {selectedLayers.length > 0 && (
-                <small style={{ display: 'block', marginTop: '8px', color: '#666' }}>
-                  {selectedLayers.length}/5 layers selected (AWS limit: 5)
-                </small>
-              )}
+                  >
+                    <input
+                      type="checkbox"
+                      style={{ width: 'auto' }}
+                      checked={checked}
+                      disabled={disabled}
+                      onChange={(e) => {
+                        const newLayers = e.target.checked
+                          ? [...selectedLayers, layer.layerVersionArn]
+                          : selectedLayers.filter((arn: string) => arn !== layer.layerVersionArn);
+                        handleInputChange('layers', newLayers);
+                      }}
+                    />
+                    <span>{layer.name} <small style={{ color: '#666' }}>(v{layer.version})</small></span>
+                  </label>
+                );
+              })}
+              <small style={{ display: 'block', marginTop: '8px', color: atCap ? '#b45309' : '#666' }}>
+                {selectedLayers.length}/{MAX_LAMBDA_LAYERS} layers selected (AWS limit: {MAX_LAMBDA_LAYERS})
+              </small>
             </div>
           );
         })()}

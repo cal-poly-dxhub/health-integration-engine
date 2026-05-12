@@ -426,3 +426,22 @@
   padding-top: 0.75rem;
   border-top: 1px solid #7dd3fc;
 }
+
+.layer-select-list {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  max-height: 200px;
+  overflow-y: auto;
+  padding: 8px 10px;
+  border: 1px solid #e5e7eb;
+  border-radius: 4px;
+  background: #fafafa;
+  margin-top: 6px;
+}
+
+.layer-select-list label {
+  font-weight: 400;
+  font-size: 0.9rem;
+  color: #374151;
+}

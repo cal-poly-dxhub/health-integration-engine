@@ -1033,7 +1033,7 @@ export class WorkflowBuilderStack extends cdk.Stack {
           'lambda:DeleteLayerVersion',
           'lambda:GetLayerVersion',
           'lambda:ListFunctions',
-          'lambda:GetFunctionConfiguration',
+          'lambda:ListTags',
           'lambda:UpdateFunctionConfiguration',
         ],
         resources: ['*'],

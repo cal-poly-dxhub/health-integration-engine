@@ -628,12 +628,15 @@ export class CloudFormationTemplateGenerator {
             { Key: 'DeploymentId', Value: { Ref: 'DeploymentId' } },
             { Key: 'Environment', Value: { Ref: 'Environment' } },
             { Key: 'NodeId', Value: nodeId },
+            { Key: 'ManagedBy', Value: 'workflow-builder' },
           ],
         },
       };
 
       // Lambda function (without API Gateway trigger)
       const lambdaVpcConfig = this.getWorkflowLambdaVpcConfig(this.getVpcConfig());
+      const lambdaArchitectures = lambdaNode.config?.architectures
+        || (lambdaNode.config?.architecture ? [lambdaNode.config.architecture] : undefined);
       resources[lambdaFunctionName] = {
         Type: 'AWS::Lambda::Function',
         Properties: {
@@ -646,6 +649,7 @@ export class CloudFormationTemplateGenerator {
           Description: `Lambda function for workflow node: ${nodeName}`,
           Timeout: lambdaNode.config?.timeout || 30,
           MemorySize: lambdaNode.config?.memorySize || 128,
+          ...(lambdaArchitectures?.length ? { Architectures: lambdaArchitectures } : {}),
           ...(lambdaNode.config?.layers?.length ? { Layers: lambdaNode.config.layers } : {}),
           ...(lambdaVpcConfig ? { VpcConfig: lambdaVpcConfig } : {}),
           Environment: {
@@ -662,6 +666,7 @@ export class CloudFormationTemplateGenerator {
             { Key: 'DeploymentId', Value: { Ref: 'DeploymentId' } },
             { Key: 'Environment', Value: { Ref: 'Environment' } },
             { Key: 'NodeId', Value: nodeId },
+            { Key: 'ManagedBy', Value: 'workflow-builder' },
           ],
         },
         DependsOn: [lambdaLogGroupName],

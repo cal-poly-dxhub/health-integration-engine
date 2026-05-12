@@ -1,15 +1,11 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { layerApiService, LayerMetadata } from '../../services/layerApi';
+import {
+  LAMBDA_RUNTIME_VALUES,
+  LAMBDA_ARCHITECTURES,
+  MAX_LAYER_ZIP_BYTES,
+} from '../../constants/lambdaRuntimes';
 import './LayerManagement.css';
-
-const RUNTIMES = [
-  'nodejs18.x', 'nodejs20.x',
-  'python3.9', 'python3.10', 'python3.11', 'python3.12', 'python3.13',
-  'java11', 'java17',
-  'dotnet6', 'dotnet8',
-];
-
-const ARCHITECTURES = ['x86_64', 'arm64'];
 
 const LayerManagement: React.FC = () => {
   const [layers, setLayers] = useState<LayerMetadata[]>([]);
@@ -50,6 +46,11 @@ const LayerManagement: React.FC = () => {
       setFormFile(null);
       return;
     }
+    if (file && file.size > MAX_LAYER_ZIP_BYTES) {
+      setFormError(`File is ${(file.size / 1024 / 1024).toFixed(1)} MiB; AWS limit is 50 MiB zipped`);
+      setFormFile(null);
+      return;
+    }
     setFormError(null);
     setFormFile(file);
   };
@@ -78,10 +79,10 @@ const LayerManagement: React.FC = () => {
     try {
       setCreating(true);
       const trimmedName = formName.trim();
-      const contentType = formFile.type || 'application/zip';
 
-      const { uploadUrl, s3Key, layerId } = await layerApiService.getUploadUrl(trimmedName, contentType);
-      await layerApiService.uploadFile(uploadUrl, formFile, contentType);
+      const { uploadUrl, s3Key, layerId, contentType: signedContentType } =
+        await layerApiService.getUploadUrl(trimmedName);
+      await layerApiService.uploadFile(uploadUrl, formFile, signedContentType);
 
       await layerApiService.createLayer({
         layerId,
@@ -112,7 +113,28 @@ const LayerManagement: React.FC = () => {
     try {
       await layerApiService.deleteLayer(layerId);
       setLayers(prev => prev.filter(l => l.id !== layerId));
-    } catch (err) {
+    } catch (err: any) {
+      // Server returns 409 with { deployedWorkflows, totalReferences } when the
+      // layer is attached to deployed workflows. Surface that to the user and
+      // offer the force-delete path.
+      const data = err?.response?.data;
+      const deployed = data?.deployedWorkflows as Array<{ id: string; name: string }> | undefined;
+      if (err?.response?.status === 409 && deployed?.length) {
+        const names = deployed.map(w => `• ${w.name}`).join('\n');
+        const ok = window.confirm(
+          `Layer "${layerName}" is attached to ${deployed.length} deployed workflow(s):\n\n${names}\n\n` +
+          `Force delete will detach it from those deployed Lambda functions and may leave the next stack update referencing a missing ARN. Continue?`
+        );
+        if (!ok) return;
+        try {
+          await layerApiService.deleteLayer(layerId, true);
+          setLayers(prev => prev.filter(l => l.id !== layerId));
+          return;
+        } catch (forceErr) {
+          setError(forceErr instanceof Error ? forceErr.message : 'Failed to force-delete layer');
+          return;
+        }
+      }
       setError(err instanceof Error ? err.message : 'Failed to delete layer');
     }
   };
@@ -173,7 +195,7 @@ const LayerManagement: React.FC = () => {
             <div className="layer-field">
               <label>Compatible Runtimes *</label>
               <div className="checkbox-grid">
-                {RUNTIMES.map(rt => (
+                {LAMBDA_RUNTIME_VALUES.map(rt => (
                   <label key={rt} className="layer-checkbox-label">
                     <input
                       type="checkbox"
@@ -189,7 +211,7 @@ const LayerManagement: React.FC = () => {
             <div className="layer-field">
               <label>Compatible Architectures *</label>
               <div className="checkbox-grid">
-                {ARCHITECTURES.map(arch => (
+                {LAMBDA_ARCHITECTURES.map(arch => (
                   <label key={arch} className="layer-checkbox-label">
                     <input
                       type="checkbox"

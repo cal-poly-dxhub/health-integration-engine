@@ -9,6 +9,7 @@ export interface LayerMetadata {
   compatibleArchitectures: string[];
   layerVersionArn: string;
   version: number;
+  sizeBytes?: number;
   createdAt: string;
 }
 
@@ -28,17 +29,28 @@ export interface CreateLayerRequest {
   s3Key: string;
 }
 
+export interface LayerInUseError {
+  error: string;
+  deployedWorkflows?: Array<{ id: string; name: string }>;
+  totalReferences?: number;
+}
+
 class LayerApiService {
   async listLayers(): Promise<LayerMetadata[]> {
     const response = await apiService.get<{ layers: LayerMetadata[] }>('/layers');
     return response.layers;
   }
 
-  async getUploadUrl(name: string, contentType = 'application/zip'): Promise<UploadUrlResponse> {
-    return await apiService.post<UploadUrlResponse>('/layers/upload-url', { name, contentType });
+  async getUploadUrl(name: string): Promise<UploadUrlResponse> {
+    return await apiService.post<UploadUrlResponse>('/layers/upload-url', { name });
   }
 
-  async uploadFile(uploadUrl: string, file: File, contentType = 'application/zip'): Promise<void> {
+  /**
+   * Upload the zip directly to S3 using the presigned PUT URL.
+   * The Content-Type header MUST match the type the URL was signed with
+   * (application/zip), otherwise S3 rejects the request.
+   */
+  async uploadFile(uploadUrl: string, file: File, contentType: string): Promise<void> {
     await axios.put(uploadUrl, file, {
       headers: { 'Content-Type': contentType },
       transformRequest: [(data) => data],
@@ -50,8 +62,9 @@ class LayerApiService {
     return response.layer;
   }
 
-  async deleteLayer(layerId: string): Promise<void> {
-    await apiService.delete(`/layers/${layerId}`);
+  async deleteLayer(layerId: string, force = false): Promise<void> {
+    const path = force ? `/layers/${layerId}?force=true` : `/layers/${layerId}`;
+    await apiService.delete(path);
   }
 }
 

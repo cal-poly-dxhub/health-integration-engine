@@ -1,0 +1,230 @@
+/* NodeComponent v2 — workflow node card on the canvas. */
+/* Class names prefixed with `nc-v2-` to avoid clashing with legacy NodeComponent.css. */
+/* IMPORTANT: keep the `.input-handle`, `.output-handle` and `[data-node-id]`
+   selectors intact — ConnectionsRenderer queries these by name to draw arrows. */
+
+.nc-v2-node {
+  position: absolute;
+  width: 220px;
+  background: var(--nc-surface, #ffffff);
+  border: 1.5px solid var(--nc-color, #cbd5e1);
+  border-radius: 12px;
+  padding: 12px 14px 12px 18px;
+  cursor: grab;
+  user-select: none;
+  font-family: Inter, system-ui, -apple-system, "Segoe UI", Roboto,
+    "Helvetica Neue", Arial, sans-serif;
+  color: #0f172a;
+  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.06),
+    0 4px 12px rgba(15, 23, 42, 0.05);
+  transition: border-color 0.15s ease, box-shadow 0.15s ease,
+    transform 0.05s ease, opacity 0.15s ease;
+  z-index: 5;
+}
+
+.nc-v2-node * {
+  box-sizing: border-box;
+}
+
+.nc-v2-node::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  top: 8px;
+  bottom: 8px;
+  width: 4px;
+  background: var(--nc-color, #cbd5e1);
+  border-radius: 2px;
+}
+
+.nc-v2-node:hover {
+  border-color: var(--nc-color, #94a3b8);
+  box-shadow: 0 2px 4px rgba(15, 23, 42, 0.08),
+    0 12px 24px rgba(15, 23, 42, 0.08);
+}
+
+.nc-v2-node:active {
+  cursor: grabbing;
+}
+
+.nc-v2-node--selected {
+  border-color: #6366f1 !important;
+  box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.18),
+    0 12px 24px rgba(15, 23, 42, 0.1);
+}
+
+.nc-v2-node--dragging {
+  opacity: 0.6;
+  transform: scale(0.98);
+}
+
+.nc-v2-node--unconfigured {
+  border-style: dashed;
+}
+
+.nc-v2-node--connecting {
+  box-shadow: 0 0 0 3px rgba(16, 185, 129, 0.25),
+    0 12px 24px rgba(15, 23, 42, 0.1);
+  border-color: #10b981;
+}
+
+/* ---------- Header (icon + name + delete) ---------- */
+.nc-v2-header {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.nc-v2-icon {
+  width: 30px;
+  height: 30px;
+  border-radius: 8px;
+  background: var(--nc-color, #94a3b8);
+  color: white;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 13px;
+  flex: none;
+}
+
+.nc-v2-title {
+  min-width: 0;
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+}
+
+.nc-v2-name {
+  font-size: 13px;
+  font-weight: 600;
+  color: #0f172a;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  line-height: 1.2;
+}
+
+.nc-v2-type {
+  font-size: 10.5px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: #64748b;
+  margin-top: 2px;
+}
+
+.nc-v2-delete {
+  width: 22px;
+  height: 22px;
+  border: 0;
+  background: transparent;
+  color: #64748b;
+  border-radius: 5px;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 14px;
+  flex: none;
+}
+
+.nc-v2-delete:hover {
+  background: #fef2f2;
+  color: #b91c1c;
+}
+
+/* ---------- Status row ---------- */
+.nc-v2-status {
+  margin-top: 10px;
+  font-size: 11px;
+  font-weight: 500;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.nc-v2-status--ok {
+  color: #047857;
+}
+
+.nc-v2-status--ok::before {
+  content: "";
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: #10b981;
+}
+
+.nc-v2-status--warn {
+  color: #b45309;
+}
+
+.nc-v2-status--warn::before {
+  content: "";
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: #f59e0b;
+}
+
+/* ---------- Connection handles ---------- */
+/* The `input-handle` / `output-handle` class names MUST stay — */
+/* ConnectionsRenderer queries them via document.querySelector. */
+.nc-v2-node .node-handle {
+  position: absolute;
+  top: 50%;
+  width: 16px;
+  height: 16px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transform: translateY(-50%);
+  z-index: 20;
+  background: transparent;
+  border: 0;
+  pointer-events: all;
+}
+
+.nc-v2-node .node-handle.input-handle {
+  left: -8px;
+}
+
+.nc-v2-node .node-handle.output-handle {
+  right: -8px;
+}
+
+.nc-v2-handle-dot {
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  background: var(--nc-color, #94a3b8);
+  border: 2px solid #ffffff;
+  box-shadow: 0 0 0 1px rgba(15, 23, 42, 0.15),
+    0 1px 3px rgba(15, 23, 42, 0.18);
+  transition: transform 0.15s ease, box-shadow 0.15s ease;
+  pointer-events: none;
+}
+
+.nc-v2-node .node-handle:hover .nc-v2-handle-dot {
+  transform: scale(1.25);
+  box-shadow: 0 0 0 4px rgba(99, 102, 241, 0.18),
+    0 2px 6px rgba(15, 23, 42, 0.18);
+}
+
+.nc-v2-connecting-tip {
+  position: absolute;
+  top: -28px;
+  left: 50%;
+  transform: translateX(-50%);
+  padding: 4px 10px;
+  border-radius: 999px;
+  background: #10b981;
+  color: white;
+  font-size: 11px;
+  font-weight: 600;
+  white-space: nowrap;
+  pointer-events: none;
+  box-shadow: 0 2px 6px rgba(16, 185, 129, 0.3);
+}

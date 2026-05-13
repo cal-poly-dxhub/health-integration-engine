@@ -1,14 +1,13 @@
 import { BrowserRouter as Router, Routes, Route, Navigate, useSearchParams } from 'react-router-dom';
 import { AuthProvider, useAuth } from '../contexts/AuthContext';
 import { authService } from '../services/auth';
-import Dashboard from './Dashboard';
-import GlobalSearchPage from './GlobalSearchPage';
-import WorkflowCanvas from './workflow/WorkflowCanvas';
-import WorkflowDetails from './workflow/WorkflowDetails';
-import SignIn from './auth/SignIn';
-import SignUp from './auth/SignUp';
-import ConfirmSignUp from './auth/ConfirmSignUp';
-import ForgotPassword from './auth/ForgotPassword';
+import Dashboard from './Dashboard.v2';
+import WorkflowCanvas from './workflow/WorkflowCanvas.v2';
+import WorkflowDetails from './workflow/WorkflowDetails.v2';
+import SignIn from './auth/SignIn.v2';
+import SignUp from './auth/SignUp.v2';
+import ConfirmSignUp from './auth/ConfirmSignUp.v2';
+import ForgotPassword from './auth/ForgotPassword.v2';
 import './Dashboard.css';
 
 // Auth configuration from environment variables (set by deploy-full-stack script)
@@ -126,11 +125,6 @@ function AppRoutes() {
           <Route path="/workflow/:workflowId" element={
             <ProtectedRoute>
               <WorkflowDetails />
-            </ProtectedRoute>
-          } />
-          <Route path="/search" element={
-            <ProtectedRoute>
-              <GlobalSearchPage />
             </ProtectedRoute>
           } />
           <Route path="/workflow/editor/:workflowId" element={

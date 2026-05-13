@@ -137,12 +137,7 @@ Workflows can include an OpenSearch node to automatically index processed data i
    cd health-integration-engine
    ```
 
-2. **Install all dependencies**:
-   ```bash
-   npm run install:all
-   ```
-
-3. **Deploy the complete stack** (infrastructure + frontend):
+2. **Deploy the complete stack** (infrastructure + frontend):
 
    **macOS / Linux:**
    ```bash

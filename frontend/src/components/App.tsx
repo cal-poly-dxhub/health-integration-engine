@@ -8,7 +8,6 @@ import SignIn from './auth/SignIn.v2';
 import SignUp from './auth/SignUp.v2';
 import ConfirmSignUp from './auth/ConfirmSignUp.v2';
 import ForgotPassword from './auth/ForgotPassword.v2';
-import './Dashboard.css';
 
 // Auth configuration from environment variables (set by deploy-full-stack script)
 const authConfig = {

@@ -8,7 +8,6 @@ import OpenSearchPanel from './workflow/OpenSearchPanel.v2';
 import LayerManagement from './workflow/LayerManagement.v2';
 import { useWorkflows } from '../hooks/useWorkflows';
 import { WorkflowMetadata } from '../types/workflow';
-import './Dashboard.css';
 import './Dashboard.v2.css';
 
 interface DashboardProps {

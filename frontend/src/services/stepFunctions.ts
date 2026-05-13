@@ -92,6 +92,7 @@ export interface ExecutionHistoryEvent {
     resource?: string;
     region?: string;
     resourceType?: string;
+    parameters?: string;
   };
 }
 

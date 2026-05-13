@@ -121,8 +121,15 @@ export class WorkflowLayoutEngine {
       if (level === 0) {
         // For root level, sort by node type priority (start first)
         nodesInLevel.sort((a, b) => {
-          const typePriority = { start: 0, s3: 1, lambda: 2, database: 3, end: 4 };
-          return (typePriority[a.type] || 5) - (typePriority[b.type] || 5);
+          const typePriority: Record<string, number> = {
+            start: 0,
+            s3: 1,
+            lambda: 2,
+            database: 3,
+            opensearch: 4,
+            end: 5,
+          };
+          return (typePriority[a.type] ?? 6) - (typePriority[b.type] ?? 6);
         });
       } else {
         // For other levels, try to minimize connection crossings

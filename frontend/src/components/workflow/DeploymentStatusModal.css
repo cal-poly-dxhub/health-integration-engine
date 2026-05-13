@@ -1,0 +1,565 @@
+/* DeploymentStatusModal — workflow create/update/delete progress modal. */
+/* Class names prefixed with `dsm-` to avoid clashing with legacy DeploymentStatusModal.css. */
+
+.dsm-overlay {
+  --dsm-accent: #6366f1;
+  --dsm-accent-hover: #4f46e5;
+  --dsm-accent-soft: rgba(99, 102, 241, 0.12);
+  --dsm-accent-fg: #4338ca;
+  --dsm-text: #0f172a;
+  --dsm-text-muted: #64748b;
+  --dsm-text-subtle: #94a3b8;
+  --dsm-border: #e2e8f0;
+  --dsm-border-strong: #cbd5e1;
+  --dsm-surface: #ffffff;
+  --dsm-surface-alt: #f8fafc;
+  --dsm-error-bg: #fef2f2;
+  --dsm-error-fg: #b91c1c;
+  --dsm-error-border: #fecaca;
+  --dsm-success-bg: #ecfdf5;
+  --dsm-success-fg: #047857;
+  --dsm-success-border: #a7f3d0;
+  --dsm-warning-bg: #fffbeb;
+  --dsm-warning-fg: #b45309;
+  --dsm-radius-sm: 8px;
+  --dsm-radius-md: 12px;
+  --dsm-radius-lg: 16px;
+
+  position: fixed;
+  inset: 0;
+  background: rgba(15, 23, 42, 0.55);
+  backdrop-filter: blur(2px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 200;
+  padding: 24px;
+  font-family: Inter, system-ui, -apple-system, "Segoe UI", Roboto,
+    "Helvetica Neue", Arial, sans-serif;
+  color: var(--dsm-text);
+}
+
+.dsm-overlay * {
+  box-sizing: border-box;
+}
+
+.dsm-modal {
+  width: 100%;
+  max-width: 620px;
+  max-height: calc(100vh - 48px);
+  background: var(--dsm-surface);
+  border-radius: var(--dsm-radius-lg);
+  box-shadow: 0 24px 60px rgba(15, 23, 42, 0.18);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+/* ---------- Header ---------- */
+.dsm-head {
+  flex: none;
+  padding: 16px 20px;
+  border-bottom: 1px solid var(--dsm-border);
+  background: var(--dsm-surface);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.dsm-title {
+  display: inline-flex;
+  align-items: center;
+  gap: 12px;
+  font-size: 15px;
+  font-weight: 600;
+  margin: 0;
+  letter-spacing: -0.01em;
+  min-width: 0;
+}
+
+.dsm-title-icon {
+  width: 32px;
+  height: 32px;
+  border-radius: 8px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: white;
+  flex: none;
+}
+
+.dsm-title--deploy .dsm-title-icon {
+  background: var(--dsm-accent);
+}
+.dsm-title--delete .dsm-title-icon {
+  background: #ef4444;
+}
+.dsm-title--update .dsm-title-icon {
+  background: #0ea5e9;
+}
+
+.dsm-title-text {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.dsm-title-main {
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--dsm-text);
+}
+
+.dsm-title-sub {
+  font-size: 11.5px;
+  color: var(--dsm-text-muted);
+  font-weight: 400;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 320px;
+}
+
+.dsm-close {
+  width: 30px;
+  height: 30px;
+  border: 0;
+  background: transparent;
+  color: var(--dsm-text-muted);
+  border-radius: 6px;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 18px;
+  flex: none;
+}
+
+.dsm-close:hover {
+  background: var(--dsm-surface-alt);
+  color: var(--dsm-text);
+}
+
+.dsm-close:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+/* ---------- Status banner ---------- */
+.dsm-banner {
+  flex: none;
+  padding: 14px 20px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  border-bottom: 1px solid var(--dsm-border);
+}
+
+.dsm-banner--in_progress {
+  background: linear-gradient(180deg, #eff6ff 0%, #ffffff 100%);
+}
+
+.dsm-banner--completed {
+  background: linear-gradient(180deg, var(--dsm-success-bg) 0%, #ffffff 100%);
+}
+
+.dsm-banner--failed {
+  background: linear-gradient(180deg, var(--dsm-error-bg) 0%, #ffffff 100%);
+}
+
+.dsm-banner--pending {
+  background: linear-gradient(180deg, var(--dsm-warning-bg) 0%, #ffffff 100%);
+}
+
+.dsm-banner-icon {
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: white;
+  flex: none;
+}
+
+.dsm-banner--in_progress .dsm-banner-icon {
+  background: #3b82f6;
+}
+
+.dsm-banner--completed .dsm-banner-icon {
+  background: #10b981;
+}
+
+.dsm-banner--failed .dsm-banner-icon {
+  background: #ef4444;
+}
+
+.dsm-banner--pending .dsm-banner-icon {
+  background: #f59e0b;
+}
+
+.dsm-banner-spinner {
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  border: 2.5px solid rgba(255, 255, 255, 0.45);
+  border-top-color: white;
+  animation: dsm-spin 0.7s linear infinite;
+}
+
+.dsm-banner-body {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.dsm-banner-title {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--dsm-text);
+  margin: 0;
+}
+
+.dsm-banner-sub {
+  font-size: 12px;
+  color: var(--dsm-text-muted);
+  margin: 1px 0 0;
+}
+
+/* ---------- Body / steps ---------- */
+.dsm-body {
+  flex: 1;
+  overflow-y: auto;
+  padding: 16px 20px 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.dsm-section-title {
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--dsm-text-muted);
+  margin: 0 0 6px;
+}
+
+/* ---------- Steps timeline ---------- */
+.dsm-steps {
+  display: flex;
+  flex-direction: column;
+  position: relative;
+}
+
+.dsm-step {
+  display: flex;
+  gap: 14px;
+  position: relative;
+  padding-bottom: 14px;
+}
+
+.dsm-step:last-child {
+  padding-bottom: 0;
+}
+
+.dsm-step-rail {
+  flex: none;
+  width: 24px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  position: relative;
+}
+
+.dsm-step-dot {
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: none;
+  font-size: 11px;
+  font-weight: 700;
+  color: white;
+  background: #94a3b8;
+  border: 2px solid var(--dsm-surface);
+  box-shadow: 0 0 0 2px var(--dsm-border);
+  z-index: 1;
+}
+
+.dsm-step--completed .dsm-step-dot {
+  background: #10b981;
+  box-shadow: 0 0 0 2px #a7f3d0;
+}
+
+.dsm-step--failed .dsm-step-dot {
+  background: #ef4444;
+  box-shadow: 0 0 0 2px var(--dsm-error-border);
+}
+
+.dsm-step--in_progress .dsm-step-dot {
+  background: #3b82f6;
+  box-shadow: 0 0 0 2px #bfdbfe, 0 0 0 6px rgba(59, 130, 246, 0.18);
+  animation: dsm-pulse 1.6s ease-in-out infinite;
+}
+
+.dsm-step--pending .dsm-step-dot {
+  background: #cbd5e1;
+  color: var(--dsm-text-muted);
+  box-shadow: 0 0 0 2px var(--dsm-border);
+}
+
+.dsm-step-line {
+  flex: 1;
+  width: 2px;
+  background: var(--dsm-border);
+  margin-top: 4px;
+}
+
+.dsm-step--completed .dsm-step-line {
+  background: #a7f3d0;
+}
+
+.dsm-step--failed .dsm-step-line {
+  background: var(--dsm-error-border);
+}
+
+.dsm-step:last-child .dsm-step-line {
+  display: none;
+}
+
+.dsm-step-body {
+  flex: 1;
+  min-width: 0;
+  padding-top: 1px;
+}
+
+.dsm-step-name {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--dsm-text);
+  margin: 0;
+  line-height: 1.45;
+  word-break: break-word;
+}
+
+.dsm-step--in_progress .dsm-step-name {
+  color: #1d4ed8;
+}
+
+.dsm-step--failed .dsm-step-name {
+  color: var(--dsm-error-fg);
+}
+
+.dsm-step--pending .dsm-step-name {
+  color: var(--dsm-text-muted);
+}
+
+.dsm-step-meta {
+  font-size: 11.5px;
+  color: var(--dsm-text-muted);
+  margin: 3px 0 0;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  font-variant-numeric: tabular-nums;
+}
+
+.dsm-step-progress {
+  margin-top: 8px;
+  height: 4px;
+  background: var(--dsm-border);
+  border-radius: 999px;
+  overflow: hidden;
+  width: 100%;
+  max-width: 240px;
+}
+
+.dsm-step-progress::after {
+  content: "";
+  display: block;
+  height: 100%;
+  width: 35%;
+  background: linear-gradient(
+    90deg,
+    transparent,
+    #3b82f6,
+    transparent
+  );
+  animation: dsm-progress 1.4s ease-in-out infinite;
+}
+
+@keyframes dsm-progress {
+  0% { transform: translateX(-100%); }
+  100% { transform: translateX(280%); }
+}
+
+@keyframes dsm-pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.65; }
+}
+
+@keyframes dsm-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+/* ---------- Initialising / empty state ---------- */
+.dsm-empty {
+  background: var(--dsm-surface-alt);
+  border: 1px dashed var(--dsm-border-strong);
+  border-radius: var(--dsm-radius-md);
+  padding: 28px;
+  text-align: center;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+  color: var(--dsm-text-muted);
+}
+
+.dsm-empty-spinner {
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  border: 3px solid var(--dsm-border);
+  border-top-color: var(--dsm-accent);
+  animation: dsm-spin 0.7s linear infinite;
+}
+
+.dsm-empty-title {
+  font-size: 13.5px;
+  font-weight: 600;
+  color: var(--dsm-text);
+  margin: 0;
+}
+
+.dsm-empty-list {
+  list-style: none;
+  margin: 6px 0 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 12px;
+  text-align: left;
+  color: var(--dsm-text-muted);
+}
+
+.dsm-empty-list li {
+  padding-left: 14px;
+  position: relative;
+}
+
+.dsm-empty-list li::before {
+  content: "•";
+  position: absolute;
+  left: 0;
+  color: var(--dsm-accent);
+}
+
+/* ---------- Error block ---------- */
+.dsm-error {
+  background: var(--dsm-error-bg);
+  border: 1px solid var(--dsm-error-border);
+  color: var(--dsm-error-fg);
+  border-radius: var(--dsm-radius-md);
+  padding: 14px 16px;
+  display: flex;
+  gap: 10px;
+  align-items: flex-start;
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.dsm-error-icon {
+  flex: none;
+  margin-top: 1px;
+}
+
+/* ---------- Success card with redirect countdown ---------- */
+.dsm-success {
+  background: var(--dsm-success-bg);
+  border: 1px solid var(--dsm-success-border);
+  border-radius: var(--dsm-radius-md);
+  padding: 14px 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.dsm-success-message {
+  font-size: 13px;
+  color: var(--dsm-success-fg);
+  margin: 0;
+  line-height: 1.5;
+}
+
+.dsm-success-actions {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.dsm-redirect-text {
+  font-size: 12px;
+  color: var(--dsm-text-muted);
+  margin: 0;
+}
+
+/* ---------- Footer ---------- */
+.dsm-foot {
+  flex: none;
+  padding: 12px 20px 16px;
+  border-top: 1px solid var(--dsm-border);
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.dsm-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  height: 36px;
+  padding: 0 14px;
+  font-size: 13px;
+  font-weight: 500;
+  font-family: inherit;
+  border-radius: var(--dsm-radius-sm);
+  border: 1px solid var(--dsm-border);
+  background: var(--dsm-surface);
+  color: var(--dsm-text);
+  cursor: pointer;
+  transition: background-color 0.15s ease, border-color 0.15s ease,
+    color 0.15s ease;
+}
+
+.dsm-btn:hover:not(:disabled) {
+  background: var(--dsm-surface-alt);
+  border-color: var(--dsm-border-strong);
+}
+
+.dsm-btn:disabled {
+  cursor: not-allowed;
+  opacity: 0.6;
+}
+
+.dsm-btn--primary {
+  background: var(--dsm-accent);
+  border-color: var(--dsm-accent);
+  color: white;
+  font-weight: 600;
+}
+
+.dsm-btn--primary:hover:not(:disabled) {
+  background: var(--dsm-accent-hover);
+  border-color: var(--dsm-accent-hover);
+}

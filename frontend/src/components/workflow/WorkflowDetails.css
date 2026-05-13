@@ -1,0 +1,1086 @@
+.workflow-details-container {
+  height: 100vh;
+  width: 100vw;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  background: #ffffff;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  overflow-y: auto;
+  position: relative;
+}
+
+/* Breadcrumb */
+.workflow-breadcrumb {
+  display: flex;
+  align-items: center;
+  padding: 1rem 2rem;
+  background: #f8fafc;
+  border-bottom: 1px solid #e2e8f0;
+  font-size: 0.875rem;
+}
+
+.breadcrumb-link {
+  background: none;
+  border: none;
+  color: #3b82f6;
+  cursor: pointer;
+  text-decoration: none;
+  padding: 0;
+  font-size: 0.875rem;
+}
+
+.breadcrumb-link:hover {
+  text-decoration: underline;
+}
+
+.breadcrumb-separator {
+  margin: 0 0.5rem;
+  color: #64748b;
+}
+
+.breadcrumb-current {
+  color: #1e293b;
+  font-weight: 500;
+}
+
+/* Banner */
+.workflow-banner {
+  background: linear-gradient(135deg, #232f3e 0%, #3b82f6 50%, #1e40af 100%);
+  color: white;
+  padding: 1.5rem 2rem;
+  border-bottom: 1px solid #1e40af;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+  width: 100%;
+  box-sizing: border-box;
+  flex-shrink: 0;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  min-height: 80px;
+}
+
+.banner-title {
+  margin: 0;
+  font-size: 1.75rem;
+  font-weight: 600;
+  color: white;
+}
+
+/* Banner Actions - Override the fixed positioning */
+.workflow-banner .workflow-actions {
+  position: static !important;
+  top: auto !important;
+  right: auto !important;
+  left: auto !important;
+  transform: none !important;
+  margin: 0 !important;
+  display: flex !important;
+  gap: 0.75rem !important;
+  align-items: center !important;
+  flex-shrink: 0 !important;
+  z-index: auto !important;
+  justify-content: flex-end !important;
+  height: 100%;
+}
+
+/* Override any conflicting fixed positioning for banner actions */
+.workflow-banner .workflow-actions,
+.workflow-details-container .workflow-banner .workflow-actions,
+.workflow-details-header .workflow-banner .workflow-actions,
+.workflow-title-section .workflow-banner .workflow-actions {
+  position: static !important;
+  top: auto !important;
+  right: auto !important;
+  left: auto !important;
+  transform: none !important;
+  margin: 0 !important;
+}
+
+/* Banner Button Styling - Adjust for dark background */
+.workflow-banner .action-btn {
+  background: rgba(255, 255, 255, 0.2);
+  color: white;
+  border: 1px solid rgba(255, 255, 255, 0.3);
+  padding: 0.75rem 1.5rem;
+  border-radius: 0.375rem;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s;
+  white-space: nowrap;
+  min-width: fit-content;
+  font-size: 0.875rem;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  min-height: 44px;
+}
+
+.workflow-banner .action-btn:hover {
+  background: rgba(255, 255, 255, 0.3);
+  border-color: rgba(255, 255, 255, 0.5);
+}
+
+.workflow-banner .edit-btn {
+  background: rgba(59, 130, 246, 0.8);
+  border-color: rgba(59, 130, 246, 0.9);
+}
+
+.workflow-banner .edit-btn:hover {
+  background: rgba(59, 130, 246, 0.9);
+  border-color: rgba(59, 130, 246, 1);
+}
+
+.workflow-banner .start-execution-btn {
+  background: rgba(255, 153, 0, 0.8);
+  border-color: rgba(255, 153, 0, 0.9);
+}
+
+.workflow-banner .start-execution-btn:hover {
+  background: rgba(255, 153, 0, 0.9);
+  border-color: rgba(255, 153, 0, 1);
+}
+
+.workflow-banner .delete-btn {
+  background: rgba(239, 68, 68, 0.8);
+  border-color: rgba(239, 68, 68, 0.9);
+}
+
+.workflow-banner .delete-btn:hover {
+  background: rgba(239, 68, 68, 0.9);
+  border-color: rgba(239, 68, 68, 1);
+}
+
+/* Header */
+.workflow-details-header {
+  padding: 2rem;
+  border-bottom: 1px solid #e2e8f0;
+  position: relative;
+  width: 100%;
+  box-sizing: border-box;
+}
+
+.workflow-title-section {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  margin-bottom: 2rem;
+  width: 100%;
+}
+
+.workflow-details-header.collapsed .workflow-title-section {
+  margin-bottom: 0;
+}
+
+.toggle-details-btn {
+  background: none;
+  border: 1px solid #d1d5db;
+  border-radius: 6px;
+  padding: 4px 12px;
+  font-size: 13px;
+  color: #6b7280;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: all 0.15s ease;
+}
+
+.toggle-details-btn:hover {
+  background: #f3f4f6;
+  color: #374151;
+  border-color: #9ca3af;
+}
+
+.workflow-title {
+  font-size: 2rem;
+  font-weight: 700;
+  color: #1e293b;
+  margin: 0;
+}
+
+.workflow-actions {
+  position: fixed !important;
+  top: 1rem !important;
+  right: 1rem !important;
+  left: auto !important;
+  display: flex !important;
+  gap: 0.75rem !important;
+  align-items: center !important;
+  flex-shrink: 0 !important;
+  z-index: 1000 !important;
+  transform: none !important;
+  margin: 0 !important;
+  justify-content: flex-end !important;
+}
+
+.action-btn {
+  padding: 0.625rem 1.25rem;
+  border: 1px solid #d1d5db;
+  border-radius: 0.375rem;
+  background: white;
+  color: #374151;
+  font-size: 0.875rem;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s;
+  white-space: nowrap;
+  min-width: fit-content;
+}
+
+.action-btn:hover {
+  background: #f9fafb;
+  border-color: #9ca3af;
+}
+
+.edit-btn {
+  background: #3b82f6;
+  color: white;
+  border-color: #3b82f6;
+  padding: 1rem 2rem !important;
+}
+
+.edit-btn:hover {
+  background: #2563eb;
+  border-color: #2563eb;
+}
+
+.start-execution-btn {
+  background: #ff9900;
+  color: white;
+  border-color: #ff9900;
+  padding: 1rem 2rem !important;
+}
+
+.start-execution-btn:hover {
+  background: #e68900;
+  border-color: #e68900;
+}
+
+.delete-btn {
+  background: #ef4444;
+  color: white;
+  border-color: #ef4444;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 1rem 2rem !important;
+}
+
+.delete-btn:hover {
+  background: #dc2626;
+  border-color: #dc2626;
+}
+
+/* Workflow Info Grid */
+.workflow-info-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+  gap: 1.5rem;
+}
+
+.info-item {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+}
+
+.info-label {
+  font-size: 0.875rem;
+  font-weight: 500;
+  color: #64748b;
+}
+
+.info-value {
+  font-size: 0.875rem;
+  color: #1e293b;
+  word-break: break-all;
+}
+
+/* Tabs */
+.workflow-tabs {
+  display: flex;
+  border-bottom: 1px solid #e2e8f0;
+  background: #f8fafc;
+  padding: 0 2rem;
+}
+
+.tab-btn {
+  background: none;
+  border: none;
+  padding: 1rem 1.5rem;
+  font-size: 0.875rem;
+  font-weight: 500;
+  color: #64748b;
+  cursor: pointer;
+  border-bottom: 2px solid transparent;
+  transition: all 0.2s;
+}
+
+.tab-btn:hover {
+  color: #1e293b;
+  background: rgba(59, 130, 246, 0.05);
+}
+
+.tab-btn.active {
+  color: #3b82f6;
+  border-bottom-color: #3b82f6;
+  background: rgba(59, 130, 246, 0.05);
+}
+
+/* Tab Content */
+.tab-content {
+  padding: 2rem;
+  min-height: 60vh;
+  flex: 1;
+}
+
+/* Executions Tab */
+.executions-tab {
+  display: flex;
+  flex-direction: column;
+}
+
+.executions-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 1.5rem;
+}
+
+.executions-header h3 {
+  font-size: 1.25rem;
+  font-weight: 600;
+  color: #1e293b;
+  margin: 0;
+}
+
+.refresh-btn {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.refresh-btn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed !important;
+}
+
+.action-btn.refresh-btn:disabled:hover {
+  background: white !important;
+  border-color: #d1d5db !important;
+  color: #374151 !important;
+}
+
+/* Enhanced Button Styles - Copied from ExecutionDetails */
+.btn-secondary {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.75rem 1.5rem;
+  border-radius: 8px;
+  font-weight: 500;
+  font-size: 0.875rem;
+  border: 1px solid #d1d5db;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  text-decoration: none;
+  position: relative;
+  overflow: hidden;
+  white-space: nowrap;
+  min-width: fit-content;
+  justify-content: center;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
+  background: white;
+  color: #374151;
+  border-color: #d1d5db;
+}
+
+.btn-secondary:hover:not(:disabled) {
+  background: #f9fafb;
+  border-color: #9ca3af;
+  box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
+  transform: translateY(-1px);
+}
+
+.btn-secondary:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.btn-secondary:disabled:hover {
+  background: white !important;
+  border-color: #d1d5db !important;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05) !important;
+  transform: none !important;
+}
+
+.refresh-btn svg {
+  flex-shrink: 0;
+}
+
+.executions-controls {
+  display: flex;
+  gap: 1rem;
+  align-items: center;
+}
+
+.execution-filters {
+  display: flex;
+  gap: 0.5rem;
+  align-items: center;
+}
+
+.filter-select {
+  padding: 0.375rem 0.75rem;
+  border: 1px solid #d1d5db;
+  border-radius: 0.375rem;
+  font-size: 0.875rem;
+  background: white;
+  cursor: pointer;
+}
+
+.filter-btn {
+  padding: 0.375rem 0.75rem;
+  border: 1px solid #d1d5db;
+  border-radius: 0.375rem;
+  background: white;
+  font-size: 0.875rem;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.filter-btn:hover {
+  background: #f9fafb;
+}
+
+.execution-actions {
+  display: flex;
+  gap: 0.5rem;
+  align-items: center;
+}
+
+.icon-btn {
+  width: 2rem;
+  height: 2rem;
+  border: 1px solid #d1d5db;
+  border-radius: 0.375rem;
+  background: white;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.2s;
+}
+
+.icon-btn:hover {
+  background: #f9fafb;
+}
+
+/* No Executions */
+.no-executions {
+  text-align: center;
+  padding: 4rem 2rem;
+  color: #64748b;
+}
+
+.no-executions p {
+  margin: 0 0 1rem 0;
+  font-size: 1rem;
+}
+
+.start-execution-link {
+  background: none;
+  border: none;
+  color: #3b82f6;
+  cursor: pointer;
+  text-decoration: underline;
+  font-size: 0.875rem;
+}
+
+.start-execution-link:hover {
+  color: #2563eb;
+}
+
+/* Executions Table */
+.executions-table-container {
+  border: 1px solid #e2e8f0;
+  border-radius: 0.5rem;
+  overflow-x: auto;
+  overflow-y: visible;
+  background: white;
+}
+
+.executions-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.875rem;
+  table-layout: fixed;
+}
+
+.executions-table thead {
+  background: #f8fafc;
+  border-bottom: 1px solid #e2e8f0;
+}
+
+.executions-table th {
+  padding: 0.75rem 1rem;
+  text-align: left;
+  font-weight: 600;
+  color: #374151;
+  border-right: 1px solid #f1f5f9;
+  position: relative;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.col-resize-handle {
+  position: absolute;
+  right: 0;
+  top: 0;
+  bottom: 0;
+  width: 5px;
+  cursor: col-resize;
+  background: transparent;
+  z-index: 1;
+}
+
+.col-resize-handle:hover,
+.col-resize-handle:active {
+  background: #3b82f6;
+}
+
+.executions-table th:last-child {
+  border-right: none;
+}
+
+.execution-row {
+  border-bottom: 1px solid #f1f5f9;
+  transition: background-color 0.2s;
+}
+
+.execution-row:hover {
+  background: #f8fafc;
+}
+
+.execution-row:last-child {
+  border-bottom: none;
+}
+
+.execution-row td {
+  padding: 0.75rem 1rem;
+  border-right: 1px solid #f1f5f9;
+  vertical-align: middle;
+  color: #374151;
+  background-color: transparent;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.execution-row td:last-child {
+  border-right: none;
+}
+
+.execution-name {
+  /* no min-width — let table-layout: fixed handle sizing */
+}
+
+/* Status column specific styling */
+.executions-table th:nth-child(2),
+.executions-table td:nth-child(2) {
+  text-align: center;
+}
+
+.executions-table td:nth-child(2) {
+  padding: 0.75rem 0.25rem;
+}
+
+/* Ensure status badges in table have proper sizing */
+.executions-table .status-badge {
+  padding: 0.5rem 0.75rem;
+  font-size: 0.7rem;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  display: inline-block;
+  max-width: 100%;
+}
+
+.execution-link {
+  background: none;
+  border: none;
+  color: #3b82f6;
+  cursor: pointer;
+  text-decoration: none;
+  padding: 0;
+  font-size: 0.875rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  display: block;
+  max-width: 100%;
+}
+
+.execution-link:hover {
+  text-decoration: underline;
+}
+
+.execution-status {
+  font-weight: 500;
+  text-transform: uppercase;
+  font-size: 0.75rem;
+  letter-spacing: 0.05em;
+}
+
+/* Status Badges - Similar to ExecutionDetails */
+.status-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.375rem;
+  padding: 0.5rem 1rem;
+  border-radius: 0.375rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  font-size: 0.75rem;
+  border: 1px solid transparent;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05);
+  min-width: 120px;
+  width: 120px;
+  justify-content: center;
+  transition: all 0.2s ease;
+  white-space: nowrap;
+}
+
+.status-badge:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+}
+
+.status-badge .status-icon {
+  font-size: 0.875rem;
+  font-weight: bold;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 1rem;
+  height: 1rem;
+}
+
+/* Status Colors */
+.status-badge.status-succeeded {
+  background-color: #d4edda;
+  color: #155724;
+  border-color: #c3e6cb;
+}
+
+.status-badge.status-succeeded .status-icon {
+  color: #28a745;
+}
+
+.status-badge.status-failed {
+  background-color: #f8d7da;
+  color: #721c24;
+  border-color: #f5c6cb;
+}
+
+.status-badge.status-failed .status-icon {
+  color: #dc3545;
+}
+
+.status-badge.status-running {
+  background-color: #cce7ff;
+  color: #004085;
+  border-color: #99d3ff;
+}
+
+.status-badge.status-running .status-icon {
+  color: #007bff;
+  width: 14px;
+  height: 14px;
+  border: 2px solid #99d3ff;
+  border-top-color: #007bff;
+  border-radius: 50%;
+  animation: spin 1s linear infinite;
+}
+
+.status-badge.status-aborted,
+.status-badge.status-cancelled,
+.status-badge.status-stopped {
+  background-color: #e2e3e5;
+  color: #383d41;
+  border-color: #c6c8ca;
+}
+
+.status-badge.status-aborted .status-icon,
+.status-badge.status-cancelled .status-icon,
+.status-badge.status-stopped .status-icon {
+  color: #6c757d;
+}
+
+.status-badge.status-timed_out {
+  background-color: #fff3cd;
+  color: #856404;
+  border-color: #ffeaa7;
+}
+
+.status-badge.status-timed_out .status-icon {
+  color: #ffc107;
+}
+
+/* Loading and Error States */
+.workflow-details-loading,
+.workflow-details-error {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  height: 100%;
+  padding: 2rem;
+  text-align: center;
+}
+
+.loading-spinner {
+  width: 2rem;
+  height: 2rem;
+  border: 2px solid #e5e7eb;
+  border-top: 2px solid #3b82f6;
+  border-radius: 50%;
+  animation: spin 1s linear infinite;
+  margin-bottom: 1rem;
+}
+
+@keyframes spin {
+  0% { transform: rotate(0deg); }
+  100% { transform: rotate(360deg); }
+}
+
+.workflow-details-error h3 {
+  font-size: 1.5rem;
+  font-weight: 600;
+  color: #dc2626;
+  margin: 0 0 0.5rem 0;
+}
+
+.workflow-details-error p {
+  color: #64748b;
+  margin: 0 0 2rem 0;
+}
+
+.back-btn {
+  background: #3b82f6;
+  color: white;
+  border: none;
+  padding: 0.75rem 1.5rem;
+  border-radius: 0.375rem;
+  font-weight: 500;
+  cursor: pointer;
+  transition: background-color 0.2s;
+}
+
+.back-btn:hover {
+  background: #2563eb;
+}
+
+/* Definition Tab */
+.definition-tab {
+  padding: 2rem;
+}
+
+.definition-tab h3 {
+  font-size: 1.25rem;
+  font-weight: 600;
+  color: #1e293b;
+  margin: 0 0 1.5rem 0;
+}
+
+.definition-content {
+  display: flex;
+  flex-direction: column;
+  gap: 2rem;
+}
+
+.definition-info {
+  background: #f8fafc;
+  padding: 1rem;
+  border-radius: 0.5rem;
+  border: 1px solid #e2e8f0;
+}
+
+.definition-info p {
+  margin: 0.5rem 0;
+  color: #1e293b;
+  font-size: 0.875rem;
+}
+
+.definition-json h4 {
+  font-size: 1rem;
+  font-weight: 600;
+  color: #1e293b;
+  margin: 0 0 1rem 0;
+}
+
+.json-display {
+  background: #1e293b;
+  color: #e2e8f0;
+  padding: 1.5rem;
+  border-radius: 0.5rem;
+  font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', monospace;
+  font-size: 0.875rem;
+  line-height: 1.5;
+  overflow-x: auto;
+  white-space: pre;
+}
+
+.deploy-workflow-btn {
+  background: linear-gradient(135deg, #3b82f6 0%, #1d4ed8 100%);
+  color: white;
+  border: none;
+  border-radius: 0.5rem;
+  padding: 0.875rem 1.5rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s;
+  margin-top: 1rem;
+  box-shadow: 0 4px 6px -1px rgba(59, 130, 246, 0.2);
+}
+
+.deploy-workflow-btn:hover {
+  background: linear-gradient(135deg, #2563eb 0%, #1e40af 100%);
+  transform: translateY(-1px);
+  box-shadow: 0 6px 8px -1px rgba(59, 130, 246, 0.3);
+}
+
+/* Executions Loading */
+.executions-loading {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 3rem;
+  color: #64748b;
+}
+
+.executions-loading .loading-spinner {
+  margin-bottom: 1rem;
+}
+
+/* Responsive Design */
+@media (max-width: 1024px) {
+  .workflow-title-section {
+    padding-right: 0;
+    margin-bottom: 4rem; /* More space for buttons */
+  }
+  
+  .workflow-actions {
+    position: static;
+    margin-top: 1rem;
+    justify-content: flex-start;
+  }
+  
+  .workflow-info-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 768px) {
+  .workflow-details-header {
+    padding: 1rem;
+  }
+  
+  .tab-content {
+    padding: 1rem;
+  }
+  
+  .workflow-tabs {
+    padding: 0 1rem;
+    overflow-x: auto;
+  }
+  
+  .tab-btn {
+    white-space: nowrap;
+    padding: 1rem;
+  }
+  
+  .executions-table-container {
+    overflow-x: auto;
+  }
+  
+  .executions-table {
+    min-width: 800px;
+  }
+}/* Force
+ buttons to absolute right corner - override any conflicting styles */
+.workflow-details-container .workflow-actions {
+  position: fixed !important;
+  top: 1rem !important;
+  right: 1rem !important;
+  left: auto !important;
+  transform: none !important;
+  margin-left: auto !important;
+  margin-right: 0 !important;
+  justify-content: flex-end !important;
+}
+
+/* Ensure no flexbox or grid parent can center the buttons */
+.workflow-details-header .workflow-actions,
+.workflow-title-section .workflow-actions {
+  position: fixed !important;
+  right: 1rem !important;
+  left: auto !important;
+  top: 1rem !important;
+}
+
+/* Filter Row Styles */
+.executions-filter-row td {
+  padding: 0.5rem;
+  background-color: #f8fafc;
+  border-bottom: 2px solid #e2e8f0;
+  border-right: 1px solid #f1f5f9;
+}
+
+.filter-input {
+  width: 100%;
+  padding: 0.5rem;
+  border: 1px solid #d1d5db;
+  border-radius: 0.375rem;
+  font-size: 0.875rem;
+  background-color: white;
+  box-sizing: border-box;
+}
+
+.filter-input:focus {
+  outline: none;
+  border-color: #3b82f6;
+  box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.1);
+}
+
+.filter-select {
+  width: 100%;
+  padding: 0.5rem;
+  border: 1px solid #d1d5db;
+  border-radius: 0.375rem;
+  font-size: 0.875rem;
+  background-color: white;
+  cursor: pointer;
+  box-sizing: border-box;
+}
+
+.filter-select:focus {
+  outline: none;
+  border-color: #3b82f6;
+  box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.1);
+}
+
+/* Error Column Styles */
+.error-cell {
+  max-width: 250px;
+}
+
+.error-content {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  cursor: help;
+}
+
+.error-type {
+  color: #dc2626;
+  font-weight: 600;
+  font-size: 0.875rem;
+}
+
+.error-cause {
+  color: #6b7280;
+  font-size: 0.75rem;
+  line-height: 1.3;
+  word-break: break-word;
+}
+
+.error-unknown {
+  color: #9ca3af;
+  font-style: italic;
+  font-size: 0.875rem;
+}
+
+.action-btn.search-btn {
+  background: rgba(255, 255, 255, 0.15);
+  border: 1px solid rgba(255, 255, 255, 0.3);
+  color: #fff;
+}
+
+.action-btn.search-btn:hover {
+  background: rgba(255, 255, 255, 0.25);
+  border-color: rgba(255, 255, 255, 0.5);
+}
+
+/* Multi-select batch re-execution */
+.executions-header-actions {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+}
+
+.batch-execution-btn {
+  padding: 0.5rem 1rem;
+  background: #2563eb;
+  color: #fff;
+  border: none;
+  border-radius: 6px;
+  font-size: 0.875rem;
+  font-weight: 500;
+  cursor: pointer;
+}
+
+.batch-execution-btn:hover {
+  background: #1d4ed8;
+}
+
+.batch-execution-btn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.checkbox-col {
+  width: 40px;
+  text-align: center;
+}
+
+.checkbox-col input[type="checkbox"] {
+  cursor: pointer;
+  width: 16px;
+  height: 16px;
+}
+
+.execution-row.selected {
+  background-color: #eff6ff;
+}
+
+.batch-confirm-modal {
+  max-width: 440px;
+}
+
+.batch-confirm-note {
+  color: #64748b;
+  font-size: 0.875rem;
+  margin-top: 0.5rem;
+}
+
+.batch-progress-bar {
+  position: fixed;
+  bottom: 1rem;
+  right: 1rem;
+  background: #1e293b;
+  color: #fff;
+  padding: 0.75rem 1.25rem;
+  border-radius: 8px;
+  font-size: 0.875rem;
+  z-index: 1000;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+}
+
+.batch-progress-bar .batch-failed {
+  color: #fca5a5;
+}

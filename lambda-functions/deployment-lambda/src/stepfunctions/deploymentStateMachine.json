@@ -1,0 +1,487 @@
+{
+  "Comment": "Workflow Deployment Orchestration State Machine",
+  "StartAt": "InitializeDeployment",
+  "States": {
+    "InitializeDeployment": {
+      "Type": "Task",
+      "Resource": "arn:aws:states:::lambda:invoke",
+      "Parameters": {
+        "FunctionName": "${InitializeLambdaArn}",
+        "Payload.$": "$"
+      },
+      "ResultPath": "$.initResult",
+      "Next": "UpdateWorkflowStatusDeploying",
+      "Catch": [
+        {
+          "ErrorEquals": ["States.ALL"],
+          "Next": "HandleDeploymentFailure",
+          "ResultPath": "$.deploymentError"
+        }
+      ]
+    },
+    
+    "UpdateWorkflowStatusDeploying": {
+      "Type": "Task",
+      "Resource": "arn:aws:states:::lambda:invoke",
+      "Parameters": {
+        "FunctionName": "${WorkflowStatusUpdateLambdaArn}",
+        "Payload": {
+          "workflowId.$": "$.deploymentContext.workflowId",
+          "userId.$": "$.deploymentContext.userId",
+          "status": "deploying",
+          "timestamp.$": "$$.State.EnteredTime"
+        }
+      },
+      "ResultPath": "$.workflowStatusResult",
+      "Next": "PublishDeploymentStartEvent",
+      "Catch": [
+        {
+          "ErrorEquals": ["States.ALL"],
+          "Next": "HandleDeploymentFailure",
+          "ResultPath": "$.deploymentError"
+        }
+      ]
+    },
+    
+    "PublishDeploymentStartEvent": {
+      "Type": "Task",
+      "Resource": "arn:aws:states:::events:putEvents",
+      "Parameters": {
+        "Entries": [
+          {
+            "Source": "workflow-builder.deployment",
+            "DetailType": "Deployment Status Update",
+            "Detail": {
+              "deploymentId.$": "$.deploymentContext.deploymentId",
+              "status": "initializing",
+              "message": "Starting workflow deployment process...",
+              "timestamp.$": "$$.State.EnteredTime"
+            }
+          }
+        ]
+      },
+      "ResultPath": null,
+      "Next": "GenerateCloudFormationTemplate"
+    },
+    
+    "GenerateCloudFormationTemplate": {
+      "Type": "Task",
+      "Resource": "arn:aws:states:::lambda:invoke",
+      "Parameters": {
+        "FunctionName": "${TemplateGeneratorLambdaArn}",
+        "Payload.$": "$"
+      },
+      "ResultPath": "$.templateResult",
+      "Next": "PublishTemplateGeneratedEvent",
+      "Catch": [
+        {
+          "ErrorEquals": ["States.ALL"],
+          "Next": "HandleDeploymentFailure",
+          "ResultPath": "$.deploymentError"
+        }
+      ]
+    },
+    
+    "PublishTemplateGeneratedEvent": {
+      "Type": "Task",
+      "Resource": "arn:aws:states:::events:putEvents",
+      "Parameters": {
+        "Entries": [
+          {
+            "Source": "workflow-builder.deployment",
+            "DetailType": "Deployment Status Update",
+            "Detail": {
+              "deploymentId.$": "$.deploymentContext.deploymentId",
+              "status": "template_generated",
+              "timestamp.$": "$$.State.EnteredTime"
+            }
+          }
+        ]
+      },
+      "ResultPath": null,
+      "Next": "CheckTemplateGenerationResult"
+    },
+    
+    "CheckTemplateGenerationResult": {
+      "Type": "Choice",
+      "Choices": [
+        {
+          "Variable": "$.templateResult.Payload.statusCode",
+          "NumericEquals": 200,
+          "Next": "PublishStackDeploymentStartEvent"
+        }
+      ],
+      "Default": "HandleTemplateGenerationFailure"
+    },
+    
+    "HandleTemplateGenerationFailure": {
+      "Type": "Task",
+      "Resource": "arn:aws:states:::events:putEvents",
+      "Parameters": {
+        "Entries": [
+          {
+            "Source": "workflow-builder.deployment",
+            "DetailType": "Deployment Status Update",
+            "Detail": {
+              "deploymentId.$": "$.deploymentContext.deploymentId",
+              "status": "failed",
+              "error": {
+                "message.$": "$.templateResult.Payload.body"
+              },
+              "timestamp.$": "$$.State.EnteredTime"
+            }
+          }
+        ]
+      },
+      "ResultPath": null,
+      "Next": "UpdateDeploymentStatusFailed"
+    },
+
+    "PublishStackDeploymentStartEvent": {
+      "Type": "Task",
+      "Resource": "arn:aws:states:::events:putEvents",
+      "Parameters": {
+        "Entries": [
+          {
+            "Source": "workflow-builder.deployment",
+            "DetailType": "Deployment Status Update",
+            "Detail": {
+              "deploymentId.$": "$.deploymentContext.deploymentId",
+              "status": "deploying_infrastructure",
+              "message": "Creating AWS resources (Lambda functions, IAM roles, Step Functions)...",
+              "timestamp.$": "$$.State.EnteredTime"
+            }
+          }
+        ]
+      },
+      "ResultPath": null,
+      "Next": "DeployCloudFormationStack"
+    },
+
+    "DeployCloudFormationStack": {
+      "Type": "Task",
+      "Resource": "arn:aws:states:::aws-sdk:cloudformation:createStack",
+      "Parameters": {
+        "StackName.$": "$.templateResult.Payload.stackName",
+        "TemplateBody.$": "$.templateResult.Payload.template",
+        "Parameters.$": "$.templateResult.Payload.parameters",
+        "Tags.$": "$.templateResult.Payload.tags",
+        "Capabilities": ["CAPABILITY_IAM", "CAPABILITY_NAMED_IAM"]
+      },
+      "ResultPath": "$.stackResult",
+      "Next": "PublishStackCreationEvent",
+      "Catch": [
+        {
+          "ErrorEquals": ["CloudFormation.AlreadyExistsException"],
+          "Next": "PublishStackUpdateEvent",
+          "ResultPath": "$.deploymentError"
+        },
+        {
+          "ErrorEquals": ["States.ALL"],
+          "Next": "HandleDeploymentFailure",
+          "ResultPath": "$.deploymentError"
+        }
+      ]
+    },
+
+    "PublishStackCreationEvent": {
+      "Type": "Task",
+      "Resource": "arn:aws:states:::events:putEvents",
+      "Parameters": {
+        "Entries": [
+          {
+            "Source": "workflow-builder.deployment",
+            "DetailType": "Deployment Status Update",
+            "Detail": {
+              "deploymentId.$": "$.deploymentContext.deploymentId",
+              "status": "stack_creating",
+              "message": "CloudFormation stack creation initiated. Waiting for resources to be created...",
+              "timestamp.$": "$$.State.EnteredTime"
+            }
+          }
+        ]
+      },
+      "ResultPath": null,
+      "Next": "WaitForStackCompletion"
+    },
+
+    "PublishStackUpdateEvent": {
+      "Type": "Task",
+      "Resource": "arn:aws:states:::events:putEvents",
+      "Parameters": {
+        "Entries": [
+          {
+            "Source": "workflow-builder.deployment",
+            "DetailType": "Deployment Status Update",
+            "Detail": {
+              "deploymentId.$": "$.deploymentContext.deploymentId",
+              "status": "stack_updating",
+              "message": "Updating existing CloudFormation stack with new resources...",
+              "timestamp.$": "$$.State.EnteredTime"
+            }
+          }
+        ]
+      },
+      "ResultPath": null,
+      "Next": "UpdateCloudFormationStack"
+    },
+    
+    "UpdateCloudFormationStack": {
+      "Type": "Task",
+      "Resource": "arn:aws:states:::aws-sdk:cloudformation:updateStack",
+      "Parameters": {
+        "StackName.$": "$.templateResult.Payload.stackName",
+        "TemplateBody.$": "$.templateResult.Payload.template",
+        "Parameters.$": "$.templateResult.Payload.parameters",
+        "Tags.$": "$.templateResult.Payload.tags",
+        "Capabilities": ["CAPABILITY_IAM", "CAPABILITY_NAMED_IAM"]
+      },
+      "ResultPath": "$.stackResult",
+      "Next": "WaitForStackCompletion",
+      "Catch": [
+        {
+          "ErrorEquals": ["States.ALL"],
+          "Next": "HandleDeploymentFailure",
+          "ResultPath": "$.deploymentError"
+        }
+      ]
+    },
+    
+    "WaitForStackCompletion": {
+      "Type": "Wait",
+      "Seconds": 30,
+      "Next": "CheckStackStatus"
+    },
+    
+    "CheckStackStatus": {
+      "Type": "Task",
+      "Resource": "arn:aws:states:::aws-sdk:cloudformation:describeStacks",
+      "Parameters": {
+        "StackName.$": "$.templateResult.Payload.stackName"
+      },
+      "ResultPath": "$.stackStatus",
+      "Next": "PublishStackProgressEvent"
+    },
+
+    "PublishStackProgressEvent": {
+      "Type": "Task",
+      "Resource": "arn:aws:states:::events:putEvents",
+      "Parameters": {
+        "Entries": [
+          {
+            "Source": "workflow-builder.deployment",
+            "DetailType": "Deployment Status Update",
+            "Detail": {
+              "deploymentId.$": "$.deploymentContext.deploymentId",
+              "status": "monitoring_stack",
+              "message.$": "States.Format('CloudFormation stack status: {}', $.stackStatus.Stacks[0].StackStatus)",
+              "timestamp.$": "$$.State.EnteredTime"
+            }
+          }
+        ]
+      },
+      "ResultPath": null,
+      "Next": "EvaluateStackStatus"
+    },
+    
+    "EvaluateStackStatus": {
+      "Type": "Choice",
+      "Choices": [
+        {
+          "Or": [
+            {
+              "Variable": "$.stackStatus.Stacks[0].StackStatus",
+              "StringEquals": "CREATE_COMPLETE"
+            },
+            {
+              "Variable": "$.stackStatus.Stacks[0].StackStatus",
+              "StringEquals": "UPDATE_COMPLETE"
+            }
+          ],
+          "Next": "PublishDeploymentSuccessEvent"
+        },
+        {
+          "Or": [
+            {
+              "Variable": "$.stackStatus.Stacks[0].StackStatus",
+              "StringEquals": "CREATE_IN_PROGRESS"
+            },
+            {
+              "Variable": "$.stackStatus.Stacks[0].StackStatus",
+              "StringEquals": "UPDATE_IN_PROGRESS"
+            },
+            {
+              "Variable": "$.stackStatus.Stacks[0].StackStatus",
+              "StringEquals": "UPDATE_COMPLETE_CLEANUP_IN_PROGRESS"
+            }
+          ],
+          "Next": "WaitForStackCompletion"
+        },
+        {
+          "Or": [
+            {
+              "Variable": "$.stackStatus.Stacks[0].StackStatus",
+              "StringEquals": "ROLLBACK_COMPLETE"
+            },
+            {
+              "Variable": "$.stackStatus.Stacks[0].StackStatus",
+              "StringEquals": "ROLLBACK_FAILED"
+            },
+            {
+              "Variable": "$.stackStatus.Stacks[0].StackStatus",
+              "StringEquals": "ROLLBACK_IN_PROGRESS"
+            },
+            {
+              "Variable": "$.stackStatus.Stacks[0].StackStatus",
+              "StringEquals": "CREATE_FAILED"
+            },
+            {
+              "Variable": "$.stackStatus.Stacks[0].StackStatus",
+              "StringEquals": "UPDATE_FAILED"
+            },
+            {
+              "Variable": "$.stackStatus.Stacks[0].StackStatus",
+              "StringEquals": "UPDATE_ROLLBACK_COMPLETE"
+            },
+            {
+              "Variable": "$.stackStatus.Stacks[0].StackStatus",
+              "StringEquals": "UPDATE_ROLLBACK_FAILED"
+            }
+          ],
+          "Next": "HandleDeploymentFailure"
+        }
+      ],
+      "Default": "WaitForStackCompletion"
+    },
+    
+    "PublishDeploymentSuccessEvent": {
+      "Type": "Task",
+      "Resource": "arn:aws:states:::events:putEvents",
+      "Parameters": {
+        "Entries": [
+          {
+            "Source": "workflow-builder.deployment",
+            "DetailType": "Deployment Status Update",
+            "Detail": {
+              "deploymentId.$": "$.deploymentContext.deploymentId",
+              "status": "completed",
+              "cloudFormationStackArn.$": "$.stackStatus.Stacks[0].StackId",
+              "timestamp.$": "$$.State.EnteredTime"
+            }
+          }
+        ]
+      },
+      "ResultPath": null,
+      "Next": "UpdateDeploymentStatusSuccess"
+    },
+    
+    "UpdateDeploymentStatusSuccess": {
+      "Type": "Task",
+      "Resource": "arn:aws:states:::lambda:invoke",
+      "Parameters": {
+        "FunctionName": "${StatusUpdateLambdaArn}",
+        "Payload": {
+          "deploymentId.$": "$.deploymentContext.deploymentId",
+          "status": "completed",
+          "cloudFormationStackArn.$": "$.stackStatus.Stacks[0].StackId"
+        }
+      },
+      "ResultPath": "$.deploymentStatusResult",
+      "Next": "UpdateWorkflowStatusDeployed"
+    },
+    
+    "UpdateWorkflowStatusDeployed": {
+      "Type": "Task",
+      "Resource": "arn:aws:states:::lambda:invoke",
+      "Parameters": {
+        "FunctionName": "${WorkflowStatusUpdateLambdaArn}",
+        "Payload": {
+          "workflowId.$": "$.deploymentContext.workflowId",
+          "userId.$": "$.deploymentContext.userId",
+          "status": "deployed",
+          "stateMachineArn.$": "$.deploymentStatusResult.Payload.workflowStepFunctionArn",
+          "stackName.$": "$.templateResult.Payload.stackName",
+          "timestamp.$": "$$.State.EnteredTime"
+        }
+      },
+      "ResultPath": "$.workflowUpdateResult",
+      "Next": "PublishFinalCompletionEvent"
+    },
+
+    "PublishFinalCompletionEvent": {
+      "Type": "Task",
+      "Resource": "arn:aws:states:::events:putEvents",
+      "Parameters": {
+        "Entries": [
+          {
+            "Source": "workflow-builder.deployment",
+            "DetailType": "Deployment Status Update",
+            "Detail": {
+              "deploymentId.$": "$.deploymentContext.deploymentId",
+              "status": "completed",
+              "message": "🎉 Workflow deployed successfully and is ready to use!",
+              "timestamp.$": "$$.State.EnteredTime"
+            }
+          }
+        ]
+      },
+      "End": true
+    },
+    
+    "HandleDeploymentFailure": {
+      "Type": "Task",
+      "Resource": "arn:aws:states:::events:putEvents",
+      "Parameters": {
+        "Entries": [
+          {
+            "Source": "workflow-builder.deployment",
+            "DetailType": "Deployment Status Update",
+            "Detail": {
+              "deploymentId.$": "$.deploymentContext.deploymentId",
+              "status": "failed",
+              "error": {
+                "message": "Deployment failed - check deployment logs for details"
+              },
+              "timestamp.$": "$$.State.EnteredTime"
+            }
+          }
+        ]
+      },
+      "ResultPath": null,
+      "Next": "UpdateDeploymentStatusFailed"
+    },
+    
+    "UpdateDeploymentStatusFailed": {
+      "Type": "Task",
+      "Resource": "arn:aws:states:::lambda:invoke",
+      "Parameters": {
+        "FunctionName": "${StatusUpdateLambdaArn}",
+        "Payload": {
+          "deploymentId.$": "$.deploymentContext.deploymentId",
+          "status": "failed",
+          "error": {
+            "message": "Deployment failed - check deployment logs for details"
+          }
+        }
+      },
+      "ResultPath": "$.deploymentStatusResult",
+      "Next": "UpdateWorkflowStatusFailed"
+    },
+    
+    "UpdateWorkflowStatusFailed": {
+      "Type": "Task",
+      "Resource": "arn:aws:states:::lambda:invoke",
+      "Parameters": {
+        "FunctionName": "${WorkflowStatusUpdateLambdaArn}",
+        "Payload": {
+          "workflowId.$": "$.deploymentContext.workflowId",
+          "userId.$": "$.deploymentContext.userId",
+          "status": "failed",
+          "errorMessage": "Deployment failed - see deployment logs for details",
+          "timestamp.$": "$$.State.EnteredTime"
+        }
+      },
+      "End": true
+    }
+  }
+}

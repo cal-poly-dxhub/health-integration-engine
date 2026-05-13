@@ -1,0 +1,117 @@
+# Workflow Builder Configuration
+# Change these values to deploy with different names
+
+# AWS region for deployment (optional). If set, --region flag must match or be omitted.
+# region: "us-west-2"
+
+# Project prefix - used for all resource names
+projectName: "workflow-builder"
+projectNamePascal: "WorkflowBuilder"  # PascalCase version for CDK construct IDs
+
+# Stack configuration
+stack:
+  name: "WorkflowBuilderStack"
+  description: "AWS Step Functions Workflow Builder Infrastructure"
+  tags:
+    Project: "WorkflowBuilder"
+
+# Cognito configuration
+cognito:
+  userPoolName: "workflow-builder-user-pool"
+  userPoolClientName: "workflow-builder-client"
+  identityPoolName: "workflow-builder-identity-pool"
+  domainPrefix: "workflow-builder"  # Will be appended with environment and account ID
+
+# API Gateway configuration
+apiGateway:
+  name: "workflow-builder-api"
+  stageName: "v1"
+  authorizerName: "workflow-builder-authorizer"
+  logGroupName: "/aws/apigateway/workflow-builder"
+
+# DynamoDB tables
+dynamodb:
+  deploymentsTable: "WorkflowBuilder-Deployments"
+  workflowsTable: "WorkflowBuilder-Workflows"
+
+# S3 buckets (account ID and region will be appended)
+s3:
+  lambdaCodeBucket: "workflow-builder-lambda-code"
+  frontendBucket: "workflow-builder-frontend"
+  amplifySourceBucket: "workflow-builder-amplify-source"
+
+# Step Functions
+stepFunctions:
+  deploymentStateMachine: "workflow-builder-deployment"
+  deletionStateMachine: "workflow-builder-deletion"
+  deploymentLogGroup: "/aws/stepfunctions/workflow-builder-deployment"
+  deletionLogGroup: "/aws/stepfunctions/workflow-builder-deletion"
+
+# EventBridge rules
+eventBridge:
+  stepFunctionStateChanges: "workflow-builder-stepfunction-state-changes"
+  deletionStateChanges: "workflow-builder-deletion-stepfunction-state-changes"
+  deploymentEvents: "workflow-builder-deployment-events"
+  deletionEvents: "workflow-builder-deletion-events"
+
+# Lambda functions
+lambda:
+  # Deployment functions
+  deployment: "workflow-builder-deployment"
+  deploymentStatus: "workflow-builder-deployment-status"
+  deploymentStatusUpdate: "workflow-builder-deployment-status-update"
+  deploymentHistory: "workflow-builder-deployment-history"
+  workflowStatusUpdate: "workflow-builder-workflow-status-update"
+  
+  # Execution functions
+  listExecutions: "workflow-builder-list-executions"
+  describeExecution: "workflow-builder-describe-execution"
+  executionHistory: "workflow-builder-execution-history"
+  startExecution: "workflow-builder-start-execution"
+  stopExecution: "workflow-builder-stop-execution"
+  describeStateMachine: "workflow-builder-describe-state-machine"
+  describeStateMachineForExecution: "workflow-builder-describe-state-machine-for-execution"
+  redriveExecution: "workflow-builder-redrive-execution"
+  
+  # Workflow functions
+  listWorkflows: "workflow-builder-list-workflows"
+  saveWorkflow: "workflow-builder-save-workflow"
+  workflow: "workflow-builder-workflow"
+  deleteWorkflow: "workflow-builder-delete-workflow"
+  
+  # Deletion functions
+  deleteCloudFormationStack: "workflow-builder-delete-cloudformation-stack"
+  deleteDatabaseRecords: "workflow-builder-delete-database-records"
+  
+  # WebSocket functions
+  wsConnect: "websocket-connect-handler"
+  wsDisconnect: "websocket-disconnect-handler"
+  wsDefault: "websocket-default-handler"
+  wsEventBridge: "eventbridge-handler"
+
+# Amplify
+amplify:
+  appName: "workflow-builder"
+
+# VPC configuration for deployed workflow Lambdas and OpenSearch
+# This is account-wide — all workflows share the same VPC setting.
+# mode: "none" | "existing" | "new"
+#   none     — No VPC created. Lambdas run without VPC. OpenSearch uses public endpoint.
+#   existing — Provide your VPC. Parent Lambdas, OpenSearch, and all child workflow Lambdas run in it. No new VPC created.
+#   new      — CDK creates exactly one shared VPC. Parent Lambdas, OpenSearch, and all child workflow Lambdas run in it.
+vpc:
+  mode: "none"
+  existing:
+    vpcId: "vpc-0abc123def456"
+    subnetIds:
+      - "subnet-abc123"
+      - "subnet-def456"
+    securityGroupIds:
+      - "sg-abc123"
+  new:
+    cidrBlock: "10.0.0.0/16"
+
+# OpenSearch Serverless configuration
+# Set to true to deploy an OpenSearch Serverless collection for indexing/search.
+# Set to false to skip OpenSearch deployment entirely (the UI checkbox will be hidden).
+enableOpenSearch: true

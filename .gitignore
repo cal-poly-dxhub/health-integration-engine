@@ -1,207 +1,293 @@
-# Byte-compiled / optimized / DLL files
-__pycache__/
-*.py[codz]
-*$py.class
+# ============================================
+# Node.js Dependencies
+# ============================================
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+lerna-debug.log*
+package-lock.json.bak
 
-# C extensions
-*.so
-
-# Distribution / packaging
-.Python
-build/
-develop-eggs/
+# ============================================
+# Build Outputs
+# ============================================
 dist/
-downloads/
-eggs/
-.eggs/
-lib/
-lib64/
-parts/
-sdist/
-var/
-wheels/
-share/python-wheels/
-*.egg-info/
-.installed.cfg
-*.egg
-MANIFEST
+build/
+out/
+*.tsbuildinfo
+.next/
+.nuxt/
+.cache/
+.parcel-cache/
 
-# PyInstaller
-#  Usually these files are written by a python script from a template
-#  before PyInstaller builds the exe, so as to inject date/other infos into it.
-*.manifest
-*.spec
-
-# Installer logs
-pip-log.txt
-pip-delete-this-directory.txt
-
-# Unit test / coverage reports
-htmlcov/
-.tox/
-.nox/
-.coverage
-.coverage.*
-.cache
-nosetests.xml
-coverage.xml
-*.cover
-*.py.cover
-.hypothesis/
-.pytest_cache/
-cover/
-
-# Translations
-*.mo
-*.pot
-
-# Django stuff:
-*.log
-local_settings.py
-db.sqlite3
-db.sqlite3-journal
-
-# Flask stuff:
-instance/
-.webassets-cache
-
-# Scrapy stuff:
-.scrapy
-
-# Sphinx documentation
-docs/_build/
-
-# PyBuilder
-.pybuilder/
-target/
-
-# Jupyter Notebook
-.ipynb_checkpoints
-
-# IPython
-profile_default/
-ipython_config.py
-
-# pyenv
-#   For a library or package, you might want to ignore these files since the code is
-#   intended to run in multiple environments; otherwise, check them in:
-# .python-version
-
-# pipenv
-#   According to pypa/pipenv#598, it is recommended to include Pipfile.lock in version control.
-#   However, in case of collaboration, if having platform-specific dependencies or dependencies
-#   having no cross-platform support, pipenv may install dependencies that don't work, or not
-#   install all needed dependencies.
-#Pipfile.lock
-
-# UV
-#   Similar to Pipfile.lock, it is generally recommended to include uv.lock in version control.
-#   This is especially recommended for binary packages to ensure reproducibility, and is more
-#   commonly ignored for libraries.
-#uv.lock
-
-# poetry
-#   Similar to Pipfile.lock, it is generally recommended to include poetry.lock in version control.
-#   This is especially recommended for binary packages to ensure reproducibility, and is more
-#   commonly ignored for libraries.
-#   https://python-poetry.org/docs/basic-usage/#commit-your-poetrylock-file-to-version-control
-#poetry.lock
-#poetry.toml
-
-# pdm
-#   Similar to Pipfile.lock, it is generally recommended to include pdm.lock in version control.
-#   pdm recommends including project-wide configuration in pdm.toml, but excluding .pdm-python.
-#   https://pdm-project.org/en/latest/usage/project/#working-with-version-control
-#pdm.lock
-#pdm.toml
-.pdm-python
-.pdm-build/
-
-# pixi
-#   Similar to Pipfile.lock, it is generally recommended to include pixi.lock in version control.
-#pixi.lock
-#   Pixi creates a virtual environment in the .pixi directory, just like venv module creates one
-#   in the .venv directory. It is recommended not to include this directory in version control.
-.pixi
-
-# PEP 582; used by e.g. github.com/David-OConnor/pyflow and github.com/pdm-project/pdm
-__pypackages__/
-
-# Celery stuff
-celerybeat-schedule
-celerybeat.pid
-
-# SageMath parsed files
-*.sage.py
-
-# Environments
+# ============================================
+# Environment Variables (CRITICAL - DO NOT COMMIT)
+# ============================================
 .env
-.envrc
-.venv
-env/
-venv/
-ENV/
-env.bak/
-venv.bak/
+.env.local
+.env.development
+.env.development.local
+.env.test
+.env.test.local
+.env.production
+.env.production.local
+.env.staging
+.env.*.local
 
-# Spyder project settings
-.spyderproject
-.spyproject
+# Keep example files
+!.env.example
+!.env.sample
 
-# Rope project settings
-.ropeproject
+# ============================================
+# AWS Specific
+# ============================================
+# CDK outputs
+cdk.out/
+cdk.context.json
+*.d.ts.map
 
-# mkdocs documentation
-/site
+# AWS credentials and config
+.aws/
+aws-exports.js
+aws-exports.ts
 
-# mypy
-.mypy_cache/
-.dmypy.json
-dmypy.json
+# Deployment info (contains account-specific data)
+deployment-info.json
+*-deployment-info.json
 
-# Pyre type checker
-.pyre/
+# Lambda packages
+*.zip
+lambda-packages/
+lambda-layer/nodejs/node_modules/
 
-# pytype static type analyzer
-.pytype/
+# Amplify
+amplify/backend/awscloudformation/
+amplify/.config/
+amplify/mock-data/
+amplify/mock-api-resources/
+amplify/#current-cloud-backend/
+amplify/team-provider-info.json
 
-# Cython debug symbols
-cython_debug/
+# ============================================
+# IDE and Editor Files
+# ============================================
+# VSCode
+.vscode/
+!.vscode/settings.json.example
+!.vscode/extensions.json
+*.code-workspace
 
-# PyCharm
-#  JetBrains specific template is maintained in a separate JetBrains.gitignore that can
-#  be found at https://github.com/github/gitignore/blob/main/Global/JetBrains.gitignore
-#  and can be added to the global gitignore or merged into this file.  For a more nuclear
-#  option (not recommended) you can uncomment the following to ignore the entire idea folder.
-#.idea/
+# JetBrains IDEs
+.idea/
+*.iml
+*.iws
+*.ipr
+out/
 
-# Abstra
-# Abstra is an AI-powered process automation framework.
-# Ignore directories containing user credentials, local state, and settings.
-# Learn more at https://abstra.io/docs
-.abstra/
+# Sublime Text
+*.sublime-project
+*.sublime-workspace
 
-# Visual Studio Code
-#  Visual Studio Code specific template is maintained in a separate VisualStudioCode.gitignore 
-#  that can be found at https://github.com/github/gitignore/blob/main/Global/VisualStudioCode.gitignore
-#  and can be added to the global gitignore or merged into this file. However, if you prefer, 
-#  you could uncomment the following to ignore the entire vscode folder
-# .vscode/
+# Vim
+*.swp
+*.swo
+*~
+.vim/
 
-# Ruff stuff:
-.ruff_cache/
+# Emacs
+*~
+\#*\#
+.\#*
 
-# PyPI configuration file
-.pypirc
+# ============================================
+# Operating System Files
+# ============================================
+# macOS
+.DS_Store
+.AppleDouble
+.LSOverride
+._*
+.DocumentRevisions-V100
+.fseventsd
+.Spotlight-V100
+.TemporaryItems
+.Trashes
+.VolumeIcon.icns
+.com.apple.timemachine.donotpresent
 
-# Cursor
-#  Cursor is an AI-powered code editor. `.cursorignore` specifies files/directories to
-#  exclude from AI features like autocomplete and code analysis. Recommended for sensitive data
-#  refer to https://docs.cursor.com/context/ignore-files
-.cursorignore
-.cursorindexingignore
+# Windows
+Thumbs.db
+Thumbs.db:encryptable
+ehthumbs.db
+ehthumbs_vista.db
+*.stackdump
+[Dd]esktop.ini
+$RECYCLE.BIN/
+*.lnk
 
-# Marimo
-marimo/_static/
-marimo/_lsp/
-__marimo__/
+# Linux
+.directory
+.Trash-*
+.nfs*
+
+# ============================================
+# Logs and Runtime Data
+# ============================================
+logs/
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+lerna-debug.log*
+
+# Runtime data
+pids/
+*.pid
+*.seed
+*.pid.lock
+lib-cov/
+
+# ============================================
+# Testing and Coverage
+# ============================================
+coverage/
+*.lcov
+.nyc_output/
+.grunt/
+.lock-wscript
+.node_repl_history
+*.tgz
+.yarn-integrity
+.eslintcache
+.stylelintcache
+
+# Jest
+jest-results/
+.jest-cache/
+
+# ============================================
+# Temporary Files
+# ============================================
+tmp/
+temp/
+*.tmp
+*.temp
+*.bak
+*.backup
+*.old
+*.orig
+
+# ============================================
+# Security and Secrets (CRITICAL)
+# ============================================
+# Private keys
+*.pem
+*.key
+*.p12
+*.pfx
+*.cer
+*.crt
+
+# Secrets
+secrets.json
+secrets.*.json
+credentials.json
+service-account.json
+
+# ============================================
+# Database
+# ============================================
+*.sqlite
+*.sqlite3
+*.db
+
+# ============================================
+# Miscellaneous
+# ============================================
+# Optional npm cache directory
+.npm
+
+# Optional eslint cache
+.eslintcache
+
+# Optional stylelint cache
+.stylelintcache
+
+# Microbundle cache
+.rpt2_cache/
+.rts2_cache_cjs/
+.rts2_cache_es/
+.rts2_cache_umd/
+
+# Optional REPL history
+.node_repl_history
+
+# Output of 'npm pack'
+*.tgz
+
+# Yarn Integrity file
+.yarn-integrity
+
+# parcel-bundler cache
+.cache
+.parcel-cache
+
+# Serverless directories
+.serverless/
+
+# FuseBox cache
+.fusebox/
+
+# DynamoDB Local files
+.dynamodb/
+
+# TernJS port file
+.tern-port
+
+# Stores VSCode versions used for testing VSCode extensions
+.vscode-test
+
+# yarn v2
+.yarn/cache
+.yarn/unplugged
+.yarn/build-state.yml
+.yarn/install-state.gz
+.pnp.*
+
+# ============================================
+# Project Specific
+# ============================================
+# Frontend build artifacts
+frontend/dist/
+frontend/build/
+frontend/.vite/
+
+# Infrastructure build artifacts
+infrastructure/cdk.out/
+infrastructure/dist/
+
+# Lambda function build artifacts
+lambda-functions/*/dist/
+lambda-functions/*/build/
+lambda-functions/*/.aws-sam/
+
+# Deployment artifacts
+deployment-artifacts/
+*.deployment.json
+
+# Local development files
+.local/
+local-config.json
+
+# Debug files
+debug.log
+error.log
+
+# CDK outputs
+cdk-outputs.json
+
+# Kiro
+.kiro/
+my-session-apr2.json

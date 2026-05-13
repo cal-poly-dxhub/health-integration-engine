@@ -5,6 +5,8 @@
 | [Overview](#overview) | See the motivation behind this project |
 | [Description](#description) | Learn more about the project |
 | [Deployment](#deployment) | How to install and deploy the solution |
+| [Configuration Reference](#configuration-reference) | All `config.yaml` settings explained |
+| [Estimated Monthly Cost](#estimated-monthly-cost) | AWS service cost breakdown |
 | [Usage](#usage) | How to use the workflow builder |
 | [Troubleshooting](#troubleshooting) | Common issues and solutions |
 | [Support](#support) | The team behind this project |
@@ -160,6 +162,64 @@ Workflows can include an OpenSearch node to automatically index processed data i
    - Updates frontend `.env` with the outputs
    - Builds and deploys frontend to S3
    - Invalidates CloudFront cache
+
+## Configuration Reference
+
+All infrastructure settings are defined in `infrastructure/config.yaml`. The defaults work out of the box — customize only what you need.
+
+| Section | Key | Description | Default |
+|:--------|:----|:------------|:--------|
+| **General** | `projectName` | Prefix for all AWS resource names | `workflow-builder` |
+| | `region` | AWS region (optional; uses CLI default if omitted) | _(commented out)_ |
+| **Cognito** | `cognito.domainPrefix` | Hosted UI domain prefix (must be globally unique) | `workflow-builder` |
+| **API Gateway** | `apiGateway.stageName` | API deployment stage | `v1` |
+| **DynamoDB** | `dynamodb.deploymentsTable` | Deployments table name | `WorkflowBuilder-Deployments` |
+| | `dynamodb.workflowsTable` | Workflows table name | `WorkflowBuilder-Workflows` |
+| **S3** | `s3.lambdaCodeBucket` | Bucket for Lambda deployment packages | `workflow-builder-lambda-code` |
+| | `s3.frontendBucket` | Bucket for frontend static assets | `workflow-builder-frontend` |
+| **VPC** | `vpc.mode` | VPC mode: `none`, `existing`, or `new` | `none` |
+| | `vpc.existing.*` | VPC ID, subnet IDs, and security group IDs (required when mode is `existing`) | — |
+| | `vpc.new.cidrBlock` | CIDR block for CDK-created VPC (used when mode is `new`) | `10.0.0.0/16` |
+| **OpenSearch** | `enableOpenSearch` | Deploy OpenSearch Serverless collection (`true`/`false`) | `true` |
+
+## Estimated Monthly Cost
+
+Estimates assume **us-east-1** pricing and 1 million workflow executions per month.
+
+| Component | AWS Service | Monthly Cost | Notes |
+|:----------|:------------|-------------:|:------|
+| User Interface | Amazon S3 | $0.00 | 5 GB storage included in Free Tier |
+| | Amazon CloudFront | $0.00 | Free Tier includes CDN, WAF, DDoS protection, DNS, and TLS certificate |
+| Workflow Execution | AWS Step Functions (Standard) | $149.90 | 1M requests, 6 state transitions per execution |
+| | AWS Lambda | $1.00 | 1M requests, 256 MB memory, 512 MB storage |
+| | Amazon CloudWatch | $5.04 | 10 GB logs from Lambda |
+| **Subtotal (base)** | | **$155.94** | |
+
+**OpenSearch Serverless (optional — set `enableOpenSearch: false` to skip):**
+
+| Component | AWS Service | Monthly Cost | Notes |
+|:----------|:------------|-------------:|:------|
+| Indexing and Search | OpenSearch Serverless OCUs | $525.60 | 3 OCUs at $0.24/OCU-hr (minimum for 10 GB data) |
+| Storage | OpenSearch Serverless Managed Storage | $0.24 | 10 GB at $0.024/GB/month |
+| **Subtotal (OpenSearch)** | | **$525.84** | |
+
+**VPC (optional — only when `vpc.mode` is `existing` or `new`):**
+
+| Component | AWS Service | Monthly Cost | Notes |
+|:----------|:------------|-------------:|:------|
+| NAT Gateway | Amazon VPC | $32.85 | `new` mode only; $0.045/hr + $0.045/GB data processed |
+| OpenSearch VPC Endpoint | AWS PrivateLink | $14.60 | $0.01/hr x 2 AZs x 730 hrs |
+| Private Hosted Zone | Amazon Route 53 | $0.50 | Created by OpenSearch Serverless for DNS resolution |
+| **Subtotal (VPC)** | | **$47.95** | ~$15.10 if using `existing` mode (no NAT Gateway) |
+
+| | | **Total** | |
+|:--|:--|--:|:--|
+| Base + OpenSearch + VPC (`new`) | | **$729.73** | |
+| Base + OpenSearch + VPC (`existing`) | | **$696.88** | |
+| Base + OpenSearch (no VPC) | | **$681.78** | |
+| Base only | | **$155.94** | |
+
+> Costs are estimates based on [AWS pricing](https://aws.amazon.com/pricing/). Actual costs may vary. Use the [AWS Pricing Calculator](https://calculator.aws/) for a detailed estimate.
 
 # Usage
 

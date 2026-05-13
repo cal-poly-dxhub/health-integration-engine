@@ -1,0 +1,1120 @@
+import React, { useEffect, useState } from 'react';
+import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
+import { Workflow } from '../../types/workflow';
+import { useWorkflows } from '../../hooks/useWorkflows';
+import { useDocumentTitle } from '../../hooks/useDocumentTitle';
+import {
+  stepFunctionsService,
+  StepFunctionExecution,
+  StateMachineDetails,
+} from '../../services/stepFunctions';
+import { workflowApiService } from '../../services/workflowApi';
+import ExecutionDetails from './ExecutionDetails.v2';
+import DeleteWorkflowModal from './DeleteWorkflowModal.v2';
+import DeploymentStatusModal from './DeploymentStatusModal.v2';
+import OpenSearchPanel from './OpenSearchPanel.v2';
+import './WorkflowDetails.v2.css';
+
+interface WorkflowDetailsProps {
+  workflow?: Workflow;
+}
+
+interface BatchProgress {
+  total: number;
+  completed: number;
+  failed: number;
+  running: boolean;
+}
+
+type TabKey = 'executions' | 'definition' | 'search';
+
+const WorkflowDetails: React.FC<WorkflowDetailsProps> = ({
+  workflow: propWorkflow,
+}) => {
+  const { workflowId } = useParams<{ workflowId: string }>();
+  const navigate = useNavigate();
+  const [searchParams, setSearchParams] = useSearchParams();
+  const executionParam = searchParams.get('execution');
+  const { getWorkflow, deleteWorkflow } = useWorkflows();
+
+  const [activeTab, setActiveTab] = useState<TabKey>('executions');
+  const [workflow, setWorkflow] = useState<Workflow | null>(
+    propWorkflow || null
+  );
+  const [stateMachineDetails, setStateMachineDetails] =
+    useState<StateMachineDetails | null>(null);
+  const [executions, setExecutions] = useState<StepFunctionExecution[]>([]);
+  const [selectedExecution, setSelectedExecution] =
+    useState<StepFunctionExecution | null>(null);
+  const [loading, setLoading] = useState(!!workflowId);
+  const [executionsLoading, setExecutionsLoading] = useState(false);
+  const [filters, setFilters] = useState({
+    name: '',
+    status: '',
+    startDate: '',
+    endDate: '',
+    error: '',
+  });
+  const [showDeleteModal, setShowDeleteModal] = useState(false);
+  const [isDeleting, setIsDeleting] = useState(false);
+  const [showDeploymentModal, setShowDeploymentModal] = useState(false);
+  const [deploymentId, setDeploymentId] = useState<string>('');
+  const [detailsCollapsed, setDetailsCollapsed] = useState(false);
+  const [deletionStatus, setDeletionStatus] = useState<string>('');
+
+  const [selectedExecutions, setSelectedExecutions] = useState<Set<string>>(
+    new Set()
+  );
+  const [showBatchConfirmModal, setShowBatchConfirmModal] = useState(false);
+  const [batchProgress, setBatchProgress] = useState<BatchProgress>({
+    total: 0,
+    completed: 0,
+    failed: 0,
+    running: false,
+  });
+
+  useDocumentTitle(workflow?.name || 'Workflow');
+
+  useEffect(() => {
+    if (workflowId && !propWorkflow) {
+      loadWorkflowDetails(workflowId);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [workflowId, propWorkflow]);
+
+  const loadWorkflowDetails = async (id: string) => {
+    setLoading(true);
+    try {
+      const apiWorkflow = await workflowApiService.getWorkflow(id);
+
+      let workflowData: Workflow;
+      let stepFunctionArn: string | null = null;
+
+      if (
+        apiWorkflow &&
+        apiWorkflow.isDeployed &&
+        apiWorkflow.stepFunctionArn
+      ) {
+        stepFunctionArn = apiWorkflow.stepFunctionArn;
+        workflowData = {
+          ...apiWorkflow,
+          nodes: apiWorkflow.nodes || [],
+          connections: apiWorkflow.connections || [],
+        } as Workflow;
+      } else {
+        workflowData = await getWorkflow(id);
+        stepFunctionArn = workflowData.stepFunctionArn || null;
+      }
+
+      setWorkflow(workflowData);
+
+      if (stepFunctionArn) {
+        await Promise.all([
+          loadStateMachineDetails(stepFunctionArn),
+          loadExecutions(stepFunctionArn),
+        ]);
+      }
+    } catch (error) {
+      console.error('Failed to load workflow details:', error);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const loadStateMachineDetails = async (stateMachineArn: string) => {
+    try {
+      const details =
+        await stepFunctionsService.describeStateMachine(stateMachineArn);
+      setStateMachineDetails(details);
+    } catch (error) {
+      console.error('Failed to load state machine details:', error);
+    }
+  };
+
+  const loadExecutions = async (
+    stateMachineArn: string,
+    silent: boolean = false
+  ) => {
+    if (!silent) setExecutionsLoading(true);
+
+    try {
+      const executionsList = await stepFunctionsService.listExecutions(
+        stateMachineArn,
+        100
+      );
+
+      const executionsWithErrors = await Promise.all(
+        executionsList.map(async (exec) => {
+          if (exec.status === 'FAILED' && !exec.error) {
+            const details = await stepFunctionsService.describeExecution(
+              exec.executionArn
+            );
+            return details
+              ? { ...exec, error: details.error, cause: details.cause }
+              : exec;
+          }
+          return exec;
+        })
+      );
+
+      setExecutions(executionsWithErrors);
+    } catch (error) {
+      console.error('Failed to load executions:', error);
+      setExecutions([]);
+    } finally {
+      if (!silent) setExecutionsLoading(false);
+    }
+  };
+
+  // Auto-select execution from query param (e.g. linked from search results)
+  useEffect(() => {
+    if (executionParam && executions.length > 0) {
+      const exec = executions.find(
+        (e) =>
+          e.executionArn === executionParam ||
+          e.executionArn.endsWith(executionParam.split(':').pop() || '')
+      );
+      if (exec) {
+        setSelectedExecution(exec);
+        setActiveTab('executions');
+        setSearchParams({}, { replace: true });
+      }
+    }
+  }, [executionParam, executions, setSearchParams]);
+
+  // Auto-refresh while there are running executions
+  useEffect(() => {
+    const hasRunning = executions.some((e) => e.status === 'RUNNING');
+    if (!hasRunning || !workflow?.stepFunctionArn) return;
+
+    const interval = setInterval(() => {
+      loadExecutions(workflow.stepFunctionArn!, true);
+    }, 5000);
+
+    return () => clearInterval(interval);
+  }, [executions, workflow?.stepFunctionArn]);
+
+  const handleEditWorkflow = () => {
+    if (workflow) navigate(`/workflow/editor/${workflow.id}`);
+  };
+
+  const handleDeleteWorkflow = () => setShowDeleteModal(true);
+
+  const confirmDeleteWorkflow = async () => {
+    if (!workflow || isDeleting) return;
+
+    try {
+      setIsDeleting(true);
+      setDeletionStatus('Initiating deletion...');
+
+      await deleteWorkflow(workflow.id);
+
+      setShowDeleteModal(false);
+      setIsDeleting(false);
+      setDeletionStatus('');
+      setDeploymentId(workflow.id);
+      setShowDeploymentModal(true);
+    } catch (error) {
+      console.error('Failed to delete workflow:', error);
+      setDeletionStatus('Deletion failed. Please try again.');
+      setIsDeleting(false);
+    }
+  };
+
+  const handleCloseDeleteModal = () => {
+    if (!isDeleting) setShowDeleteModal(false);
+  };
+
+  const handleRefreshExecutions = async () => {
+    if (workflow?.stepFunctionArn) {
+      await loadExecutions(workflow.stepFunctionArn);
+    }
+  };
+
+  const toggleExecutionSelection = (executionArn: string) => {
+    setSelectedExecutions((prev) => {
+      const next = new Set(prev);
+      if (next.has(executionArn)) next.delete(executionArn);
+      else next.add(executionArn);
+      return next;
+    });
+  };
+
+  const toggleSelectAll = () => {
+    if (selectedExecutions.size === filteredExecutions.length) {
+      setSelectedExecutions(new Set());
+    } else {
+      setSelectedExecutions(
+        new Set(filteredExecutions.map((e) => e.executionArn))
+      );
+    }
+  };
+
+  const handleBatchNewExecution = async () => {
+    if (!workflow?.stepFunctionArn || selectedExecutions.size === 0) return;
+
+    setShowBatchConfirmModal(false);
+    const selected = Array.from(selectedExecutions);
+    setBatchProgress({
+      total: selected.length,
+      completed: 0,
+      failed: 0,
+      running: true,
+    });
+
+    const BATCH_SIZE = 25;
+    for (let i = 0; i < selected.length; i++) {
+      if (i > 0 && i % BATCH_SIZE === 0) {
+        await new Promise((resolve) => setTimeout(resolve, 1000));
+      }
+
+      try {
+        const details = await stepFunctionsService.describeExecution(
+          selected[i]
+        );
+        const input = details?.input || '{}';
+
+        await stepFunctionsService.startExecution(
+          workflow.stepFunctionArn,
+          `reexec-${Date.now()}-${crypto.randomUUID().slice(0, 8)}`,
+          input
+        );
+
+        setBatchProgress((prev) => ({
+          ...prev,
+          completed: prev.completed + 1,
+        }));
+      } catch (err) {
+        console.error('Failed to re-execute:', selected[i], err);
+        setBatchProgress((prev) => ({ ...prev, failed: prev.failed + 1 }));
+      }
+    }
+
+    setBatchProgress((prev) => ({ ...prev, running: false }));
+    setSelectedExecutions(new Set());
+
+    if (workflow.stepFunctionArn) {
+      await loadExecutions(workflow.stepFunctionArn);
+    }
+  };
+
+  const formatDate = (dateString: string | undefined | null) => {
+    if (!dateString) return '—';
+    try {
+      const date = new Date(dateString);
+      if (isNaN(date.getTime())) return 'Invalid date';
+      return date.toLocaleDateString('en-US', {
+        year: 'numeric',
+        month: 'short',
+        day: 'numeric',
+        hour: '2-digit',
+        minute: '2-digit',
+        second: '2-digit',
+      });
+    } catch {
+      return 'Error';
+    }
+  };
+
+  const formatDuration = (startDate: string, stopDate: string) => {
+    const start = new Date(startDate).getTime();
+    const stop = new Date(stopDate).getTime();
+    const durationMs = stop - start;
+
+    if (durationMs < 1000) return `${durationMs}ms`;
+    if (durationMs < 60000) return `${(durationMs / 1000).toFixed(1)}s`;
+    if (durationMs < 3600000) {
+      const minutes = Math.floor(durationMs / 60000);
+      const seconds = Math.floor((durationMs % 60000) / 1000);
+      return `${minutes}m ${seconds}s`;
+    }
+    const hours = Math.floor(durationMs / 3600000);
+    const minutes = Math.floor((durationMs % 3600000) / 60000);
+    const seconds = Math.floor((durationMs % 60000) / 1000);
+    return `${hours}h ${minutes}m ${seconds}s`;
+  };
+
+  const filteredExecutions = executions.filter((exec) => {
+    if (
+      filters.name &&
+      !exec.name.toLowerCase().includes(filters.name.toLowerCase())
+    )
+      return false;
+    if (filters.status && exec.status !== filters.status) return false;
+    if (
+      filters.startDate &&
+      new Date(exec.startDate).toISOString().split('T')[0] !==
+        filters.startDate
+    )
+      return false;
+    if (
+      filters.endDate &&
+      exec.stopDate &&
+      new Date(exec.stopDate).toISOString().split('T')[0] !== filters.endDate
+    )
+      return false;
+    if (filters.error && exec.status === 'FAILED') {
+      const errorText = `${exec.error || ''} ${exec.cause || ''}`.toLowerCase();
+      if (!errorText.includes(filters.error.toLowerCase())) return false;
+    }
+    return true;
+  });
+
+  if (loading) {
+    return (
+      <div className="wfd-v2-root">
+        <div className="wfd-v2-body">
+          <div className="wfd-v2-state">
+            <span className="wfd-v2-state-spinner" aria-hidden="true" />
+            <p className="wfd-v2-state-sub">Loading workflow…</p>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  if (!workflow) {
+    return (
+      <div className="wfd-v2-root">
+        <div className="wfd-v2-body">
+          <div className="wfd-v2-state">
+            <span className="wfd-v2-state-icon" aria-hidden="true">
+              <AlertIcon />
+            </span>
+            <h3 className="wfd-v2-state-title">Workflow not found</h3>
+            <p className="wfd-v2-state-sub">
+              The requested workflow could not be found.
+            </p>
+            <button
+              onClick={() => navigate('/dashboard')}
+              className="wfd-v2-btn wfd-v2-btn--primary"
+            >
+              Back to dashboard
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // Show execution details if an execution is selected
+  if (selectedExecution) {
+    return (
+      <ExecutionDetails
+        execution={selectedExecution}
+        onClose={() => setSelectedExecution(null)}
+      />
+    );
+  }
+
+  const tabsList: Array<{ key: TabKey; label: string; enabled: boolean }> = [
+    { key: 'executions', label: 'Executions', enabled: true },
+    { key: 'definition', label: 'Definition', enabled: true },
+    {
+      key: 'search',
+      label: 'Message Search',
+      enabled: import.meta.env.VITE_ENABLE_OPENSEARCH !== 'false',
+    },
+  ];
+
+  const allChecked =
+    filteredExecutions.length > 0 &&
+    selectedExecutions.size === filteredExecutions.length;
+
+  return (
+    <div className="wfd-v2-root">
+      {/* ---------- Top nav ---------- */}
+      <nav className="wfd-v2-nav">
+        <div className="wfd-v2-nav-left">
+          <button
+            type="button"
+            className="wfd-v2-back"
+            onClick={() => navigate('/dashboard')}
+          >
+            <ArrowLeftIcon />
+            Dashboard
+          </button>
+          <span className="wfd-v2-crumbs">
+            <span className="wfd-v2-crumbs-sep">/</span>
+            <span className="wfd-v2-crumbs-current">{workflow.name}</span>
+          </span>
+        </div>
+
+        <div className="wfd-v2-nav-right">
+          <button
+            type="button"
+            className="wfd-v2-btn wfd-v2-btn--danger"
+            onClick={handleDeleteWorkflow}
+          >
+            <TrashIcon />
+            Delete
+          </button>
+          <button
+            type="button"
+            className="wfd-v2-btn wfd-v2-btn--primary"
+            onClick={handleEditWorkflow}
+          >
+            <EditIcon />
+            Edit
+          </button>
+        </div>
+      </nav>
+
+      {/* ---------- Body ---------- */}
+      <div className="wfd-v2-body">
+        <div className="wfd-v2-page">
+          {/* Summary card */}
+          <section className="wfd-v2-summary-card">
+            <div className="wfd-v2-summary-head">
+              <div className="wfd-v2-summary-title">
+                <h1 className="wfd-v2-name">{workflow.name}</h1>
+                <DeploymentBadge workflow={workflow} />
+              </div>
+              <button
+                type="button"
+                className="wfd-v2-toggle-details"
+                onClick={() => setDetailsCollapsed((s) => !s)}
+                aria-expanded={!detailsCollapsed}
+              >
+                {detailsCollapsed ? '▸ Show details' : '▾ Hide details'}
+              </button>
+            </div>
+
+            {!detailsCollapsed && (
+              <div className="wfd-v2-summary-grid">
+                <div>
+                  <span className="wfd-v2-info-label">Status</span>
+                  <span className="wfd-v2-info-value">
+                    {stateMachineDetails?.status ||
+                      (workflow.isDeployed ? 'Active' : 'Draft')}
+                  </span>
+                </div>
+                <div>
+                  <span className="wfd-v2-info-label">Type</span>
+                  <span className="wfd-v2-info-value">
+                    {stateMachineDetails?.type || 'Standard'}
+                  </span>
+                </div>
+                <div>
+                  <span className="wfd-v2-info-label">Created</span>
+                  <span className="wfd-v2-info-value">
+                    {stateMachineDetails?.creationDate
+                      ? formatDate(stateMachineDetails.creationDate)
+                      : formatDate(workflow.createdAt)}
+                  </span>
+                </div>
+                <div style={{ gridColumn: '1 / -1' }}>
+                  <span className="wfd-v2-info-label">
+                    State machine ARN
+                  </span>
+                  <span className="wfd-v2-info-value wfd-v2-info-mono">
+                    {workflow.stepFunctionArn || 'Not deployed'}
+                  </span>
+                </div>
+                {stateMachineDetails?.roleArn && (
+                  <div style={{ gridColumn: '1 / -1' }}>
+                    <span className="wfd-v2-info-label">IAM role ARN</span>
+                    <span className="wfd-v2-info-value wfd-v2-info-mono">
+                      {stateMachineDetails.roleArn}
+                    </span>
+                  </div>
+                )}
+              </div>
+            )}
+          </section>
+
+          {/* Tabs */}
+          <div className="wfd-v2-tabs" role="tablist">
+            {tabsList
+              .filter((t) => t.enabled)
+              .map((tab) => (
+                <button
+                  key={tab.key}
+                  type="button"
+                  role="tab"
+                  aria-selected={activeTab === tab.key}
+                  onClick={() => setActiveTab(tab.key)}
+                  className={`wfd-v2-tab${
+                    activeTab === tab.key ? ' wfd-v2-tab--active' : ''
+                  }`}
+                >
+                  {tab.label}
+                </button>
+              ))}
+          </div>
+
+          {/* ---------- Executions tab ---------- */}
+          {activeTab === 'executions' && (
+            <div className="wfd-v2-pane">
+              <div className="wfd-v2-pane-head">
+                <h3 className="wfd-v2-pane-title">
+                  Executions{' '}
+                  <span className="wfd-v2-pane-title-count">
+                    ({filteredExecutions.length}
+                    {filteredExecutions.length !== executions.length
+                      ? ` of ${executions.length}`
+                      : ''}
+                    )
+                  </span>
+                </h3>
+                <div className="wfd-v2-pane-actions">
+                  {selectedExecutions.size > 0 && (
+                    <button
+                      type="button"
+                      onClick={() => setShowBatchConfirmModal(true)}
+                      className="wfd-v2-btn wfd-v2-btn--primary"
+                      disabled={batchProgress.running}
+                    >
+                      <PlayIcon />
+                      New execution ({selectedExecutions.size} selected)
+                    </button>
+                  )}
+                  {workflow.stepFunctionArn && (
+                    <button
+                      type="button"
+                      onClick={handleRefreshExecutions}
+                      className="wfd-v2-btn"
+                      disabled={executionsLoading}
+                      title="Refresh executions"
+                    >
+                      <RefreshIcon />
+                      {executionsLoading ? 'Refreshing…' : 'Refresh'}
+                    </button>
+                  )}
+                </div>
+              </div>
+
+              {executionsLoading ? (
+                <div className="wfd-v2-state">
+                  <span
+                    className="wfd-v2-state-spinner"
+                    aria-hidden="true"
+                  />
+                  <p className="wfd-v2-state-sub">Loading executions…</p>
+                </div>
+              ) : executions.length === 0 ? (
+                <div className="wfd-v2-state">
+                  <span className="wfd-v2-state-icon" aria-hidden="true">
+                    <PlayIcon />
+                  </span>
+                  <h3 className="wfd-v2-state-title">
+                    {workflow.isDeployed
+                      ? 'No executions yet'
+                      : 'Workflow not deployed'}
+                  </h3>
+                  <p className="wfd-v2-state-sub">
+                    {workflow.isDeployed
+                      ? 'Start an execution to see it appear here.'
+                      : 'Deploy this workflow to start executing it.'}
+                  </p>
+                </div>
+              ) : (
+                <div className="wfd-v2-table-wrap">
+                  <table className="wfd-v2-table">
+                    <thead>
+                      <tr>
+                        <th className="wfd-v2-checkbox-col">
+                          <input
+                            type="checkbox"
+                            className="wfd-v2-checkbox"
+                            checked={allChecked}
+                            onChange={toggleSelectAll}
+                            aria-label="Select all"
+                          />
+                        </th>
+                        <th>Name</th>
+                        <th>Status</th>
+                        <th>Start time</th>
+                        <th>End time</th>
+                        <th>Duration</th>
+                        <th>Error</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      <tr className="wfd-v2-filter-row">
+                        <td></td>
+                        <td>
+                          <input
+                            type="text"
+                            placeholder="Filter name…"
+                            value={filters.name}
+                            onChange={(e) =>
+                              setFilters((f) => ({
+                                ...f,
+                                name: e.target.value,
+                              }))
+                            }
+                            className="wfd-v2-filter-input"
+                          />
+                        </td>
+                        <td>
+                          <select
+                            value={filters.status}
+                            onChange={(e) =>
+                              setFilters((f) => ({
+                                ...f,
+                                status: e.target.value,
+                              }))
+                            }
+                            className="wfd-v2-filter-select"
+                          >
+                            <option value="">All</option>
+                            <option value="RUNNING">Running</option>
+                            <option value="SUCCEEDED">Succeeded</option>
+                            <option value="FAILED">Failed</option>
+                            <option value="TIMED_OUT">Timed out</option>
+                            <option value="ABORTED">Aborted</option>
+                          </select>
+                        </td>
+                        <td>
+                          <input
+                            type="date"
+                            value={filters.startDate}
+                            onChange={(e) =>
+                              setFilters((f) => ({
+                                ...f,
+                                startDate: e.target.value,
+                              }))
+                            }
+                            className="wfd-v2-filter-input"
+                          />
+                        </td>
+                        <td>
+                          <input
+                            type="date"
+                            value={filters.endDate}
+                            onChange={(e) =>
+                              setFilters((f) => ({
+                                ...f,
+                                endDate: e.target.value,
+                              }))
+                            }
+                            className="wfd-v2-filter-input"
+                          />
+                        </td>
+                        <td></td>
+                        <td>
+                          <input
+                            type="text"
+                            placeholder="Filter error…"
+                            value={filters.error}
+                            onChange={(e) =>
+                              setFilters((f) => ({
+                                ...f,
+                                error: e.target.value,
+                              }))
+                            }
+                            className="wfd-v2-filter-input"
+                          />
+                        </td>
+                      </tr>
+
+                      {filteredExecutions.map((execution) => {
+                        const isSelected = selectedExecutions.has(
+                          execution.executionArn
+                        );
+                        return (
+                          <tr
+                            key={execution.executionArn}
+                            className={
+                              isSelected ? 'wfd-v2-row--selected' : undefined
+                            }
+                          >
+                            <td className="wfd-v2-checkbox-col">
+                              <input
+                                type="checkbox"
+                                className="wfd-v2-checkbox"
+                                checked={isSelected}
+                                onChange={() =>
+                                  toggleExecutionSelection(
+                                    execution.executionArn
+                                  )
+                                }
+                                aria-label={`Select ${execution.name}`}
+                              />
+                            </td>
+                            <td>
+                              <button
+                                type="button"
+                                className="wfd-v2-execution-link"
+                                onClick={() =>
+                                  setSelectedExecution(execution)
+                                }
+                              >
+                                {execution.name}
+                              </button>
+                            </td>
+                            <td>
+                              <ExecutionStatusBadge
+                                status={execution.status}
+                              />
+                            </td>
+                            <td className="wfd-v2-cell-date">
+                              {formatDate(execution.startDate)}
+                            </td>
+                            <td className="wfd-v2-cell-date">
+                              {execution.stopDate
+                                ? formatDate(execution.stopDate)
+                                : '—'}
+                            </td>
+                            <td className="wfd-v2-cell-duration">
+                              {execution.stopDate && execution.startDate
+                                ? formatDuration(
+                                    execution.startDate,
+                                    execution.stopDate
+                                  )
+                                : '—'}
+                            </td>
+                            <td className="wfd-v2-error-cell">
+                              {execution.status === 'FAILED' &&
+                              (execution.error || execution.cause) ? (
+                                <div
+                                  className="wfd-v2-error-content"
+                                  title={execution.cause || execution.error}
+                                >
+                                  <span className="wfd-v2-error-type">
+                                    {execution.error || 'Error'}
+                                  </span>
+                                  {execution.cause && (
+                                    <span className="wfd-v2-error-cause">
+                                      {execution.cause.length > 80
+                                        ? `${execution.cause.substring(0, 80)}…`
+                                        : execution.cause}
+                                    </span>
+                                  )}
+                                </div>
+                              ) : execution.status === 'FAILED' ? (
+                                <span className="wfd-v2-error-unknown">
+                                  View details
+                                </span>
+                              ) : (
+                                '—'
+                              )}
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* ---------- Definition tab ---------- */}
+          {activeTab === 'definition' && (
+            <div className="wfd-v2-pane">
+              <div className="wfd-v2-pane-head">
+                <h3 className="wfd-v2-pane-title">State machine definition</h3>
+              </div>
+              {stateMachineDetails ? (
+                <div className="wfd-v2-def-grid">
+                  <div className="wfd-v2-def-meta">
+                    <div>
+                      <span className="wfd-v2-info-label">Name</span>
+                      <span className="wfd-v2-info-value">
+                        {stateMachineDetails.name}
+                      </span>
+                    </div>
+                    <div>
+                      <span className="wfd-v2-info-label">Type</span>
+                      <span className="wfd-v2-info-value">
+                        {stateMachineDetails.type}
+                      </span>
+                    </div>
+                    <div>
+                      <span className="wfd-v2-info-label">Status</span>
+                      <span className="wfd-v2-info-value">
+                        {stateMachineDetails.status}
+                      </span>
+                    </div>
+                    <div style={{ gridColumn: '1 / -1' }}>
+                      <span className="wfd-v2-info-label">Role ARN</span>
+                      <span className="wfd-v2-info-value wfd-v2-info-mono">
+                        {stateMachineDetails.roleArn}
+                      </span>
+                    </div>
+                  </div>
+
+                  <div className="wfd-v2-def-block">
+                    <div className="wfd-v2-def-block-head">
+                      Step Functions definition (JSON)
+                    </div>
+                    <pre className="wfd-v2-def-pre">
+                      {stateMachineDetails.definition}
+                    </pre>
+                  </div>
+                </div>
+              ) : workflow.isDeployed ? (
+                <div className="wfd-v2-state">
+                  <span
+                    className="wfd-v2-state-spinner"
+                    aria-hidden="true"
+                  />
+                  <p className="wfd-v2-state-sub">
+                    Loading state machine definition…
+                  </p>
+                </div>
+              ) : (
+                <div className="wfd-v2-state">
+                  <span className="wfd-v2-state-icon" aria-hidden="true">
+                    <CodeIcon />
+                  </span>
+                  <h3 className="wfd-v2-state-title">Not deployed</h3>
+                  <p className="wfd-v2-state-sub">
+                    Deploy this workflow to see the Step Functions definition.
+                  </p>
+                  <button
+                    onClick={handleEditWorkflow}
+                    className="wfd-v2-btn wfd-v2-btn--primary"
+                  >
+                    <EditIcon />
+                    Edit and deploy
+                  </button>
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* ---------- Search tab ---------- */}
+          {activeTab === 'search' &&
+            import.meta.env.VITE_ENABLE_OPENSEARCH !== 'false' && (
+              <OpenSearchPanel
+                workflowId={workflowId}
+                indexName={
+                  workflow.nodes?.find(
+                    (n: any) => n.type === 'opensearch'
+                  )?.config?.indexName
+                }
+              />
+            )}
+        </div>
+      </div>
+
+      {/* ---------- Batch confirm modal ---------- */}
+      {showBatchConfirmModal && (
+        <div
+          className="wfd-v2-modal-overlay"
+          onClick={() => setShowBatchConfirmModal(false)}
+        >
+          <div className="wfd-v2-modal" onClick={(e) => e.stopPropagation()}>
+            <div className="wfd-v2-modal-head">
+              <h3 className="wfd-v2-modal-title">
+                Confirm batch re-execution
+              </h3>
+              <button
+                type="button"
+                className="wfd-v2-modal-close"
+                onClick={() => setShowBatchConfirmModal(false)}
+                aria-label="Close"
+              >
+                ✕
+              </button>
+            </div>
+            <div className="wfd-v2-modal-body">
+              <p>
+                Start a new execution for{' '}
+                <strong>{selectedExecutions.size}</strong> selected item
+                {selectedExecutions.size > 1 ? 's' : ''}?
+              </p>
+              <p className="wfd-v2-modal-note">
+                Each new execution will use the original execution's input.
+              </p>
+              {selectedExecutions.size > 25 && (
+                <p className="wfd-v2-modal-note">
+                  Executions will be processed in batches of 25 to avoid
+                  rate limiting.
+                </p>
+              )}
+            </div>
+            <div className="wfd-v2-modal-foot">
+              <button
+                type="button"
+                className="wfd-v2-btn"
+                onClick={() => setShowBatchConfirmModal(false)}
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                className="wfd-v2-btn wfd-v2-btn--primary"
+                onClick={handleBatchNewExecution}
+              >
+                Start executions
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ---------- Batch progress toast ---------- */}
+      {batchProgress.running && (
+        <div className="wfd-v2-batch-toast" role="status" aria-live="polite">
+          <span className="wfd-v2-batch-toast-spinner" aria-hidden="true" />
+          <span>
+            Re-executing {batchProgress.completed + batchProgress.failed} of{' '}
+            {batchProgress.total}
+            {batchProgress.failed > 0 && (
+              <>
+                {' '}
+                <span className="wfd-v2-batch-toast-failed">
+                  ({batchProgress.failed} failed)
+                </span>
+              </>
+            )}
+          </span>
+        </div>
+      )}
+
+      {/* ---------- Delete + deployment modals (unchanged) ---------- */}
+      {showDeleteModal && workflow && (
+        <DeleteWorkflowModal
+          workflow={{
+            id: workflow.id,
+            name: workflow.name,
+            description: workflow.description,
+            createdAt: workflow.createdAt,
+            updatedAt: workflow.updatedAt,
+            isDeployed: workflow.isDeployed || false,
+            deploymentStatus: workflow.deploymentStatus,
+            nodeCount: workflow.nodes?.length || 0,
+          }}
+          isOpen={showDeleteModal}
+          onClose={handleCloseDeleteModal}
+          onConfirm={confirmDeleteWorkflow}
+          isDeleting={isDeleting}
+          deletionStatus={deletionStatus}
+        />
+      )}
+
+      {showDeploymentModal && deploymentId && workflow && (
+        <DeploymentStatusModal
+          isOpen={showDeploymentModal}
+          deploymentId={deploymentId}
+          workflowName={`${workflow.name} (Deletion)`}
+          onClose={() => {
+            setShowDeploymentModal(false);
+            setDeploymentId('');
+          }}
+          onComplete={(status) => {
+            if (status.status === 'completed') {
+              navigate('/dashboard');
+            }
+          }}
+        />
+      )}
+    </div>
+  );
+};
+
+export default WorkflowDetails;
+
+/* ---------- Helpers ---------- */
+
+function DeploymentBadge({ workflow }: { workflow: Workflow }) {
+  if (!workflow.isDeployed) {
+    return <span className="wfd-v2-badge wfd-v2-badge--default">Draft</span>;
+  }
+  const status = workflow.deploymentStatus;
+  const variant =
+    status === 'deployed'
+      ? 'succeeded'
+      : status === 'deploying'
+      ? 'running'
+      : status === 'failed' || status === 'delete_failed'
+      ? 'failed'
+      : 'default';
+  const label = (status || 'deployed').toUpperCase();
+  return (
+    <span className={`wfd-v2-badge wfd-v2-badge--${variant}`}>{label}</span>
+  );
+}
+
+function ExecutionStatusBadge({ status }: { status: string }) {
+  const variant =
+    status === 'SUCCEEDED'
+      ? 'succeeded'
+      : status === 'FAILED'
+      ? 'failed'
+      : status === 'RUNNING'
+      ? 'running'
+      : status === 'TIMED_OUT'
+      ? 'timed-out'
+      : status === 'ABORTED' ||
+        status === 'STOPPED' ||
+        status === 'CANCELLED'
+      ? 'aborted'
+      : 'default';
+  return (
+    <span className={`wfd-v2-badge wfd-v2-badge--${variant}`}>
+      {status}
+    </span>
+  );
+}
+
+/* ---------- Inline SVG icons ---------- */
+
+function ArrowLeftIcon() {
+  return (
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <line x1="19" y1="12" x2="5" y2="12" />
+      <polyline points="12 19 5 12 12 5" />
+    </svg>
+  );
+}
+
+function EditIcon() {
+  return (
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7" />
+      <path d="m18.5 2.5 3 3L12 15l-4 1 1-4 9.5-9.5z" />
+    </svg>
+  );
+}
+
+function TrashIcon() {
+  return (
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <polyline points="3 6 5 6 21 6" />
+      <path d="m19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" />
+      <line x1="10" y1="11" x2="10" y2="17" />
+      <line x1="14" y1="11" x2="14" y2="17" />
+    </svg>
+  );
+}
+
+function PlayIcon() {
+  return (
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor" stroke="none">
+      <polygon points="6 4 20 12 6 20" />
+    </svg>
+  );
+}
+
+function RefreshIcon() {
+  return (
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M21 12a9 9 0 1 1-9-9c2.52 0 4.93 1 6.74 2.74L21 8" />
+      <path d="M21 3v5h-5" />
+    </svg>
+  );
+}
+
+function AlertIcon() {
+  return (
+    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <circle cx="12" cy="12" r="10" />
+      <path d="M12 8v4" />
+      <path d="M12 16h.01" />
+    </svg>
+  );
+}
+
+function CodeIcon() {
+  return (
+    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <polyline points="16 18 22 12 16 6" />
+      <polyline points="8 6 2 12 8 18" />
+    </svg>
+  );
+}

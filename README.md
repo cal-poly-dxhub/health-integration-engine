@@ -102,6 +102,14 @@ Workflows can include an OpenSearch node to automatically index processed data i
 - **Indexing**: Enable the OpenSearch option when creating a workflow — processed data from upstream Lambda nodes is automatically indexed into the configured collection and index
 - **Search**: The dashboard includes a search panel for querying indexed data across all workflows, and the workflow details page provides workflow-specific search
 
+## Lambda Layers
+
+Workflows often need external libraries (`pandas`, `requests`, custom utilities, etc.). Instead of bundling these inside every Lambda node, you can upload a library archive once as a Lambda Layer and attach it to any compatible Lambda node.
+
+- **Creating a layer**: Open the **Lambda Layers** tab from the dashboard, provide a name, select compatible runtimes and architectures, and upload a `.zip` packaged in the [AWS-required layer layout](https://docs.aws.amazon.com/lambda/latest/dg/configuration-layers.html#configuration-layers-path) — the zip uploads directly to S3 via a presigned URL, then is published to AWS Lambda
+- **Attaching a layer**: Open a Lambda node's configuration, select a runtime and architecture, and pick from layers compatible with both — up to 5 per function (AWS limit)
+- **Limits**: 50 MiB max zip size; layers are scoped per user; deleting a layer attached to a deployed workflow requires explicit force-delete confirmation
+
 # Deployment
 
 ## Prerequisites

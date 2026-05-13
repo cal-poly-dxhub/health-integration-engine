@@ -882,9 +882,11 @@ const WorkflowDetails: React.FC<WorkflowDetailsProps> = ({
               <OpenSearchPanel
                 workflowId={workflowId}
                 indexName={
-                  workflow.nodes?.find(
-                    (n: any) => n.type === 'opensearch'
-                  )?.config?.indexName
+                  (
+                    workflow.nodes?.find(
+                      (n: any) => n.type === 'opensearch'
+                    )?.config as { indexName?: string } | undefined
+                  )?.indexName
                 }
               />
             )}

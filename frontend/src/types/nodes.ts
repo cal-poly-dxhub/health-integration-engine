@@ -86,6 +86,8 @@ export interface OpenSearchNodeConfig {
   operation: 'index';
   collectionEndpoint: string;
   indexName: string;
+  dateRangeField?: string;
+  dateRangeDays?: number;
   iamRole?: {
     useExisting: boolean;
     existingRoleArn?: string;

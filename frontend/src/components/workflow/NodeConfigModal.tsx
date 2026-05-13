@@ -51,9 +51,9 @@ const NodeConfigModal: React.FC<NodeConfigModalProps> = ({
   const fetchIAMRoles = async (serviceType: string) => {
     setLoadingRoles(true);
     try {
-      const response = await apiService.get(
+      const response = (await apiService.get(
         `/iam/roles?serviceType=${serviceType}`
-      );
+      )) as { data?: { roles?: IAMRole[] }; roles?: IAMRole[] };
       const roles = response.data?.roles || response.roles || [];
       setIamRoles(roles);
     } catch (err) {

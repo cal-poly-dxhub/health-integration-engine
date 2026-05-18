@@ -87,7 +87,7 @@ export const handler = async (
  */
 async function getWorkflowFromDatabase(workflowId: string, userId: string): Promise<any | null> {
   try {
-    console.log('🔍 Looking up workflow:', { workflowId, userId });
+    console.log('Looking up workflow:', { workflowId, userId });
     
     const response = await docClient.send(new GetCommand({
       TableName: WORKFLOWS_TABLE,
@@ -98,11 +98,11 @@ async function getWorkflowFromDatabase(workflowId: string, userId: string): Prom
     }));
 
     if (!response.Item) {
-      console.log('❌ No workflow found with ID:', workflowId);
+      console.log('No workflow found with ID:', workflowId);
       return null;
     }
 
-    console.log('✅ Found workflow record:', {
+    console.log('Found workflow record:', {
       id: response.Item.id,
       name: response.Item.name,
       isDeployed: response.Item.isDeployed,
@@ -113,7 +113,7 @@ async function getWorkflowFromDatabase(workflowId: string, userId: string): Prom
     return response.Item;
     
   } catch (error) {
-    console.error('❌ Error fetching workflow:', error);
+    console.error('Error fetching workflow:', error);
     return null;
   }
 }
@@ -160,7 +160,7 @@ async function refreshWorkflowDeploymentStatus(workflow: any, userId: string): P
 
     // Update database if status changed
     if (actualStatus !== workflow.deploymentStatus || isDeployed !== workflow.isDeployed) {
-      console.log(`🔄 Updating workflow ${workflow.id} status: ${workflow.deploymentStatus} -> ${actualStatus}`);
+      console.log(`Updating workflow ${workflow.id} status: ${workflow.deploymentStatus} -> ${actualStatus}`);
       
       await updateWorkflowDeploymentStatus(workflow.id, userId, {
         deploymentStatus: actualStatus,
@@ -178,7 +178,7 @@ async function refreshWorkflowDeploymentStatus(workflow: any, userId: string): P
 
     return workflow;
   } catch (error) {
-    console.error(`❌ Error checking deployment status for workflow ${workflow.id}:`, error);
+    console.error(`Error checking deployment status for workflow ${workflow.id}:`, error);
     return workflow;
   }
 }

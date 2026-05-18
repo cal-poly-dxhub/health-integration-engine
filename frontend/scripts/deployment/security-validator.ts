@@ -115,7 +115,7 @@ export class SecurityValidator {
   };
 
   static async validateDeploymentSecurity(environment: string): Promise<SecurityValidationResult> {
-    console.log(chalk.blue.bold(`🔒 Performing security validation for ${environment} environment`));
+    console.log(chalk.blue.bold(`Performing security validation for ${environment} environment`));
     console.log('');
 
     const config = this.SECURITY_CONFIGS[environment];
@@ -222,10 +222,10 @@ export class SecurityValidator {
       }
 
       if (isolationResult.isIsolated) {
-        console.log(chalk.green('✓ Environment isolation validation passed'));
+        console.log(chalk.green('Environment isolation validation passed'));
         return true;
       } else {
-        console.log(chalk.red('✗ Environment isolation validation failed'));
+        console.log(chalk.red('Environment isolation validation failed'));
         return false;
       }
 
@@ -275,7 +275,7 @@ export class SecurityValidator {
         return false;
       }
 
-      console.log(chalk.green('✓ Backend security validation passed'));
+      console.log(chalk.green('Backend security validation passed'));
       return true;
 
     } catch (error) {
@@ -300,7 +300,7 @@ export class SecurityValidator {
       result.recommendations.push(`Environment ${environment} allows up to ${config.maxResourceLimits.cloudFrontDistributions} CloudFront distributions`);
       result.recommendations.push(`Environment ${environment} allows up to ${config.maxResourceLimits.lambdaFunctions} Lambda functions`);
 
-      console.log(chalk.green('✓ Resource limits validation passed'));
+      console.log(chalk.green('Resource limits validation passed'));
       return true;
 
     } catch (error) {
@@ -335,7 +335,7 @@ export class SecurityValidator {
         result.recommendations.push('Security headers will be configured');
       }
 
-      console.log(chalk.green('✓ Access control validation passed'));
+      console.log(chalk.green('Access control validation passed'));
       return true;
 
     } catch (error) {
@@ -366,7 +366,7 @@ export class SecurityValidator {
         result.recommendations.push('CloudWatch logs encryption will be enabled');
       }
 
-      console.log(chalk.green('✓ Encryption compliance validation passed'));
+      console.log(chalk.green('Encryption compliance validation passed'));
       return true;
 
     } catch (error) {
@@ -405,7 +405,7 @@ export class SecurityValidator {
 
   private static displaySecurityResults(result: SecurityValidationResult): void {
     console.log('');
-    console.log(chalk.cyan.bold('🔒 Security Validation Results:'));
+    console.log(chalk.cyan.bold('Security Validation Results:'));
     console.log('');
 
     // Display security level
@@ -425,7 +425,7 @@ export class SecurityValidator {
 
     // Display errors
     if (result.errors.length > 0) {
-      console.log(chalk.red.bold('❌ Security Errors:'));
+      console.log(chalk.red.bold('Security Errors:'));
       for (const error of result.errors) {
         console.log(chalk.red(`  • ${error}`));
       }
@@ -434,7 +434,7 @@ export class SecurityValidator {
 
     // Display warnings
     if (result.warnings.length > 0) {
-      console.log(chalk.yellow.bold('⚠️  Security Warnings:'));
+      console.log(chalk.yellow.bold(' Security Warnings:'));
       for (const warning of result.warnings) {
         console.log(chalk.yellow(`  • ${warning}`));
       }
@@ -443,7 +443,7 @@ export class SecurityValidator {
 
     // Display recommendations
     if (result.recommendations.length > 0) {
-      console.log(chalk.blue.bold('💡 Security Recommendations:'));
+      console.log(chalk.blue.bold('Security Recommendations:'));
       for (const recommendation of result.recommendations) {
         console.log(chalk.blue(`  • ${recommendation}`));
       }
@@ -452,16 +452,16 @@ export class SecurityValidator {
 
     // Display final result
     if (result.isValid) {
-      console.log(chalk.green.bold('✅ Security validation passed! Deployment meets security requirements.'));
+      console.log(chalk.green.bold('Security validation passed! Deployment meets security requirements.'));
     } else {
-      console.log(chalk.red.bold('❌ Security validation failed! Please address the security issues above.'));
+      console.log(chalk.red.bold('Security validation failed! Please address the security issues above.'));
     }
 
     console.log('');
   }
 
   private static getCheckIcon(passed: boolean): string {
-    return passed ? chalk.green('✓') : chalk.red('✗');
+    return passed ? chalk.green('') : chalk.red('');
   }
 
   static async promptForProductionApproval(environment: string): Promise<boolean> {
@@ -470,7 +470,7 @@ export class SecurityValidator {
     }
 
     console.log('');
-    console.log(chalk.red.bold('⚠️  PRODUCTION DEPLOYMENT WARNING'));
+    console.log(chalk.red.bold(' PRODUCTION DEPLOYMENT WARNING'));
     console.log(chalk.yellow('You are about to deploy to the PRODUCTION environment.'));
     console.log(chalk.yellow('This will affect live users and systems.'));
     console.log('');

@@ -122,7 +122,7 @@ export class WebSocketService {
                 timestamp: message.timestamp || new Date().toISOString(),
               });
             } else if (message.type === 'workflow_deletion_update' && message.workflowId) {
-              console.log('🔍 Processing workflow_deletion_update message:', message);
+              console.log('Processing workflow_deletion_update message:', message);
               
               const deletionUpdate = {
                 workflowId: message.workflowId,
@@ -132,7 +132,7 @@ export class WebSocketService {
                 timestamp: message.timestamp || new Date().toISOString(),
               };
               
-              console.log('🔍 Created deletion update:', deletionUpdate);
+              console.log('Created deletion update:', deletionUpdate);
               
               // Handle as deletion update
               this.handleDeletionUpdate(deletionUpdate);
@@ -148,11 +148,11 @@ export class WebSocketService {
                   originalStatus: message.status || 'deleting',
                 };
                 
-                console.log('🔄 Converting deletion update to deployment update:', deploymentUpdate);
+                console.log('Converting deletion update to deployment update:', deploymentUpdate);
                 this.handleDeploymentUpdate(deploymentUpdate);
-                console.log('✅ Deployment update handled successfully');
+                console.log('Deployment update handled successfully');
               } catch (error) {
-                console.error('❌ Error converting deletion to deployment update:', error);
+                console.error('Error converting deletion to deployment update:', error);
               }
             } else if (message.type === 'error') {
               console.error('WebSocket server error:', message.message);
@@ -309,16 +309,16 @@ export class WebSocketService {
    * Handle deployment update - simplified approach following AWS sample
    */
   private handleDeploymentUpdate(update: DeploymentUpdate): void {
-    console.log(`🔍 Handling deployment update for ${update.deploymentId}:`, update);
-    console.log(`🔍 Available listeners:`, Array.from(this.listeners.keys()));
+    console.log(`Handling deployment update for ${update.deploymentId}:`, update);
+    console.log(`Available listeners:`, Array.from(this.listeners.keys()));
     
     const listeners = this.listeners.get(update.deploymentId);
-    console.log(`🔍 Found ${listeners?.size || 0} listeners for deploymentId: ${update.deploymentId}`);
+    console.log(`Found ${listeners?.size || 0} listeners for deploymentId: ${update.deploymentId}`);
     
     if (listeners) {
       listeners.forEach(callback => {
         try {
-          console.log(`📤 Calling deployment update callback`);
+          console.log(`Calling deployment update callback`);
           callback(update);
         } catch (error) {
           console.error('Error in deployment update callback:', error);

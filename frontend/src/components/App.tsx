@@ -1,6 +1,5 @@
-import { BrowserRouter as Router, Routes, Route, Navigate, useSearchParams } from 'react-router-dom';
+import { BrowserRouter as Router, Routes, Route, Navigate, useSearchParams, useNavigate } from 'react-router-dom';
 import { AuthProvider, useAuth } from '../contexts/AuthContext';
-import { authService } from '../services/auth';
 import Dashboard from './Dashboard';
 import WorkflowCanvas from './workflow/WorkflowCanvas';
 import WorkflowDetails from './workflow/WorkflowDetails';
@@ -9,7 +8,6 @@ import SignUp from './auth/SignUp';
 import ConfirmSignUp from './auth/ConfirmSignUp';
 import ForgotPassword from './auth/ForgotPassword';
 
-// Auth configuration from environment variables (set by deploy-full-stack script)
 const authConfig = {
   region: import.meta.env.VITE_AWS_REGION,
   userPoolId: import.meta.env.VITE_COGNITO_USER_POOL_ID,
@@ -17,26 +15,8 @@ const authConfig = {
   identityPoolId: import.meta.env.VITE_COGNITO_IDENTITY_POOL_ID,
 };
 
-// Wrapper component to read email from URL params
-function ConfirmSignUpWrapper() {
-  const [searchParams] = useSearchParams();
-  const email = searchParams.get('email') || '';
-  const password = searchParams.get('password') || undefined;
-  
-  return (
-    <ConfirmSignUp 
-      email={email}
-      password={password}
-      onConfirmSuccess={() => window.location.href = '/dashboard'}
-      onBackToSignUp={() => window.location.href = '/signup'}
-    />
-  );
-}
-
-// Protected Route component
 function ProtectedRoute({ children }: { children: React.ReactNode }) {
   const { isAuthenticated, isLoading } = useAuth();
-
   if (isLoading) {
     return (
       <div className="app-loading">
@@ -45,14 +25,11 @@ function ProtectedRoute({ children }: { children: React.ReactNode }) {
       </div>
     );
   }
-
   return isAuthenticated ? <>{children}</> : <Navigate to="/signin" replace />;
 }
 
-// Public Route component (redirects to dashboard if authenticated)
 function PublicRoute({ children }: { children: React.ReactNode }) {
   const { isAuthenticated, isLoading } = useAuth();
-
   if (isLoading) {
     return (
       <div className="app-loading">
@@ -61,78 +38,103 @@ function PublicRoute({ children }: { children: React.ReactNode }) {
       </div>
     );
   }
-
   return isAuthenticated ? <Navigate to="/dashboard" replace /> : <>{children}</>;
 }
 
-// App Routes component (needs to be inside AuthProvider)
+function SignInPage() {
+  const navigate = useNavigate();
+  return (
+    <PublicRoute>
+      <SignIn
+        onSignInSuccess={() => navigate('/dashboard', { replace: true })}
+        onSwitchToSignUp={() => navigate('/signup')}
+        onSwitchToForgotPassword={() => navigate('/forgot-password')}
+      />
+    </PublicRoute>
+  );
+}
+
+function SignUpPage() {
+  const navigate = useNavigate();
+  return (
+    <PublicRoute>
+      <SignUp
+        onSignUpSuccess={(email, password) =>
+          navigate(`/confirm-signup?email=${encodeURIComponent(email)}`, {
+            state: { password },
+          })
+        }
+        onSwitchToSignIn={() => navigate('/signin')}
+      />
+    </PublicRoute>
+  );
+}
+
+function ConfirmSignUpPage() {
+  const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
+  const email = searchParams.get('email') || '';
+  // Password passed via router location state — never exposed in the URL
+  const password = (window.history.state?.usr as { password?: string } | undefined)?.password;
+  return (
+    <PublicRoute>
+      <ConfirmSignUp
+        email={email}
+        password={password}
+        onConfirmSuccess={() => navigate('/dashboard', { replace: true })}
+        onBackToSignUp={() => navigate('/signup')}
+      />
+    </PublicRoute>
+  );
+}
+
+function ForgotPasswordPage() {
+  const navigate = useNavigate();
+  return (
+    <PublicRoute>
+      <ForgotPassword onBackToSignIn={() => navigate('/signin')} />
+    </PublicRoute>
+  );
+}
+
+function DashboardPage() {
+  const navigate = useNavigate();
+  const { signOut } = useAuth();
+  return (
+    <ProtectedRoute>
+      <Dashboard
+        onSignOut={async () => {
+          // Navigate first so ProtectedRoute never renders the unauthenticated flash
+          navigate('/signin', { replace: true });
+          try {
+            await signOut();
+          } catch (error) {
+            console.error('Sign out error:', error);
+          }
+        }}
+        onEditWorkflow={(workflowId) => navigate(`/workflow/editor/${workflowId}`)}
+        onViewWorkflow={(workflowId) => navigate(`/workflow/${workflowId}`)}
+      />
+    </ProtectedRoute>
+  );
+}
+
 function AppRoutes() {
   return (
     <Router>
       <div className="app">
         <Routes>
-          {/* Auth routes */}
-          <Route path="/signin" element={
-            <PublicRoute>
-              <SignIn 
-                onSignInSuccess={() => window.location.href = '/dashboard'}
-                onSwitchToSignUp={() => window.location.href = '/signup'}
-                onSwitchToForgotPassword={() => window.location.href = '/forgot-password'}
-              />
-            </PublicRoute>
-          } />
-          <Route path="/signup" element={
-            <PublicRoute>
-              <SignUp 
-                onSignUpSuccess={(email, password) => window.location.href = `/confirm-signup?email=${encodeURIComponent(email)}&password=${encodeURIComponent(password)}`}
-                onSwitchToSignIn={() => window.location.href = '/signin'}
-              />
-            </PublicRoute>
-          } />
-          <Route path="/confirm-signup" element={
-            <PublicRoute>
-              <ConfirmSignUpWrapper />
-            </PublicRoute>
-          } />
-          <Route path="/forgot-password" element={
-            <PublicRoute>
-              <ForgotPassword 
-                onBackToSignIn={() => window.location.href = '/signin'}
-              />
-            </PublicRoute>
-          } />
-          
-          {/* Protected routes */}
-          <Route path="/dashboard" element={
-            <ProtectedRoute>
-              <Dashboard 
-                onSignOut={async () => {
-                  try {
-                    await authService.signOut();
-                    window.location.href = '/signin';
-                  } catch (error) {
-                    console.error('Sign out error:', error);
-                    // Force redirect even if sign out fails
-                    window.location.href = '/signin';
-                  }
-                }}
-                onEditWorkflow={(workflowId) => window.location.href = `/workflow/editor/${workflowId}`}
-                onViewWorkflow={(workflowId) => window.location.href = `/workflow/${workflowId}`}
-              />
-            </ProtectedRoute>
-          } />
+          <Route path="/signin" element={<SignInPage />} />
+          <Route path="/signup" element={<SignUpPage />} />
+          <Route path="/confirm-signup" element={<ConfirmSignUpPage />} />
+          <Route path="/forgot-password" element={<ForgotPasswordPage />} />
+          <Route path="/dashboard" element={<DashboardPage />} />
           <Route path="/workflow/:workflowId" element={
-            <ProtectedRoute>
-              <WorkflowDetails />
-            </ProtectedRoute>
+            <ProtectedRoute><WorkflowDetails /></ProtectedRoute>
           } />
           <Route path="/workflow/editor/:workflowId" element={
-            <ProtectedRoute>
-              <WorkflowCanvas />
-            </ProtectedRoute>
+            <ProtectedRoute><WorkflowCanvas /></ProtectedRoute>
           } />
-          
-          {/* Default redirects */}
           <Route path="/" element={<Navigate to="/dashboard" replace />} />
           <Route path="*" element={<Navigate to="/dashboard" replace />} />
         </Routes>

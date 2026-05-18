@@ -80,17 +80,12 @@ class AuthService {
     }
 
     try {
-      console.log('Configuring AWS SDK with config:', config);
-      
       this.config = config;
       this.client = new CognitoIdentityProviderClient({
         region: config.region,
       });
 
-      // Load stored tokens if available
       this.loadStoredTokens();
-
-      console.log('AWS SDK configured successfully');
     } catch (error) {
       console.error('Failed to configure AWS SDK:', error);
       throw error;

@@ -29,7 +29,7 @@ export class DeletionOrchestrator {
   async orchestrateDeletion(request: DeletionRequest): Promise<void> {
     const { workflowId, userId, workflowName, isDeployed } = request;
     
-    console.log(`🗑️ Starting deletion orchestration for workflow: ${workflowName}`);
+    console.log(`Starting deletion orchestration for workflow: ${workflowName}`);
 
     const steps: DeletionStep[] = [
       { id: 'aws-cleanup', name: 'Clean up AWS resources', status: 'pending' },
@@ -53,7 +53,7 @@ export class DeletionOrchestrator {
         steps[0].status = 'completed';
         steps[0].startTime = new Date().toISOString();
         steps[0].endTime = new Date().toISOString();
-        console.log('⏭️ Skipping AWS cleanup for draft workflow');
+        console.log('Skipping AWS cleanup for draft workflow');
       }
 
       // Step 2: Clean up database records
@@ -67,10 +67,10 @@ export class DeletionOrchestrator {
         steps,
       });
 
-      console.log(`✅ Deletion orchestration completed for workflow: ${workflowName}`);
+      console.log(`Deletion orchestration completed for workflow: ${workflowName}`);
 
     } catch (error) {
-      console.error(`❌ Deletion orchestration failed for workflow: ${workflowName}`, error);
+      console.error(`Deletion orchestration failed for workflow: ${workflowName}`, error);
       
       // Send failure notification
       await this.notificationService.sendDeletionUpdate(userId, {
@@ -90,7 +90,7 @@ export class DeletionOrchestrator {
     step.startTime = new Date().toISOString();
 
     try {
-      console.log(`🔄 Starting AWS cleanup for workflow: ${workflowId}`);
+      console.log(`Starting AWS cleanup for workflow: ${workflowId}`);
       
       // Send progress update
       await this.notificationService.sendDeletionUpdate(userId, {
@@ -102,13 +102,13 @@ export class DeletionOrchestrator {
 
       // Delete CloudFormation stack
       const stackName = `workflow-${workflowId}`;
-      console.log(`🔧 DeletionOrchestrator: About to call stackManager.deleteStack for ${stackName}`);
+      console.log(`DeletionOrchestrator: About to call stackManager.deleteStack for ${stackName}`);
       
       try {
         const deletionResult = await this.stackManager.deleteStack(stackName, workflowId, userId);
-        console.log(`✅ DeletionOrchestrator: stackManager.deleteStack completed:`, deletionResult);
+        console.log(`DeletionOrchestrator: stackManager.deleteStack completed:`, deletionResult);
       } catch (stackError) {
-        console.error(`❌ DeletionOrchestrator: stackManager.deleteStack failed:`, stackError);
+        console.error(`DeletionOrchestrator: stackManager.deleteStack failed:`, stackError);
         throw stackError;
       }
       
@@ -123,14 +123,14 @@ export class DeletionOrchestrator {
       step.status = 'completed';
       step.endTime = new Date().toISOString();
       
-      console.log(`✅ AWS cleanup initiated for workflow: ${workflowId}`);
+      console.log(`AWS cleanup initiated for workflow: ${workflowId}`);
 
     } catch (error) {
       step.status = 'failed';
       step.endTime = new Date().toISOString();
       step.error = error instanceof Error ? error.message : 'Unknown error';
       
-      console.error(`❌ AWS cleanup failed for workflow: ${workflowId}`, error);
+      console.error(`AWS cleanup failed for workflow: ${workflowId}`, error);
       throw error;
     }
   }
@@ -141,7 +141,7 @@ export class DeletionOrchestrator {
     step.startTime = new Date().toISOString();
 
     try {
-      console.log(`🔄 Starting database cleanup for workflow: ${workflowId}`);
+      console.log(`Starting database cleanup for workflow: ${workflowId}`);
       
       // Send progress update
       await this.notificationService.sendDeletionUpdate(userId, {
@@ -171,14 +171,14 @@ export class DeletionOrchestrator {
       step.status = 'completed';
       step.endTime = new Date().toISOString();
       
-      console.log(`✅ Database cleanup completed for workflow: ${workflowId}`);
+      console.log(`Database cleanup completed for workflow: ${workflowId}`);
 
     } catch (error) {
       step.status = 'failed';
       step.endTime = new Date().toISOString();
       step.error = error instanceof Error ? error.message : 'Unknown error';
       
-      console.error(`❌ Database cleanup failed for workflow: ${workflowId}`, error);
+      console.error(`Database cleanup failed for workflow: ${workflowId}`, error);
       throw error;
     }
   }

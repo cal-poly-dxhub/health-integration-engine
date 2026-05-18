@@ -35,7 +35,7 @@ class DirectFrontendDeployer {
 
   async deploy(): Promise<DeploymentResult> {
     try {
-      console.log(chalk.blue.bold(`🚀 Starting direct frontend deployment for ${this.options.environment} environment`));
+      console.log(chalk.blue.bold(`Starting direct frontend deployment for ${this.options.environment} environment`));
       console.log('');
 
       // Step 1: Build frontend
@@ -48,7 +48,7 @@ class DirectFrontendDeployer {
       const cloudFrontUrl = await this.setupCloudFront(s3BucketName);
 
       console.log('');
-      console.log(chalk.green.bold('✅ Frontend deployment completed successfully!'));
+      console.log(chalk.green.bold('Frontend deployment completed successfully!'));
       console.log(chalk.blue(`S3 Bucket: ${s3BucketName}`));
       if (cloudFrontUrl) {
         console.log(chalk.blue(`CloudFront URL: ${cloudFrontUrl}`));
@@ -65,7 +65,7 @@ class DirectFrontendDeployer {
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : 'Unknown error occurred';
       console.log('');
-      console.log(chalk.red.bold('❌ Frontend deployment failed!'));
+      console.log(chalk.red.bold('Frontend deployment failed!'));
       console.log(chalk.red(`Error: ${errorMessage}`));
       
       return {
@@ -228,7 +228,7 @@ class DirectFrontendDeployer {
           stdio: this.options.verbose ? 'inherit' : 'pipe'
         });
 
-        console.log(chalk.green(`✅ Created S3 bucket: ${bucketName}`));
+        console.log(chalk.green(`Created S3 bucket: ${bucketName}`));
       }
 
       // Sync files to S3
@@ -354,8 +354,8 @@ class DirectFrontendDeployer {
           distributionId = distribution.Distribution.Id;
           distributionDomain = distribution.Distribution.DomainName;
           
-          console.log(chalk.green(`✅ Created CloudFront distribution: ${distributionId}`));
-          console.log(chalk.yellow('⏳ Distribution is deploying... This may take 10-15 minutes to be fully available.'));
+          console.log(chalk.green(`Created CloudFront distribution: ${distributionId}`));
+          console.log(chalk.yellow('Distribution is deploying... This may take 10-15 minutes to be fully available.'));
           
         } finally {
           // Clean up temp file
@@ -446,15 +446,15 @@ program
     
     // Display deployment summary
     console.log('');
-    console.log(chalk.blue.bold('📋 Deployment Summary:'));
+    console.log(chalk.blue.bold('Deployment Summary:'));
     console.log(`Environment: ${result.environment.toUpperCase()}`);
     console.log(`Status: ${result.success ? chalk.green('SUCCESS') : chalk.red('FAILED')}`);
     console.log(`Timestamp: ${new Date().toISOString()}`);
     
     if (result.success) {
-      console.log(chalk.green.bold('✅ Deployment successful!'));
+      console.log(chalk.green.bold('Deployment successful!'));
     } else {
-      console.log(chalk.red.bold('❌ Deployment failed!'));
+      console.log(chalk.red.bold('Deployment failed!'));
       process.exit(1);
     }
   });

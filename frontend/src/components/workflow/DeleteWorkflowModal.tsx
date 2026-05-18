@@ -90,7 +90,7 @@ const DeleteWorkflowModal: React.FC<DeleteWorkflowModalProps> = ({
             disabled={isDeleting}
             aria-label="Close"
           >
-            ✕
+            
           </button>
         </div>
 

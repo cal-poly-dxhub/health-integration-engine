@@ -23,8 +23,8 @@ const DELETION_STATE_MACHINE_ARN = `arn:aws:states:${AWS_REGION}:${AWS_ACCOUNT_I
 export const handler = async (
   event: APIGatewayProxyEvent | any
 ): Promise<APIGatewayProxyResult | any> => {
-  console.log('🗑️ DELETE WORKFLOW HANDLER INVOKED');
-  console.log('📋 Event received:', JSON.stringify(event, null, 2));
+  console.log('DELETE WORKFLOW HANDLER INVOKED');
+  console.log('Event received:', JSON.stringify(event, null, 2));
 
   // Check if this is a Step Functions action call
   if (event.action) {
@@ -41,7 +41,7 @@ export const handler = async (
 async function handleStepFunctionsAction(event: any): Promise<any> {
   const { action, workflowId, userId } = event;
   
-  console.log(`🔧 Handling Step Functions action: ${action} for workflow: ${workflowId}`);
+  console.log(`Handling Step Functions action: ${action} for workflow: ${workflowId}`);
 
   try {
     switch (action) {
@@ -55,7 +55,7 @@ async function handleStepFunctionsAction(event: any): Promise<any> {
         throw new Error(`Unknown action: ${action}`);
     }
   } catch (error) {
-    console.error(`❌ Step Functions action ${action} failed:`, error);
+    console.error(`Step Functions action ${action} failed:`, error);
     throw error;
   }
 }
@@ -69,7 +69,7 @@ async function handleApiGatewayRequest(event: APIGatewayProxyEvent): Promise<API
     const userId = extractUserIdFromEvent(event);
     
     if (!userId) {
-      console.error('❌ No user ID found in JWT token');
+      console.error('No user ID found in JWT token');
       return createAuthErrorResponse('Valid authentication token required');
     }
 
@@ -85,7 +85,7 @@ async function handleApiGatewayRequest(event: APIGatewayProxyEvent): Promise<API
       };
     }
 
-    console.log('🔍 Deleting workflow:', workflowId, 'for user:', userId);
+    console.log('Deleting workflow:', workflowId, 'for user:', userId);
 
     // 1. Get workflow from database to check ownership and get deployment info
     const workflow = await getWorkflow(workflowId, userId);
@@ -99,14 +99,14 @@ async function handleApiGatewayRequest(event: APIGatewayProxyEvent): Promise<API
       };
     }
 
-    console.log('✅ Found workflow:', workflow.name);
+    console.log('Found workflow:', workflow.name);
 
     // 2. Start Step Functions deletion workflow
-    console.log('🚀 Starting Step Functions deletion workflow');
+    console.log('Starting Step Functions deletion workflow');
     
     const DELETION_STATE_MACHINE_ARN = process.env.DELETION_STATE_MACHINE_ARN;
     if (!DELETION_STATE_MACHINE_ARN) {
-      console.error('❌ DELETION_STATE_MACHINE_ARN environment variable not set');
+      console.error('DELETION_STATE_MACHINE_ARN environment variable not set');
       return {
         statusCode: 500,
         headers: createSuccessHeaders(),
@@ -126,7 +126,7 @@ async function handleApiGatewayRequest(event: APIGatewayProxyEvent): Promise<API
         isDeployed: workflow.isDeployed || false,
       };
 
-      console.log('📤 Starting Step Functions execution:', {
+      console.log('Starting Step Functions execution:', {
         stateMachineArn: DELETION_STATE_MACHINE_ARN,
         executionName,
         input: executionInput,
@@ -138,7 +138,7 @@ async function handleApiGatewayRequest(event: APIGatewayProxyEvent): Promise<API
         input: JSON.stringify(executionInput),
       }));
 
-      console.log('✅ Step Functions deletion execution started:', executionResponse.executionArn);
+      console.log('Step Functions deletion execution started:', executionResponse.executionArn);
 
       return {
         statusCode: 202, // Accepted - will process asynchronously
@@ -158,7 +158,7 @@ async function handleApiGatewayRequest(event: APIGatewayProxyEvent): Promise<API
       };
 
     } catch (sfnError) {
-      console.error('❌ Failed to start Step Functions deletion:', sfnError);
+      console.error('Failed to start Step Functions deletion:', sfnError);
       return {
         statusCode: 500,
         headers: createSuccessHeaders(),
@@ -170,7 +170,7 @@ async function handleApiGatewayRequest(event: APIGatewayProxyEvent): Promise<API
     }
 
   } catch (error) {
-    console.error('❌ Delete workflow error:', error);
+    console.error('Delete workflow error:', error);
     
     return {
       statusCode: 500,
@@ -187,7 +187,7 @@ async function handleApiGatewayRequest(event: APIGatewayProxyEvent): Promise<API
  * Step Functions action: Delete CloudFormation stack
  */
 async function deleteCloudFormationStackAction(workflowId: string, userId: string): Promise<any> {
-  console.log(`🗑️ Step Functions Action: Deleting CloudFormation stack for workflow: ${workflowId}`);
+  console.log(`Step Functions Action: Deleting CloudFormation stack for workflow: ${workflowId}`);
   
   try {
     const { CloudFormationStackManager } = await import('../services/cloudFormationStackManager');
@@ -196,7 +196,7 @@ async function deleteCloudFormationStackAction(workflowId: string, userId: strin
     const stackName = `workflow-${workflowId}`;
     const result = await stackManager.deleteStack(stackName, workflowId, userId);
     
-    console.log('✅ CloudFormation stack deletion result:', result);
+    console.log('CloudFormation stack deletion result:', result);
     
     return {
       success: result.success,
@@ -205,7 +205,7 @@ async function deleteCloudFormationStackAction(workflowId: string, userId: strin
       warnings: result.warnings,
     };
   } catch (error) {
-    console.error('❌ CloudFormation stack deletion failed:', error);
+    console.error('CloudFormation stack deletion failed:', error);
     throw error;
   }
 }
@@ -214,7 +214,7 @@ async function deleteCloudFormationStackAction(workflowId: string, userId: strin
  * Step Functions action: Delete database records
  */
 async function deleteDatabaseRecordsAction(workflowId: string, userId: string): Promise<any> {
-  console.log(`🗑️ Step Functions Action: Deleting database records for workflow: ${workflowId}`);
+  console.log(`Step Functions Action: Deleting database records for workflow: ${workflowId}`);
   
   try {
     // Delete workflow record from database
@@ -226,7 +226,7 @@ async function deleteDatabaseRecordsAction(workflowId: string, userId: string): 
       },
     }));
     
-    console.log('✅ Workflow record deleted from database');
+    console.log('Workflow record deleted from database');
     
     // Also clean up deployment records
     const DEPLOYMENTS_TABLE = process.env.DEPLOYMENTS_TABLE || 'WorkflowBuilder-Deployments';
@@ -239,9 +239,9 @@ async function deleteDatabaseRecordsAction(workflowId: string, userId: string): 
           SK: `DEPLOYMENT#latest`,
         },
       }));
-      console.log('✅ Deployment records cleaned up');
+      console.log('Deployment records cleaned up');
     } catch (deploymentError) {
-      console.warn('⚠️ Failed to clean up deployment records (may not exist):', deploymentError);
+      console.warn('Failed to clean up deployment records (may not exist):', deploymentError);
     }
     
     return {
@@ -251,7 +251,7 @@ async function deleteDatabaseRecordsAction(workflowId: string, userId: string): 
       deploymentRecordsRemoved: true,
     };
   } catch (error) {
-    console.error('❌ Database records deletion failed:', error);
+    console.error('Database records deletion failed:', error);
     throw error;
   }
 }
@@ -271,7 +271,7 @@ async function getWorkflow(workflowId: string, userId: string): Promise<any> {
 
     return response.Item || null;
   } catch (error) {
-    console.error('❌ Error fetching workflow:', error);
+    console.error('Error fetching workflow:', error);
     return null;
   }
 }

@@ -31,7 +31,7 @@ export interface WorkflowStatusUpdateResult {
  * Called by Step Functions deployment and deletion workflows
  */
 export const handler = async (event: WorkflowStatusUpdateEvent): Promise<WorkflowStatusUpdateResult> => {
-  console.log('🔄 Updating workflow status:', JSON.stringify(event, null, 2));
+  console.log('Updating workflow status:', JSON.stringify(event, null, 2));
 
   try {
     const { workflowId, userId, status, stateMachineArn, stackName, errorMessage, message, timestamp } = event;
@@ -99,7 +99,7 @@ export const handler = async (event: WorkflowStatusUpdateEvent): Promise<Workflo
 
     const result = await docClient.send(updateCommand);
     
-    console.log('✅ Workflow status updated successfully:', {
+    console.log('Workflow status updated successfully:', {
       workflowId,
       status,
       updatedAttributes: result.Attributes,
@@ -116,7 +116,7 @@ export const handler = async (event: WorkflowStatusUpdateEvent): Promise<Workflo
     };
 
   } catch (error) {
-    console.error('❌ Error updating workflow status:', error);
+    console.error('Error updating workflow status:', error);
     
     const errorMessage = error instanceof Error ? error.message : 'Unknown error';
     
@@ -140,7 +140,7 @@ async function sendWebSocketNotification(
   errorMessage?: string
 ): Promise<void> {
   try {
-    console.log('📡 Sending WebSocket notification:', { workflowId, userId, status, message });
+    console.log('Sending WebSocket notification:', { workflowId, userId, status, message });
 
     // Map status to appropriate WebSocket message type and content
     let notificationType: string;
@@ -185,9 +185,9 @@ async function sendWebSocketNotification(
       timestamp: new Date().toISOString(),
     });
 
-    console.log('✅ WebSocket notification sent successfully');
+    console.log('WebSocket notification sent successfully');
   } catch (error) {
-    console.error('❌ Failed to send WebSocket notification:', error);
+    console.error('Failed to send WebSocket notification:', error);
     // Don't throw - WebSocket notifications are non-critical
   }
 }

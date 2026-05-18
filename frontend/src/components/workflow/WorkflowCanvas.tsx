@@ -53,6 +53,8 @@ const WorkflowCanvasContent: React.FC = () => {
   const [savedOpensearchIndexName, setSavedOpensearchIndexName] =
     useState('health-messages');
   const [isInitialLoad, setIsInitialLoad] = useState(true);
+  const [canvasError, setCanvasError] = useState<string | null>(null);
+  const [confirmLeave, setConfirmLeave] = useState(false);
 
   const canvasRef = useRef<HTMLDivElement>(null);
 
@@ -332,7 +334,7 @@ const WorkflowCanvasContent: React.FC = () => {
       setSavedOpensearchIndexName(opensearchIndexName);
     } catch (err) {
       console.error('Failed to save workflow:', err);
-      alert('Failed to save workflow. Please try again.');
+      setCanvasError('Failed to save workflow. Please try again.');
     } finally {
       setIsSaving(false);
       setTimeout(() => {
@@ -382,7 +384,7 @@ const WorkflowCanvasContent: React.FC = () => {
     const validation =
       DeploymentService.validateWorkflowForDeployment(currentWorkflow);
     if (!validation.isValid) {
-      alert(`Workflow validation failed:\n\n${validation.errors.join('\n')}`);
+      setCanvasError(`Workflow validation failed:\n\n${validation.errors.join('\n')}`);
       return;
     }
 
@@ -406,7 +408,7 @@ const WorkflowCanvasContent: React.FC = () => {
       setDeploymentModalOpen(true);
     } catch (err) {
       console.error('Failed to deploy workflow:', err);
-      alert('Failed to start deployment. Please try again.');
+      setCanvasError('Failed to start deployment. Please try again.');
     } finally {
       setIsDeploying(false);
     }
@@ -473,16 +475,14 @@ const WorkflowCanvasContent: React.FC = () => {
       setHasUnsavedChanges(true);
     } catch (err) {
       console.error('Failed to apply auto-layout:', err);
-      alert('Failed to auto-arrange nodes. Please try again.');
+      setCanvasError('Failed to auto-arrange nodes. Please try again.');
     }
   }, [nodes, connections]);
 
   const handleBack = () => {
     if (hasUnsavedChanges) {
-      const shouldLeave = confirm(
-        'You have unsaved changes. Are you sure you want to leave?'
-      );
-      if (!shouldLeave) return;
+      setConfirmLeave(true);
+      return;
     }
     navigate('/dashboard');
   };
@@ -682,6 +682,34 @@ const WorkflowCanvasContent: React.FC = () => {
         </div>
       </div>
 
+      {/* ---------- Unsaved changes confirm ---------- */}
+      {confirmLeave && (
+        <div role="dialog" aria-modal="true" aria-label="Unsaved changes" className="wfc-confirm-overlay">
+          <div className="wfc-confirm">
+            <p className="wfc-confirm-title">You have unsaved changes. Leave without saving?</p>
+            <div className="wfc-confirm-actions">
+              <button type="button" className="wfc-btn wfc-btn--danger" onClick={() => { setConfirmLeave(false); navigate('/dashboard'); }}>Leave</button>
+              <button type="button" className="wfc-btn" onClick={() => setConfirmLeave(false)}>Stay</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ---------- Canvas error banner ---------- */}
+      {canvasError && (
+        <div role="alert" className="wfc-error-banner">
+          <span className="wfc-error-banner-msg">{canvasError}</span>
+          <button
+            type="button"
+            className="wfc-error-banner-close"
+            onClick={() => setCanvasError(null)}
+            aria-label="Dismiss error"
+          >
+            
+          </button>
+        </div>
+      )}
+
       {/* ---------- Body ---------- */}
       <div className="wfc-body">
         <NodeSidebar />
@@ -789,7 +817,7 @@ const WorkflowCanvasContent: React.FC = () => {
                 onClick={() => setSelectedNode(null)}
                 aria-label="Close"
               >
-                ✕
+                
               </button>
             </div>
 

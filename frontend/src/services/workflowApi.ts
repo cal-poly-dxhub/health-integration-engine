@@ -43,10 +43,10 @@ class WorkflowApiService {
     
     try {
       const response = await apiService.get<ListWorkflowsResponse>(url);
-      console.log('✅ Listed workflows:', response.workflows.length, 'workflows');
+      console.log('Listed workflows:', response.workflows.length, 'workflows');
       return response;
     } catch (error) {
-      console.error('❌ Failed to list workflows:', error);
+      console.error('Failed to list workflows:', error);
       throw new Error('Failed to load workflows');
     }
   }
@@ -57,10 +57,10 @@ class WorkflowApiService {
   async getWorkflow(workflowId: string): Promise<Workflow> {
     try {
       const workflow = await apiService.get<Workflow>(`/workflows/${workflowId}`);
-      console.log('✅ Retrieved workflow:', workflow.id, workflow.name);
+      console.log('Retrieved workflow:', workflow.id, workflow.name);
       return workflow;
     } catch (error) {
-      console.error('❌ Failed to get workflow:', error);
+      console.error('Failed to get workflow:', error);
       if ((error as any)?.response?.status === 404) {
         throw new Error('Workflow not found');
       }
@@ -78,16 +78,16 @@ class WorkflowApiService {
       if (workflow.id) {
         // Update existing workflow
         response = await apiService.put<SaveWorkflowResponse>(`/workflows/${workflow.id}`, workflow);
-        console.log('✅ Updated workflow:', workflow.id, workflow.name);
+        console.log('Updated workflow:', workflow.id, workflow.name);
       } else {
         // Create new workflow
         response = await apiService.post<SaveWorkflowResponse>('/workflows', workflow);
-        console.log('✅ Created workflow:', response.workflow.id, response.workflow.name);
+        console.log('Created workflow:', response.workflow.id, response.workflow.name);
       }
       
       return response;
     } catch (error) {
-      console.error('❌ Failed to save workflow:', error);
+      console.error('Failed to save workflow:', error);
       
       if ((error as any)?.response?.status === 409) {
         throw new Error('Workflow has been modified by another user. Please refresh and try again.');
@@ -116,11 +116,11 @@ class WorkflowApiService {
         };
       }>(`/workflows/${workflowId}`);
       
-      console.log('✅ Workflow deletion initiated:', workflowId);
+      console.log('Workflow deletion initiated:', workflowId);
       
       // Handle async deletion (202 response)
       if (response.status === 'DELETION_IN_PROGRESS') {
-        console.log('🔄 Deletion is processing asynchronously with real-time updates');
+        console.log('Deletion is processing asynchronously with real-time updates');
       }
       
       return {
@@ -134,7 +134,7 @@ class WorkflowApiService {
         details: response.details
       };
     } catch (error) {
-      console.error('❌ Failed to delete workflow:', error);
+      console.error('Failed to delete workflow:', error);
       
       // Enhanced error handling
       if ((error as any)?.response?.status === 404) {
@@ -145,7 +145,7 @@ class WorkflowApiService {
         throw new Error('Workflow cannot be deleted - it may be currently deploying');
       } else if ((error as any)?.response?.status === 504 || (error as any)?.code === 'ECONNABORTED') {
         // Handle timeout - deletion may have succeeded
-        console.log('⚠️ Deletion request timed out - checking if workflow was actually deleted...');
+        console.log('Deletion request timed out - checking if workflow was actually deleted...');
         throw new Error('Deletion request timed out - please refresh to check if the workflow was deleted');
       } else {
         throw new Error('Failed to delete workflow');
@@ -156,7 +156,7 @@ class WorkflowApiService {
   /**
    * Search workflows by name or description
    */
-  async searchWorkflows(query: string, limit: number = 20): Promise<Workflow[]> {
+  async searchWorkflows(query: string, limit = 20): Promise<Workflow[]> {
     try {
       const response = await this.listWorkflows({
         search: query,
@@ -165,10 +165,10 @@ class WorkflowApiService {
         sortOrder: 'desc',
       });
       
-      console.log('✅ Search results:', response.workflows.length, 'workflows found');
+      console.log('Search results:', response.workflows.length, 'workflows found');
       return response.workflows;
     } catch (error) {
-      console.error('❌ Failed to search workflows:', error);
+      console.error('Failed to search workflows:', error);
       throw new Error('Failed to search workflows');
     }
   }
@@ -178,7 +178,7 @@ class WorkflowApiService {
    */
   async getWorkflowsByStatus(
     status: 'draft' | 'pending' | 'deploying' | 'deployed' | 'failed',
-    limit: number = 20
+    limit = 20
   ): Promise<Workflow[]> {
     try {
       const response = await this.listWorkflows({
@@ -188,10 +188,10 @@ class WorkflowApiService {
         sortOrder: 'desc',
       });
       
-      console.log('✅ Workflows by status:', status, response.workflows.length, 'workflows found');
+      console.log('Workflows by status:', status, response.workflows.length, 'workflows found');
       return response.workflows;
     } catch (error) {
-      console.error('❌ Failed to get workflows by status:', error);
+      console.error('Failed to get workflows by status:', error);
       throw new Error('Failed to load workflows');
     }
   }
@@ -199,7 +199,7 @@ class WorkflowApiService {
   /**
    * Get recently updated workflows
    */
-  async getRecentWorkflows(limit: number = 10): Promise<Workflow[]> {
+  async getRecentWorkflows(limit = 10): Promise<Workflow[]> {
     try {
       const response = await this.listWorkflows({
         limit,
@@ -207,10 +207,10 @@ class WorkflowApiService {
         sortOrder: 'desc',
       });
       
-      console.log('✅ Recent workflows:', response.workflows.length, 'workflows found');
+      console.log('Recent workflows:', response.workflows.length, 'workflows found');
       return response.workflows;
     } catch (error) {
-      console.error('❌ Failed to get recent workflows:', error);
+      console.error('Failed to get recent workflows:', error);
       throw new Error('Failed to load recent workflows');
     }
   }

@@ -38,7 +38,7 @@ class FrontendDeployer {
 
   async deploy(): Promise<DeploymentResult> {
     try {
-      console.log(chalk.blue.bold(`🚀 Starting frontend deployment for ${this.options.environment} environment`));
+      console.log(chalk.blue.bold(`Starting frontend deployment for ${this.options.environment} environment`));
       console.log('Deployment options:', this.options);
       console.log('Skip validation:', this.options.skipValidation);
       console.log('');
@@ -48,7 +48,7 @@ class FrontendDeployer {
         console.log('Running validation...');
         await this.performComprehensiveValidation();
       } else {
-        console.log(chalk.yellow('⚠️ Skipping validation as requested'));
+        console.log(chalk.yellow('Skipping validation as requested'));
       }
 
       // Step 2: Deployment confirmation (especially important for production)
@@ -77,7 +77,7 @@ class FrontendDeployer {
       await this.deployToAWS(buildResult.buildPath);
 
       console.log('');
-      console.log(chalk.green.bold('✅ Frontend deployment completed successfully!'));
+      console.log(chalk.green.bold('Frontend deployment completed successfully!'));
       
       return {
         success: true,
@@ -91,7 +91,7 @@ class FrontendDeployer {
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : 'Unknown error occurred';
       console.log('');
-      console.log(chalk.red.bold('❌ Frontend deployment failed!'));
+      console.log(chalk.red.bold('Frontend deployment failed!'));
       console.log(chalk.red(`Error: ${errorMessage}`));
       
       return {
@@ -270,7 +270,7 @@ class FrontendDeployer {
         throw new Error(`Deployment failed: ${result.error?.message || 'Unknown error'}`);
       }
 
-      console.log(`\n${chalk.green('✅ Deployment successful!')}`);
+      console.log(`\n${chalk.green('Deployment successful!')}`);
       console.log(`${chalk.blue('Deployment ID:')} ${result.deploymentId}`);
       console.log(`${chalk.blue('S3 Bucket:')} ${result.s3BucketName}`);
       console.log(`${chalk.blue('CloudFront URL:')} ${result.cloudFrontUrl}`);

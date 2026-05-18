@@ -19,7 +19,6 @@ import ErrorBoundary from './components/ErrorBoundary';
 import App from './components/App';
 import './index.css';
 
-// Render app immediately with loading state
 ReactDOM.createRoot(document.getElementById('root')!).render(
   <React.StrictMode>
     <ErrorBoundary>
@@ -28,29 +27,22 @@ ReactDOM.createRoot(document.getElementById('root')!).render(
   </React.StrictMode>
 );
 
-// Initialize smart auth service in background
-const initializeAuth = async () => {
+// Pre-configure the auth service so it is ready before the first user interaction.
+// AuthProvider also calls configure() — authService.configure() is idempotent (no-op if
+// already configured), so calling it twice is safe.
+(async () => {
   try {
-    // Wait for polyfills to be ready
-    await new Promise(resolve => setTimeout(resolve, 500));
-    
-    console.log('Initializing auth service...');
-    
-    // Import auth service after polyfills are ready
+    // Defer one tick so the polyfills above are fully applied before the
+    // Cognito SDK (which reads globalThis.fetch at import time) loads.
+    await new Promise(resolve => setTimeout(resolve, 0));
     const { authService } = await import('./services/auth');
-    
     authService.configure({
       region: import.meta.env.VITE_AWS_REGION,
       userPoolId: import.meta.env.VITE_COGNITO_USER_POOL_ID,
       userPoolClientId: import.meta.env.VITE_COGNITO_USER_POOL_CLIENT_ID,
       identityPoolId: import.meta.env.VITE_COGNITO_IDENTITY_POOL_ID,
     });
-    console.log('Auth service configured successfully');
-    
   } catch (error) {
-    console.error('Failed to configure auth service:', error);
+    console.error('Failed to pre-configure auth service:', error);
   }
-};
-
-// Initialize auth service
-initializeAuth();
+})();

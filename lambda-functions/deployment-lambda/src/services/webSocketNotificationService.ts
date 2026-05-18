@@ -24,7 +24,7 @@ export class WebSocketNotificationService {
 
   async notifyDeploymentUpdate(deploymentId: string, status: any): Promise<void> {
     if (!this.client || !this.endpoint) {
-      console.log('⚠️ WebSocket client not initialized, skipping notification');
+      console.log('WebSocket client not initialized, skipping notification');
       return;
     }
 
@@ -38,10 +38,10 @@ export class WebSocketNotificationService {
 
       // For now, we'll skip the actual WebSocket notification
       // In a full implementation, we'd need to track connection IDs
-      console.log('📡 WebSocket notification (simulated):', message);
+      console.log('WebSocket notification (simulated):', message);
       
     } catch (error) {
-      console.error('❌ Failed to send WebSocket notification:', error);
+      console.error('Failed to send WebSocket notification:', error);
       // Don't throw - this is non-critical
     }
   }
@@ -57,7 +57,7 @@ export class WebSocketNotificationService {
     allSteps?: any[];
   }): Promise<void> {
     if (!this.client || !this.endpoint) {
-      console.log('⚠️ WebSocket client not initialized, skipping step notification');
+      console.log('WebSocket client not initialized, skipping step notification');
       return;
     }
 
@@ -71,17 +71,17 @@ export class WebSocketNotificationService {
 
       // For now, we'll skip the actual WebSocket notification
       // In a full implementation, we'd need to track connection IDs
-      console.log('📡 WebSocket step notification (simulated):', message);
+      console.log('WebSocket step notification (simulated):', message);
       
     } catch (error) {
-      console.error('❌ Failed to send WebSocket step notification:', error);
+      console.error('Failed to send WebSocket step notification:', error);
       // Don't throw - this is non-critical
     }
   }
 
   async sendDeletionUpdate(userId: string, updateData: any): Promise<void> {
     if (!this.client || !this.endpoint) {
-      console.log('⚠️ WebSocket client not initialized, skipping deletion notification');
+      console.log('WebSocket client not initialized, skipping deletion notification');
       return;
     }
 
@@ -97,10 +97,10 @@ export class WebSocketNotificationService {
 
       // For now, we'll skip the actual WebSocket notification
       // In a full implementation, we'd need to track connection IDs
-      console.log('📡 WebSocket workflow notification (simulated):', message);
+      console.log('WebSocket workflow notification (simulated):', message);
       
     } catch (error) {
-      console.error('❌ Failed to send WebSocket workflow notification:', error);
+      console.error('Failed to send WebSocket workflow notification:', error);
       // Don't throw - this is non-critical
     }
   }

@@ -86,7 +86,7 @@ export class CloudFormationStackManager {
     stackInfo?: any;
     issues: string[];
   }> {
-    console.log(`🔍 CloudFormation Stack Manager: Validating workflow update behavior for ${workflowId}`);
+    console.log(`CloudFormation Stack Manager: Validating workflow update behavior for ${workflowId}`);
     
     const stackName = `workflow-${workflowId}`;
     const issues: string[] = [];
@@ -95,7 +95,7 @@ export class CloudFormationStackManager {
       const stackInfo = await this.getStackInfo(stackName);
       
       if (!stackInfo) {
-        console.log('🆕 CloudFormation Stack Manager: No existing stack found - first deployment');
+        console.log('CloudFormation Stack Manager: No existing stack found - first deployment');
         return {
           isValid: true,
           stackExists: false,
@@ -103,7 +103,7 @@ export class CloudFormationStackManager {
         };
       }
 
-      console.log('📋 CloudFormation Stack Manager: Found existing stack:', {
+      console.log('CloudFormation Stack Manager: Found existing stack:', {
         stackName: stackInfo.stackName,
         status: stackInfo.stackStatus,
         lastUpdated: stackInfo.lastUpdatedTime,
@@ -134,7 +134,7 @@ export class CloudFormationStackManager {
       };
 
     } catch (error) {
-      console.error('❌ CloudFormation Stack Manager: Error validating workflow update behavior:', error);
+      console.error('CloudFormation Stack Manager: Error validating workflow update behavior:', error);
       issues.push(`Validation error: ${error instanceof Error ? error.message : 'Unknown error'}`);
       
       return {
@@ -187,10 +187,10 @@ export class CloudFormationStackManager {
         }
       });
 
-      console.log(`📋 CloudFormation Stack Manager: Resource naming validation completed with ${issues.length} issues`);
+      console.log(`CloudFormation Stack Manager: Resource naming validation completed with ${issues.length} issues`);
       
     } catch (error) {
-      console.warn('⚠️ CloudFormation Stack Manager: Could not validate resource naming:', error);
+      console.warn('CloudFormation Stack Manager: Could not validate resource naming:', error);
       issues.push('Could not validate resource naming');
     }
 
@@ -212,7 +212,7 @@ export class CloudFormationStackManager {
     reconciliationNeeded: boolean;
     reconciliationActions: string[];
   }> {
-    console.log(`🌊 CloudFormation Stack Manager: Detecting stack drift for ${stackName}`);
+    console.log(`CloudFormation Stack Manager: Detecting stack drift for ${stackName}`);
     
     const result = {
       hasDrift: false,
@@ -228,7 +228,7 @@ export class CloudFormationStackManager {
       }));
 
       const detectionId = driftResponse.StackDriftDetectionId!;
-      console.log(`🔍 CloudFormation Stack Manager: Drift detection started with ID: ${detectionId}`);
+      console.log(`CloudFormation Stack Manager: Drift detection started with ID: ${detectionId}`);
 
       // Wait for drift detection to complete
       await this.waitForDriftDetection(detectionId);
@@ -259,14 +259,14 @@ export class CloudFormationStackManager {
         result.reconciliationActions = reconciliationAnalysis.actions;
       }
 
-      console.log(`🌊 CloudFormation Stack Manager: Drift detection completed:`, {
+      console.log(`CloudFormation Stack Manager: Drift detection completed:`, {
         hasDrift: result.hasDrift,
         driftedResources: result.driftDetails.length,
         reconciliationNeeded: result.reconciliationNeeded,
       });
 
     } catch (error) {
-      console.warn('⚠️ CloudFormation Stack Manager: Drift detection failed:', error);
+      console.warn('CloudFormation Stack Manager: Drift detection failed:', error);
       // Don't fail the deployment if drift detection fails
     }
 
@@ -289,7 +289,7 @@ export class CloudFormationStackManager {
       }));
 
       const detectionStatus = statusResponse.DetectionStatus;
-      console.log(`📊 CloudFormation Stack Manager: Drift detection status: ${detectionStatus}`);
+      console.log(`CloudFormation Stack Manager: Drift detection status: ${detectionStatus}`);
 
       if (detectionStatus === 'DETECTION_COMPLETE') {
         return;
@@ -344,7 +344,7 @@ export class CloudFormationStackManager {
     partialFailures?: string[];
     warnings?: string[];
   }> {
-    console.log(`🗑️ CloudFormation Stack Manager: Deleting stack ${stackName}`);
+    console.log(`CloudFormation Stack Manager: Deleting stack ${stackName}`);
     
     const result = {
       success: false,
@@ -373,12 +373,12 @@ export class CloudFormationStackManager {
             `${r.LogicalResourceId} (${r.ResourceType})`
           ) || [];
           
-          console.log(`📋 CloudFormation Stack Manager: Found ${resources.length} resources to delete`);
+          console.log(`CloudFormation Stack Manager: Found ${resources.length} resources to delete`);
           resources.forEach(resource => console.log(`  - ${resource}`));
         }
       } catch (error: any) {
         if (error.name === 'ValidationError' && error.message.includes('does not exist')) {
-          console.log(`ℹ️ CloudFormation Stack Manager: Stack ${stackName} does not exist`);
+          console.log(`ℹCloudFormation Stack Manager: Stack ${stackName} does not exist`);
           result.warnings.push('CloudFormation stack does not exist - may have been deleted manually');
         } else {
           throw error;
@@ -390,37 +390,37 @@ export class CloudFormationStackManager {
         try {
           await this.cleanupEventBridgeRules(workflowId);
         } catch (ebError) {
-          console.warn('⚠️ CloudFormation Stack Manager: EventBridge cleanup failed (non-fatal):', ebError);
+          console.warn('CloudFormation Stack Manager: EventBridge cleanup failed (non-fatal):', ebError);
         }
       }
 
       // 3. Delete the stack if it exists
       if (stackExists) {
         try {
-          console.log(`🚀 CloudFormation Stack Manager: About to send DeleteStackCommand for ${stackName}`);
+          console.log(`CloudFormation Stack Manager: About to send DeleteStackCommand for ${stackName}`);
           
           const deleteCommand = new DeleteStackCommand({
             StackName: stackName,
           });
           
-          console.log(`📤 CloudFormation Stack Manager: Sending DeleteStackCommand...`);
+          console.log(`CloudFormation Stack Manager: Sending DeleteStackCommand...`);
           const deleteResponse = await this.cfnClient.send(deleteCommand);
-          console.log(`📥 CloudFormation Stack Manager: DeleteStackCommand response:`, deleteResponse);
+          console.log(`CloudFormation Stack Manager: DeleteStackCommand response:`, deleteResponse);
 
-          console.log(`🗑️ CloudFormation Stack Manager: Stack deletion initiated for ${stackName}`);
+          console.log(`CloudFormation Stack Manager: Stack deletion initiated for ${stackName}`);
           
           // Wait for stack deletion to actually complete
           await this.waitForStackDeletion(stackName);
           
           result.deletedResources = resources;
-          console.log(`✅ CloudFormation Stack Manager: Stack deletion completed for ${stackName}`);
+          console.log(`CloudFormation Stack Manager: Stack deletion completed for ${stackName}`);
           
         } catch (deletionError: any) {
-          console.error(`❌ CloudFormation Stack Manager: Stack deletion failed:`, deletionError);
-          console.error(`❌ CloudFormation Stack Manager: Error name:`, deletionError.name);
-          console.error(`❌ CloudFormation Stack Manager: Error message:`, deletionError.message);
-          console.error(`❌ CloudFormation Stack Manager: Error code:`, deletionError.code);
-          console.error(`❌ CloudFormation Stack Manager: Full error:`, JSON.stringify(deletionError, null, 2));
+          console.error(`CloudFormation Stack Manager: Stack deletion failed:`, deletionError);
+          console.error(`CloudFormation Stack Manager: Error name:`, deletionError.name);
+          console.error(`CloudFormation Stack Manager: Error message:`, deletionError.message);
+          console.error(`CloudFormation Stack Manager: Error code:`, deletionError.code);
+          console.error(`CloudFormation Stack Manager: Full error:`, JSON.stringify(deletionError, null, 2));
           
           // Handle specific CloudFormation deletion errors
           if (deletionError.name === 'ValidationError') {
@@ -441,9 +441,9 @@ export class CloudFormationStackManager {
       // 4. Clean up workflow database records regardless of stack deletion outcome
       try {
         await this.cleanupWorkflowRecords(workflowId, userId);
-        console.log('✅ CloudFormation Stack Manager: Workflow database records cleaned up');
+        console.log('CloudFormation Stack Manager: Workflow database records cleaned up');
       } catch (dbError) {
-        console.error('⚠️ CloudFormation Stack Manager: Failed to clean up database records:', dbError);
+        console.error('CloudFormation Stack Manager: Failed to clean up database records:', dbError);
         result.partialFailures.push('Failed to clean up workflow database records');
       }
 
@@ -466,7 +466,7 @@ export class CloudFormationStackManager {
       return result;
 
     } catch (error) {
-      console.error(`❌ CloudFormation Stack Manager: Critical error during stack deletion:`, error);
+      console.error(`CloudFormation Stack Manager: Critical error during stack deletion:`, error);
       
       result.success = false;
       result.message = `Critical error during deletion: ${error instanceof Error ? error.message : 'Unknown error'}`;
@@ -496,7 +496,7 @@ export class CloudFormationStackManager {
     let lastStatus = '';
     let lastResourceCount = 0;
 
-    console.log(`⏳ CloudFormation Stack Manager: Waiting for stack ${stackName} deletion to complete...`);
+    console.log(`CloudFormation Stack Manager: Waiting for stack ${stackName} deletion to complete...`);
 
     while (attempts < maxAttempts) {
       try {
@@ -506,7 +506,7 @@ export class CloudFormationStackManager {
 
         const stack = response.Stacks?.[0];
         if (!stack) {
-          console.log(`✅ CloudFormation Stack Manager: Stack ${stackName} deleted successfully`);
+          console.log(`CloudFormation Stack Manager: Stack ${stackName} deleted successfully`);
           if (progressCallback) {
             await progressCallback('DELETE_COMPLETE', 0);
           }
@@ -517,13 +517,13 @@ export class CloudFormationStackManager {
         
         // Log status changes
         if (status !== lastStatus) {
-          console.log(`📊 CloudFormation Stack Manager: Stack ${stackName} status changed: ${lastStatus} → ${status}`);
+          console.log(`CloudFormation Stack Manager: Stack ${stackName} status changed: ${lastStatus} → ${status}`);
           lastStatus = status;
         }
 
         // Check for completion
         if (status === 'DELETE_COMPLETE') {
-          console.log(`✅ CloudFormation Stack Manager: Stack ${stackName} deletion completed`);
+          console.log(`CloudFormation Stack Manager: Stack ${stackName} deletion completed`);
           if (progressCallback) {
             await progressCallback('DELETE_COMPLETE', 0);
           }
@@ -531,7 +531,7 @@ export class CloudFormationStackManager {
         } else if (status === 'DELETE_FAILED') {
           // Get more details about the failure
           const failureReason = stack.StackStatusReason || 'Unknown failure reason';
-          console.error(`❌ CloudFormation Stack Manager: Stack deletion failed: ${failureReason}`);
+          console.error(`CloudFormation Stack Manager: Stack deletion failed: ${failureReason}`);
           
           // Try to get details about which resources failed
           try {
@@ -544,13 +544,13 @@ export class CloudFormationStackManager {
             ) || [];
             
             if (failedResources.length > 0) {
-              console.error(`❌ Failed to delete resources:`);
+              console.error(`Failed to delete resources:`);
               failedResources.forEach(resource => {
                 console.error(`  - ${resource.LogicalResourceId} (${resource.ResourceType}): ${resource.ResourceStatusReason}`);
               });
             }
           } catch (resourceError) {
-            console.warn('⚠️ Could not get details about failed resources:', resourceError);
+            console.warn('Could not get details about failed resources:', resourceError);
           }
           
           throw new Error(`Stack deletion failed: ${failureReason}`);
@@ -565,7 +565,7 @@ export class CloudFormationStackManager {
           const currentResourceCount = resourcesResponse.StackResourceSummaries?.length || 0;
           
           if (currentResourceCount !== lastResourceCount) {
-            console.log(`📊 CloudFormation Stack Manager: ${currentResourceCount} resources remaining`);
+            console.log(`CloudFormation Stack Manager: ${currentResourceCount} resources remaining`);
             lastResourceCount = currentResourceCount;
             
             // Send progress update via callback
@@ -575,7 +575,7 @@ export class CloudFormationStackManager {
           }
         } catch (resourceError) {
           // Don't fail the whole process if we can't get resource details
-          console.warn('⚠️ Could not get resource count:', resourceError);
+          console.warn('Could not get resource count:', resourceError);
         }
 
         await this.sleep(10000); // Wait 10 seconds
@@ -583,7 +583,7 @@ export class CloudFormationStackManager {
 
       } catch (error: any) {
         if (error.name === 'ValidationError' && error.message.includes('does not exist')) {
-          console.log(`✅ CloudFormation Stack Manager: Stack ${stackName} deleted successfully`);
+          console.log(`CloudFormation Stack Manager: Stack ${stackName} deleted successfully`);
           if (progressCallback) {
             await progressCallback('DELETE_COMPLETE', 0);
           }
@@ -591,11 +591,11 @@ export class CloudFormationStackManager {
         }
         
         if (attempts >= maxAttempts - 1) {
-          console.error(`❌ CloudFormation Stack Manager: Stack deletion timed out after ${maxAttempts * 10} seconds`);
+          console.error(`CloudFormation Stack Manager: Stack deletion timed out after ${maxAttempts * 10} seconds`);
           throw new Error(`Stack deletion timed out after ${maxAttempts * 10} seconds. Last status: ${lastStatus}`);
         }
         
-        console.warn(`⚠️ CloudFormation Stack Manager: Error checking stack status (attempt ${attempts + 1}/${maxAttempts}):`, error.message);
+        console.warn(`CloudFormation Stack Manager: Error checking stack status (attempt ${attempts + 1}/${maxAttempts}):`, error.message);
         await this.sleep(10000);
         attempts++;
       }
@@ -620,7 +620,7 @@ export class CloudFormationStackManager {
     
     try {
       // 1. Update workflow record to mark as not deployed
-      console.log('🧹 CloudFormation Stack Manager: Cleaning up workflow record...');
+      console.log('CloudFormation Stack Manager: Cleaning up workflow record...');
       
       await this.docClient.send(new UpdateCommand({
         TableName: WORKFLOWS_TABLE,
@@ -639,10 +639,10 @@ export class CloudFormationStackManager {
         ConditionExpression: 'attribute_exists(PK)', // Ensure the workflow exists
       }));
 
-      console.log('✅ CloudFormation Stack Manager: Workflow record updated successfully');
+      console.log('CloudFormation Stack Manager: Workflow record updated successfully');
 
       // 2. Clean up deployment records for this workflow
-      console.log('🧹 CloudFormation Stack Manager: Cleaning up deployment records...');
+      console.log('CloudFormation Stack Manager: Cleaning up deployment records...');
       
       try {
         // Get all deployment records for this workflow
@@ -673,19 +673,19 @@ export class CloudFormationStackManager {
             },
           }));
 
-          console.log('✅ CloudFormation Stack Manager: Deployment records updated successfully');
+          console.log('CloudFormation Stack Manager: Deployment records updated successfully');
         } else {
-          console.log('ℹ️ CloudFormation Stack Manager: No deployment records found to clean up');
+          console.log('ℹCloudFormation Stack Manager: No deployment records found to clean up');
         }
       } catch (deploymentError) {
-        console.warn('⚠️ CloudFormation Stack Manager: Failed to clean up deployment records:', deploymentError);
+        console.warn('CloudFormation Stack Manager: Failed to clean up deployment records:', deploymentError);
         // Don't fail the whole cleanup process for deployment record issues
       }
 
-      console.log('✅ CloudFormation Stack Manager: Database cleanup completed successfully');
+      console.log('CloudFormation Stack Manager: Database cleanup completed successfully');
       
     } catch (error: any) {
-      console.error('❌ CloudFormation Stack Manager: Failed to clean up workflow records:', error);
+      console.error('CloudFormation Stack Manager: Failed to clean up workflow records:', error);
       
       if (error.name === 'ConditionalCheckFailedException') {
         throw new Error('Workflow record not found - may have been deleted already');
@@ -733,16 +733,16 @@ export class CloudFormationStackManager {
       const targetIds = targets.Targets?.map(t => t.Id!).filter(Boolean) || [];
 
       if (targetIds.length > 0) {
-        console.log(`🧹 Removing ${targetIds.length} targets from EventBridge rule: ${ruleName}`);
+        console.log(`Removing ${targetIds.length} targets from EventBridge rule: ${ruleName}`);
         await ebClient.send(new RemoveTargetsCommand({ Rule: ruleName, Ids: targetIds }));
       }
 
-      console.log(`🧹 Deleting EventBridge rule: ${ruleName}`);
+      console.log(`Deleting EventBridge rule: ${ruleName}`);
       await ebClient.send(new DeleteRuleCommand({ Name: ruleName }));
-      console.log(`✅ EventBridge rule cleaned up: ${ruleName}`);
+      console.log(`EventBridge rule cleaned up: ${ruleName}`);
     } catch (error: any) {
       if (error.name === 'ResourceNotFoundException') {
-        console.log(`ℹ️ EventBridge rule ${ruleName} does not exist — skipping`);
+        console.log(`ℹEventBridge rule ${ruleName} does not exist — skipping`);
         return;
       }
       throw error;

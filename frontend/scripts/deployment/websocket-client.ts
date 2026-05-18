@@ -41,7 +41,7 @@ export class DeploymentWebSocketClient {
           this.reconnectAttempts = 0;
           this.reconnectDelay = 1000;
           
-          console.log(chalk.green('✅ Connected to deployment monitoring service'));
+          console.log(chalk.green('Connected to deployment monitoring service'));
           resolve();
         });
 
@@ -110,7 +110,7 @@ export class DeploymentWebSocketClient {
     };
 
     this.ws.send(JSON.stringify(message));
-    console.log(chalk.blue(`📡 Subscribed to deployment: ${deploymentId}`));
+    console.log(chalk.blue(`Subscribed to deployment: ${deploymentId}`));
   }
 
   /**
@@ -177,7 +177,7 @@ export class DeploymentWebSocketClient {
     const { status } = message;
     
     console.log('');
-    console.log(chalk.cyan.bold('📊 Deployment Status Update'));
+    console.log(chalk.cyan.bold('Deployment Status Update'));
     console.log(`Status: ${this.getStatusIcon(status.status)} ${status.status}`);
     console.log(`Progress: ${status.progress.percentage}%`);
     console.log(`Current Step: ${status.progress.currentStep}`);
@@ -196,24 +196,24 @@ export class DeploymentWebSocketClient {
     const timestamp = new Date(log.timestamp).toLocaleTimeString();
     
     let logColor = chalk.white;
-    let logIcon = 'ℹ️';
+    let logIcon = 'ℹ';
     
     switch (log.level) {
       case 'error':
         logColor = chalk.red;
-        logIcon = '❌';
+        logIcon = '';
         break;
       case 'warn':
         logColor = chalk.yellow;
-        logIcon = '⚠️';
+        logIcon = '';
         break;
       case 'info':
         logColor = chalk.blue;
-        logIcon = 'ℹ️';
+        logIcon = 'ℹ';
         break;
       case 'debug':
         logColor = chalk.gray;
-        logIcon = '🔍';
+        logIcon = '';
         break;
     }
     
@@ -239,7 +239,7 @@ export class DeploymentWebSocketClient {
     
     // Show completed steps
     if (progress.completedSteps.length > 0) {
-      console.log(chalk.green(`✅ Completed: ${progress.completedSteps.join(', ')}`));
+      console.log(chalk.green(`Completed: ${progress.completedSteps.join(', ')}`));
     }
   }
 
@@ -258,31 +258,31 @@ export class DeploymentWebSocketClient {
     
     switch (phase) {
       case 'configuring':
-        console.log(chalk.blue.bold('🔧 Configuration Phase Started'));
+        console.log(chalk.blue.bold('Configuration Phase Started'));
         this.spinner.start('Configuring deployment environment...');
         break;
         
       case 'building':
-        console.log(chalk.blue.bold('🏗️  Build Phase Started'));
+        console.log(chalk.blue.bold(' Build Phase Started'));
         this.spinner.start('Building frontend application...');
         break;
         
       case 'uploading':
-        console.log(chalk.blue.bold('📤 Upload Phase Started'));
+        console.log(chalk.blue.bold('Upload Phase Started'));
         this.spinner.start('Uploading build artifacts to S3...');
         break;
         
       case 'distributing':
-        console.log(chalk.blue.bold('🌐 Distribution Phase Started'));
+        console.log(chalk.blue.bold('Distribution Phase Started'));
         this.spinner.start('Configuring CloudFront distribution...');
         break;
         
       case 'completed':
-        this.spinner.succeed(chalk.green.bold('🎉 Deployment Completed Successfully!'));
+        this.spinner.succeed(chalk.green.bold('Deployment Completed Successfully!'));
         console.log('');
         
         if (phaseDetails?.result?.cloudFrontUrl) {
-          console.log(chalk.green.bold('🌐 Your application is now live:'));
+          console.log(chalk.green.bold('Your application is now live:'));
           console.log(chalk.cyan(`   ${phaseDetails.result.cloudFrontUrl}`));
         }
         
@@ -293,13 +293,13 @@ export class DeploymentWebSocketClient {
         break;
         
       case 'failed':
-        this.spinner.fail(chalk.red.bold('❌ Deployment Failed'));
+        this.spinner.fail(chalk.red.bold('Deployment Failed'));
         console.log('');
         console.log(chalk.red(`Error: ${phaseDetails?.error?.message || 'Unknown error'}`));
         
         if (phaseDetails?.troubleshootingInfo) {
           console.log('');
-          console.log(chalk.yellow.bold('🔍 Troubleshooting Information:'));
+          console.log(chalk.yellow.bold('Troubleshooting Information:'));
           
           if (phaseDetails.troubleshootingInfo.suggestions) {
             console.log(chalk.yellow('Suggested actions:'));
@@ -320,14 +320,14 @@ export class DeploymentWebSocketClient {
    * Handle subscription confirmation
    */
   private handleSubscriptionConfirmed(message: any): void {
-    console.log(chalk.green(`✅ ${message.message}`));
+    console.log(chalk.green(`${message.message}`));
   }
 
   /**
    * Handle error message
    */
   private handleError(message: any): void {
-    console.error(chalk.red(`❌ Error: ${message.message}`));
+    console.error(chalk.red(`Error: ${message.message}`));
   }
 
   /**
@@ -368,21 +368,21 @@ export class DeploymentWebSocketClient {
   private getStatusIcon(status: string): string {
     switch (status) {
       case 'pending':
-        return '⏳';
+        return '';
       case 'configuring':
-        return '🔧';
+        return '';
       case 'building':
-        return '🏗️';
+        return '';
       case 'uploading':
-        return '📤';
+        return '';
       case 'distributing':
-        return '🌐';
+        return '';
       case 'completed':
-        return '✅';
+        return '';
       case 'failed':
-        return '❌';
+        return '';
       default:
-        return 'ℹ️';
+        return 'ℹ';
     }
   }
 
@@ -421,7 +421,7 @@ export class DeploymentMonitorCLI {
    * Start monitoring a deployment
    */
   async startMonitoring(deploymentId?: string): Promise<void> {
-    console.log(chalk.blue.bold('🚀 Starting Deployment Monitor'));
+    console.log(chalk.blue.bold('Starting Deployment Monitor'));
     console.log('');
 
     try {
@@ -440,7 +440,7 @@ export class DeploymentMonitorCLI {
       // Setup graceful shutdown
       this.setupGracefulShutdown();
       
-      console.log(chalk.green('✅ Monitoring started. Press Ctrl+C to stop.'));
+      console.log(chalk.green('Monitoring started. Press Ctrl+C to stop.'));
       console.log('');
       
       // Keep the process alive
@@ -458,14 +458,14 @@ export class DeploymentMonitorCLI {
   private setupGracefulShutdown(): void {
     const shutdown = async () => {
       console.log('');
-      console.log(chalk.yellow('🛑 Shutting down deployment monitor...'));
+      console.log(chalk.yellow('Shutting down deployment monitor...'));
       
       if (this.deploymentId) {
         await this.client.unsubscribeFromDeployment();
       }
       
       this.client.disconnect();
-      console.log(chalk.green('✅ Monitor stopped successfully'));
+      console.log(chalk.green('Monitor stopped successfully'));
       process.exit(0);
     };
 

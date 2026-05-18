@@ -183,7 +183,7 @@ export class CloudFormationTemplateGenerator {
    * Generate CloudFormation template for a workflow
    */
   static async generateTemplate(workflow: Workflow, deploymentContext: DeploymentContext, lambdaCodeUploads?: any[]): Promise<string> {
-    console.log('📝 CFT GENERATOR: Starting template generation...');
+    console.log('CFT GENERATOR: Starting template generation...');
     
     try {
     // Validate IAM roles for S3 and database nodes
@@ -196,17 +196,17 @@ export class CloudFormationTemplateGenerator {
         if (!validation.valid) {
           throw new Error(`Invalid IAM role for ${node.type} node ${node.name}: ${validation.error}`);
         }
-        console.log(`✓ Validated existing role for ${node.type} node ${node.name}`);
+        console.log(`Validated existing role for ${node.type} node ${node.name}`);
       }
     }
     
-    console.log('📋 CFT GENERATOR: Workflow details:', {
+    console.log('CFT GENERATOR: Workflow details:', {
       name: workflow.name,
       id: workflow.id,
       nodeCount: workflow.nodes.length,
       connectionCount: workflow.connections.length,
     });
-    console.log('🎯 CFT GENERATOR: Deployment context:', {
+    console.log('CFT GENERATOR: Deployment context:', {
       deploymentId: deploymentContext.deploymentId,
       workflowId: deploymentContext.workflowId,
       environment: deploymentContext.environment,
@@ -215,7 +215,7 @@ export class CloudFormationTemplateGenerator {
     // Check for S3 trigger configuration
     const s3TriggerConfig = this.getS3TriggerConfig(workflow);
     if (s3TriggerConfig) {
-      console.log('🔔 CFT GENERATOR: S3 trigger detected:', s3TriggerConfig);
+      console.log('CFT GENERATOR: S3 trigger detected:', s3TriggerConfig);
     }
 
     const template = {
@@ -369,10 +369,10 @@ export class CloudFormationTemplateGenerator {
 
     const templateJson = JSON.stringify(template, null, 2);
     
-    console.log('✅ CFT GENERATOR: Template generation completed');
-    console.log('📊 CFT GENERATOR: Template size:', templateJson.length, 'characters');
-    console.log('🔍 CFT GENERATOR: Template resources:', Object.keys(template.Resources));
-    console.log('📄 CFT GENERATOR: Generated CloudFormation Template:');
+    console.log('CFT GENERATOR: Template generation completed');
+    console.log('CFT GENERATOR: Template size:', templateJson.length, 'characters');
+    console.log('CFT GENERATOR: Template resources:', Object.keys(template.Resources));
+    console.log('CFT GENERATOR: Generated CloudFormation Template:');
     console.log('=' .repeat(80));
     console.log(templateJson);
     console.log('=' .repeat(80));
@@ -380,8 +380,8 @@ export class CloudFormationTemplateGenerator {
     return templateJson;
     
     } catch (error) {
-      console.error('❌ CFT GENERATOR: Template generation failed:', error);
-      console.error('❌ CFT GENERATOR: Error details:', {
+      console.error('CFT GENERATOR: Template generation failed:', error);
+      console.error('CFT GENERATOR: Error details:', {
         message: error instanceof Error ? error.message : 'Unknown error',
         stack: error instanceof Error ? error.stack : undefined,
         workflowId: workflow.id,
@@ -396,14 +396,14 @@ export class CloudFormationTemplateGenerator {
    * Generate Step Functions definition from workflow using extensible node handlers
    */
   private static generateStepFunctionDefinition(workflow: Workflow, deploymentContext: DeploymentContext): string {
-    console.log('🔄 CFT GENERATOR: Generating Step Functions definition...');
+    console.log('CFT GENERATOR: Generating Step Functions definition...');
     
     // Find start node first to determine StartAt
     const startNode = workflow.nodes.find(node => node.type === 'start');
     if (!startNode) {
       throw new Error('Workflow must have a start node');
     }
-    console.log('🚀 CFT GENERATOR: Found start node:', startNode.name || startNode.id);
+    console.log('CFT GENERATOR: Found start node:', startNode.name || startNode.id);
     
     // Use consistent naming: always include node ID to ensure uniqueness
     const startStateName = startNode.name ? `${startNode.name}_${startNode.id}` : `${startNode.type}_${startNode.id}`;
@@ -420,11 +420,11 @@ export class CloudFormationTemplateGenerator {
     if (!endNode) {
       throw new Error('Workflow must have an end node');
     }
-    console.log('🏁 CFT GENERATOR: Found end node:', endNode.name || endNode.id);
+    console.log('CFT GENERATOR: Found end node:', endNode.name || endNode.id);
 
     // Generate states for each node using the registry
-    console.log('🔧 CFT GENERATOR: Processing nodes...');
-    console.log('🔍 CFT GENERATOR: All workflow nodes:', workflow.nodes.map(n => ({ 
+    console.log('CFT GENERATOR: Processing nodes...');
+    console.log('CFT GENERATOR: All workflow nodes:', workflow.nodes.map(n => ({ 
       id: n.id, 
       name: n.name, 
       type: n.type, 
@@ -435,8 +435,8 @@ export class CloudFormationTemplateGenerator {
       // Skip opensearch nodes — they'll be inserted before End automatically
       if (node.type === 'opensearch') return;
 
-      console.log(`  📦 Processing node: ${node.name || node.id} (type: ${node.type})`);
-      console.log(`    🏷️  Node details:`, { 
+      console.log(`  Processing node: ${node.name || node.id} (type: ${node.type})`);
+      console.log(`     Node details:`, { 
         id: node.id, 
         name: node.name, 
         type: node.type, 
@@ -448,12 +448,12 @@ export class CloudFormationTemplateGenerator {
       const stateName = node.name ? `${node.name}_${node.id}` : `${node.type}_${node.id}`;
       const nextState = this.getNextState(node.id, workflow);
       
-      console.log(`    🎯 State name: "${stateName}"`);
-      console.log(`    ➡️  Next state: ${nextState || 'End'}`);
+      console.log(`    State name: "${stateName}"`);
+      console.log(`     Next state: ${nextState || 'End'}`);
       
       // Check if state name already exists (this would indicate duplicate names)
       if (definition.States[stateName]) {
-        console.warn(`⚠️  CFT GENERATOR: State name "${stateName}" already exists! This will overwrite the previous state.`);
+        console.warn(` CFT GENERATOR: State name "${stateName}" already exists! This will overwrite the previous state.`);
         console.warn(`    Previous state:`, JSON.stringify(definition.States[stateName], null, 2));
       }
       
@@ -468,7 +468,7 @@ export class CloudFormationTemplateGenerator {
       
       definition.States[stateName] = stateDefinition;
       
-      console.log(`    ✅ Generated state definition:`, JSON.stringify(stateDefinition, null, 2));
+      console.log(`    Generated state definition:`, JSON.stringify(stateDefinition, null, 2));
     });
 
     // Insert opensearch state before End if an opensearch node exists
@@ -481,7 +481,7 @@ export class CloudFormationTemplateGenerator {
       for (const [name, state] of Object.entries(definition.States)) {
         if (name !== endStateName && (state as any).Next === endStateName) {
           (state as any).Next = osStateName;
-          console.log(`    🔗 Rewired "${name}" → "${osStateName}" (was → "${endStateName}")`);
+          console.log(`    Rewired "${name}" → "${osStateName}" (was → "${endStateName}")`);
           break;
         }
       }
@@ -489,12 +489,12 @@ export class CloudFormationTemplateGenerator {
       // Generate the opensearch state pointing to End
       const osHandler = NodeHandlerRegistry.getHandler('opensearch');
       definition.States[osStateName] = osHandler(opensearchNode, endStateName, workflow, deploymentContext);
-      console.log(`    ✅ Inserted OpenSearch state "${osStateName}" before "${endStateName}"`);
+      console.log(`    Inserted OpenSearch state "${osStateName}" before "${endStateName}"`);
     }
 
     const definitionJson = JSON.stringify(definition, null, 2);
-    console.log('✅ CFT GENERATOR: Step Functions definition completed');
-    console.log('📄 CFT GENERATOR: Step Functions ASL Definition:');
+    console.log('CFT GENERATOR: Step Functions definition completed');
+    console.log('CFT GENERATOR: Step Functions ASL Definition:');
     console.log('-' .repeat(60));
     console.log(definitionJson);
     console.log('-' .repeat(60));
@@ -534,7 +534,7 @@ export class CloudFormationTemplateGenerator {
       const functionName = lambdaNode.config?.functionName || nodeName;
       const sanitizedName = functionName.replace(/[^a-zA-Z0-9]/g, '');
       
-      console.log(`🔧 CFT GENERATOR: Generating Lambda resources for node: ${nodeName}`);
+      console.log(`CFT GENERATOR: Generating Lambda resources for node: ${nodeName}`);
       
       // Generate IAM role for this Lambda function based on connected nodes
       // Truncate sanitizedName to ensure role name stays within 64 character limit
@@ -605,7 +605,7 @@ export class CloudFormationTemplateGenerator {
         
         // Use existing role ARN
         lambdaRoleArn = lambdaNode.config.iamRole.existingRoleArn;
-        console.log(`🔧 CFT GENERATOR: Using existing IAM role for ${nodeName}: ${lambdaRoleArn}`);
+        console.log(`CFT GENERATOR: Using existing IAM role for ${nodeName}: ${lambdaRoleArn}`);
       } else {
         // Create new role
         resources[lambdaRoleName] = {
@@ -672,7 +672,7 @@ export class CloudFormationTemplateGenerator {
         DependsOn: [lambdaLogGroupName],
       };
       
-      console.log(`✅ CFT GENERATOR: Generated Lambda resources for ${nodeName}:`, {
+      console.log(`CFT GENERATOR: Generated Lambda resources for ${nodeName}:`, {
         role: lambdaRoleName,
         function: lambdaFunctionName,
         logGroup: lambdaLogGroupName,
@@ -690,7 +690,7 @@ export class CloudFormationTemplateGenerator {
     const permissions: any[] = [];
     const nodeId = lambdaNode.id;
     
-    console.log(`🔍 CFT GENERATOR: Analyzing connections for Lambda node: ${lambdaNode.name || nodeId}`);
+    console.log(`CFT GENERATOR: Analyzing connections for Lambda node: ${lambdaNode.name || nodeId}`);
     
     // Find upstream nodes (nodes that connect TO this Lambda)
     const upstreamConnections = workflow.connections.filter(conn => conn.targetNodeId === nodeId);
@@ -704,15 +704,15 @@ export class CloudFormationTemplateGenerator {
       workflow.nodes.find(node => node.id === conn.targetNodeId)
     ).filter(Boolean);
     
-    console.log(`  📥 Upstream nodes: ${upstreamNodes.map(n => n?.name || n?.id).join(', ')}`);
-    console.log(`  📤 Downstream nodes: ${downstreamNodes.map(n => n?.name || n?.id).join(', ')}`);
+    console.log(`  Upstream nodes: ${upstreamNodes.map(n => n?.name || n?.id).join(', ')}`);
+    console.log(`  Downstream nodes: ${downstreamNodes.map(n => n?.name || n?.id).join(', ')}`);
     
     // Analyze upstream nodes for read permissions
     upstreamNodes.forEach(node => {
       if (!node) return;
       const nodePermissions = this.getLambdaPermissionsForConnectedNode(node, 'read');
       permissions.push(...nodePermissions);
-      console.log(`    📥 Added read permissions for ${node.type}: ${nodePermissions.map(p => p.Action).flat().join(', ')}`);
+      console.log(`    Added read permissions for ${node.type}: ${nodePermissions.map(p => p.Action).flat().join(', ')}`);
     });
     
     // Analyze downstream nodes for write permissions
@@ -720,7 +720,7 @@ export class CloudFormationTemplateGenerator {
       if (!node) return;
       const nodePermissions = this.getLambdaPermissionsForConnectedNode(node, 'write');
       permissions.push(...nodePermissions);
-      console.log(`    📤 Added write permissions for ${node.type}: ${nodePermissions.map(p => p.Action).flat().join(', ')}`);
+      console.log(`    Added write permissions for ${node.type}: ${nodePermissions.map(p => p.Action).flat().join(', ')}`);
     });
     
     return permissions;
@@ -841,8 +841,8 @@ export class CloudFormationTemplateGenerator {
       return code || '';
     }
 
-    console.log('🔧 CFT GENERATOR: Preserving original Lambda code');
-    console.log('📝 CFT GENERATOR: Code length:', code.length);
+    console.log('CFT GENERATOR: Preserving original Lambda code');
+    console.log('CFT GENERATOR: Code length:', code.length);
     
     // Simply return the code as-is, but ensure it's properly escaped for JSON
     // CloudFormation will handle it correctly
@@ -858,14 +858,14 @@ export class CloudFormationTemplateGenerator {
     const customHandler = lambdaNode.config?.handler;
     const defaultHandler = this.getDefaultHandler(runtime);
 
-    console.log('🔧 CFT GENERATOR: Generating Lambda code config for node:', lambdaNode.id);
+    console.log('CFT GENERATOR: Generating Lambda code config for node:', lambdaNode.id);
     
     // First, check if we have pre-uploaded S3 code for this node
     if (lambdaCodeUploads && lambdaCodeUploads.length > 0) {
       const codeUpload = lambdaCodeUploads.find(upload => upload.nodeId === lambdaNode.id);
       
       if (codeUpload) {
-        console.log('✅ CFT GENERATOR: Using pre-uploaded S3 code for node:', lambdaNode.id);
+        console.log('CFT GENERATOR: Using pre-uploaded S3 code for node:', lambdaNode.id);
         return {
           Handler: customHandler || defaultHandler,
           Code: { S3Bucket: codeUpload.s3Bucket, S3Key: codeUpload.s3Key },
@@ -874,10 +874,10 @@ export class CloudFormationTemplateGenerator {
     }
     
     // Fallback: try to create and upload code on-the-fly (legacy behavior)
-    console.warn('⚠️ CFT GENERATOR: No pre-uploaded code found, attempting on-the-fly upload for node:', lambdaNode.id);
+    console.warn('CFT GENERATOR: No pre-uploaded code found, attempting on-the-fly upload for node:', lambdaNode.id);
     
     const code = lambdaNode.config?.code || this.getDefaultLambdaCode(lambdaNode);
-    console.log('📝 CFT GENERATOR: Code length:', code.length);
+    console.log('CFT GENERATOR: Code length:', code.length);
     
     try {
       // Try S3-based deployment
@@ -885,7 +885,7 @@ export class CloudFormationTemplateGenerator {
       const s3Key = this.generateS3CodeKey(lambdaNode, deploymentContext);
       const bucketName = this.getCodeBucketName(deploymentContext);
       
-      console.log('📦 CFT GENERATOR: Using on-the-fly S3 deployment');
+      console.log('CFT GENERATOR: Using on-the-fly S3 deployment');
       
       // Upload code to S3 immediately
       await this.uploadCodeToS3(zipBuffer, bucketName, s3Key);
@@ -895,7 +895,7 @@ export class CloudFormationTemplateGenerator {
         Code: { S3Bucket: bucketName, S3Key: s3Key },
       };
     } catch (error) {
-      console.warn('⚠️ CFT GENERATOR: On-the-fly S3 deployment failed, falling back to inline code:', error);
+      console.warn('CFT GENERATOR: On-the-fly S3 deployment failed, falling back to inline code:', error);
       
       // Final fallback to inline code deployment
       // CloudFormation ZipFile creates the file as index.py (Python) or index.js (Node.js),
@@ -904,8 +904,8 @@ export class CloudFormationTemplateGenerator {
                              runtime.includes('nodejs') ? 'index.handler' :
                              'index.lambda_handler';
       
-      console.log('📝 CFT GENERATOR: Using inline code deployment as final fallback');
-      console.log('📝 CFT GENERATOR: Overriding handler to match ZipFile behavior:', zipFileHandler);
+      console.log('CFT GENERATOR: Using inline code deployment as final fallback');
+      console.log('CFT GENERATOR: Overriding handler to match ZipFile behavior:', zipFileHandler);
       
       // Normalize and validate the code
       const normalizedCode = this.normalizeLambdaCode(code, runtime);
@@ -916,7 +916,7 @@ export class CloudFormationTemplateGenerator {
       }
       
       if (validation.warnings.length > 0) {
-        console.warn('⚠️ CFT GENERATOR: Code validation warnings:', validation.warnings);
+        console.warn('CFT GENERATOR: Code validation warnings:', validation.warnings);
       }
       
       return {
@@ -944,10 +944,10 @@ export class CloudFormationTemplateGenerator {
     // Use the pre-created bucket from environment variable
     const bucketName = process.env.LAMBDA_CODE_BUCKET;
     if (!bucketName) {
-      console.warn('⚠️ CFT GENERATOR: LAMBDA_CODE_BUCKET environment variable not set, S3 deployment will fail');
+      console.warn('CFT GENERATOR: LAMBDA_CODE_BUCKET environment variable not set, S3 deployment will fail');
       throw new Error('LAMBDA_CODE_BUCKET environment variable not set');
     }
-    console.log('🪣 CFT GENERATOR: Using S3 bucket for code storage:', bucketName);
+    console.log('CFT GENERATOR: Using S3 bucket for code storage:', bucketName);
     return bucketName;
   }
 
@@ -956,14 +956,14 @@ export class CloudFormationTemplateGenerator {
    */
   private static async createCodeZipFile(code: string, lambdaNode: any): Promise<Buffer> {
     try {
-      console.log('📦 CFT GENERATOR: Attempting to import jszip for ZIP creation');
+      console.log('CFT GENERATOR: Attempting to import jszip for ZIP creation');
       const JSZip = await import('jszip');
       
       if (!JSZip || !JSZip.default) {
         throw new Error('jszip module imported but default export is not available');
       }
       
-      console.log('✅ CFT GENERATOR: jszip imported successfully');
+      console.log('CFT GENERATOR: jszip imported successfully');
       const zip = new JSZip.default();
     
     // Determine file extension based on runtime
@@ -983,7 +983,7 @@ export class CloudFormationTemplateGenerator {
     // Generate ZIP buffer
     const zipBuffer = await zip.generateAsync({ type: 'nodebuffer' });
     
-    console.log('📦 CFT GENERATOR: Created ZIP file:', {
+    console.log('CFT GENERATOR: Created ZIP file:', {
       fileName,
       originalSize: code.length,
       zipSize: zipBuffer.length
@@ -991,7 +991,7 @@ export class CloudFormationTemplateGenerator {
     
       return zipBuffer;
     } catch (error) {
-      console.error('❌ CFT GENERATOR: Failed to create ZIP file with jszip:', error);
+      console.error('CFT GENERATOR: Failed to create ZIP file with jszip:', error);
       
       // Provide specific error messages for common issues
       let errorMessage = 'Failed to create ZIP file';
@@ -1028,14 +1028,14 @@ export class CloudFormationTemplateGenerator {
         }
       }));
       
-      console.log('✅ CFT GENERATOR: Successfully uploaded code to S3:', {
+      console.log('CFT GENERATOR: Successfully uploaded code to S3:', {
         bucket: bucketName,
         key: s3Key,
         size: zipBuffer.length
       });
       
     } catch (error) {
-      console.error('❌ CFT GENERATOR: Failed to upload code to S3:', error);
+      console.error('CFT GENERATOR: Failed to upload code to S3:', error);
       throw new Error(`Failed to upload Lambda code to S3: ${error instanceof Error ? error.message : 'Unknown error'}`);
     }
   }
@@ -1062,7 +1062,7 @@ export class CloudFormationTemplateGenerator {
       }
     }
     
-    console.log('✅ CFT GENERATOR: Code validation completed', { warnings: warnings.length });
+    console.log('CFT GENERATOR: Code validation completed', { warnings: warnings.length });
     return {
       isValid: warnings.length === 0,
       warnings
@@ -1074,8 +1074,6 @@ export class CloudFormationTemplateGenerator {
    */
   private static normalizeLambdaCode(code: string, runtime: string): string {
     if (!code) return code;
-    
-    console.log('🔧 CFT GENERATOR: Normalizing Lambda code for runtime:', runtime);
     
     if (runtime.includes('python')) {
       // Python-specific normalization
@@ -1137,9 +1135,7 @@ export class CloudFormationTemplateGenerator {
       }
     }
     
-    const result = normalizedLines.join('\n');
-    console.log('🐍 CFT GENERATOR: Python code normalized');
-    return result;
+    return normalizedLines.join('\n');
   }
   
   /**
@@ -1164,9 +1160,7 @@ export class CloudFormationTemplateGenerator {
       normalizedLines.pop();
     }
     
-    const result = normalizedLines.join('\n');
-    console.log('📦 CFT GENERATOR: Node.js code normalized');
-    return result;
+    return normalizedLines.join('\n');
   }
 
   /**
@@ -1227,7 +1221,7 @@ def handler(event, context):
     const opensearchNodes = workflow.nodes.filter(node => node.type === 'opensearch');
     if (opensearchNodes.length === 0) return {};
 
-    console.log('🔍 CFT GENERATOR: Generating OpenSearch resources for', opensearchNodes.length, 'nodes');
+    console.log('CFT GENERATOR: Generating OpenSearch resources for', opensearchNodes.length, 'nodes');
 
     const resources: any = {};
 

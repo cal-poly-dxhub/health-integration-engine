@@ -32,7 +32,7 @@ class FrontendRollback {
 
   async rollback(): Promise<RollbackResult> {
     try {
-      console.log(chalk.blue.bold(`🔄 Starting frontend rollback for ${this.options.environment} environment`));
+      console.log(chalk.blue.bold(`Starting frontend rollback for ${this.options.environment} environment`));
       console.log('');
 
       // Step 1: Find previous deployment
@@ -50,7 +50,7 @@ class FrontendRollback {
       await this.rollbackAWSDeployment(previousDeployment);
 
       console.log('');
-      console.log(chalk.green.bold('✅ Frontend rollback completed successfully!'));
+      console.log(chalk.green.bold('Frontend rollback completed successfully!'));
       
       return {
         success: true,
@@ -62,7 +62,7 @@ class FrontendRollback {
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : 'Unknown error occurred';
       console.log('');
-      console.log(chalk.red.bold('❌ Frontend rollback failed!'));
+      console.log(chalk.red.bold('Frontend rollback failed!'));
       console.log(chalk.red(`Error: ${errorMessage}`));
       
       return {
@@ -118,7 +118,7 @@ class FrontendRollback {
     timestamp: string;
   }): Promise<void> {
     console.log('');
-    console.log(chalk.yellow.bold('⚠️  Rollback Confirmation'));
+    console.log(chalk.yellow.bold(' Rollback Confirmation'));
     console.log(chalk.yellow(`Environment: ${this.options.environment}`));
     console.log(chalk.yellow(`Previous deployment: ${new Date(previousDeployment.timestamp).toLocaleString()}`));
     console.log('');

@@ -30,9 +30,9 @@ export class CloudFormationDeployer {
   private docClient: DynamoDBDocumentClient;
 
   constructor() {
-    console.log('🔧 CloudFormation: Initializing CloudFormation client');
-    console.log('🌍 CloudFormation: AWS Region:', process.env.AWS_REGION);
-    console.log('🔑 CloudFormation: AWS credentials available:', !!process.env.AWS_ACCESS_KEY_ID || 'using IAM role');
+    console.log('CloudFormation: Initializing CloudFormation client');
+    console.log('CloudFormation: AWS Region:', process.env.AWS_REGION);
+    console.log('CloudFormation: AWS credentials available:', !!process.env.AWS_ACCESS_KEY_ID || 'using IAM role');
     
     this.cfnClient = new CloudFormationClient({ 
       region: process.env.AWS_REGION,
@@ -42,7 +42,7 @@ export class CloudFormationDeployer {
     this.dynamoClient = new DynamoDBClient({ region: process.env.AWS_REGION });
     this.docClient = DynamoDBDocumentClient.from(this.dynamoClient);
     
-    console.log('✅ CloudFormation: Client initialized successfully');
+    console.log('CloudFormation: Client initialized successfully');
   }
 
   /**
@@ -53,9 +53,9 @@ export class CloudFormationDeployer {
     cloudFormationTemplate: string,
     updateStatus: (status: Partial<DeploymentStatus>) => Promise<void>
   ): Promise<DeploymentStatus> {
-    console.log('🚀 CloudFormation: Starting deployment with enhanced update functionality');
-    console.log('📄 CloudFormation: Template received, size:', cloudFormationTemplate.length, 'characters');
-    console.log('📄 CloudFormation: Template preview:', cloudFormationTemplate.substring(0, 500));
+    console.log('CloudFormation: Starting deployment with enhanced update functionality');
+    console.log('CloudFormation: Template received, size:', cloudFormationTemplate.length, 'characters');
+    console.log('CloudFormation: Template preview:', cloudFormationTemplate.substring(0, 500));
     
     // Use consistent stack name based on workflow ID only (not deployment ID)
     // This ensures updates target the same stack instead of creating new ones
@@ -79,7 +79,7 @@ export class CloudFormationDeployer {
       steps,
     };
 
-    console.log('📊 CloudFormation: Updating initial deployment status');
+    console.log('CloudFormation: Updating initial deployment status');
     await updateStatus(deploymentStatus);
 
     try {
@@ -140,8 +140,8 @@ export class CloudFormationDeployer {
       deploymentStatus.updatedAt = new Date().toISOString();
 
       // Update workflow status in database when deployment completes successfully
-      console.log('📊 CloudFormation: Updating workflow status after successful deployment');
-      console.log('📋 CloudFormation: Stack outputs available:', Object.keys(stackOutputs));
+      console.log('CloudFormation: Updating workflow status after successful deployment');
+      console.log('CloudFormation: Stack outputs available:', Object.keys(stackOutputs));
       
       const workflowUpdates = {
         isDeployed: true,
@@ -154,12 +154,12 @@ export class CloudFormationDeployer {
         updatedAt: new Date().toISOString(),
       };
       
-      console.log('📋 CloudFormation: Workflow updates to apply:', JSON.stringify(workflowUpdates, null, 2));
+      console.log('CloudFormation: Workflow updates to apply:', JSON.stringify(workflowUpdates, null, 2));
       
       await this.updateWorkflowStatus(deploymentContext, workflowUpdates);
 
       // Also call the updateDeploymentStatus handler to maintain consistency with Step Functions flow
-      console.log('🔄 CloudFormation: Calling updateDeploymentStatus handler for completion event');
+      console.log('CloudFormation: Calling updateDeploymentStatus handler for completion event');
       await this.callUpdateDeploymentStatusHandler({
         deploymentId: deploymentContext.deploymentId,
         status: 'completed',
@@ -167,7 +167,7 @@ export class CloudFormationDeployer {
       });
 
     } catch (error) {
-      console.error('❌ CloudFormation deployment failed:', error);
+      console.error('CloudFormation deployment failed:', error);
       deploymentStatus.status = 'failed';
       deploymentStatus.error = {
         code: 'CLOUDFORMATION_DEPLOYMENT_FAILED',
@@ -183,11 +183,11 @@ export class CloudFormationDeployer {
           updatedAt: new Date().toISOString(),
         });
       } catch (updateError) {
-        console.error('❌ Failed to update workflow status to failed:', updateError);
+        console.error('Failed to update workflow status to failed:', updateError);
       }
 
       // Also call the updateDeploymentStatus handler for failed deployments
-      console.log('🔄 CloudFormation: Calling updateDeploymentStatus handler for failure event');
+      console.log('CloudFormation: Calling updateDeploymentStatus handler for failure event');
       await this.callUpdateDeploymentStatusHandler({
         deploymentId: deploymentContext.deploymentId,
         status: 'failed',
@@ -212,7 +212,7 @@ export class CloudFormationDeployer {
     updateStatus: (status: Partial<DeploymentStatus>) => Promise<void>,
     deploymentStatus: DeploymentStatus
   ): Promise<T> {
-    console.log(`📊 CloudFormation: Starting step: ${step.name}`);
+    console.log(`CloudFormation: Starting step: ${step.name}`);
     step.status = 'in_progress';
     step.startTime = new Date().toISOString();
     
@@ -235,7 +235,7 @@ export class CloudFormationDeployer {
         })),
       });
     } catch (wsError) {
-      console.log('⚠️ WebSocket notification failed (non-critical):', wsError);
+      console.log('WebSocket notification failed (non-critical):', wsError);
     }
     
     await updateStatus({ 
@@ -246,7 +246,7 @@ export class CloudFormationDeployer {
     try {
       const result = await operation();
       
-      console.log(`✅ CloudFormation: Completed step: ${step.name}`);
+      console.log(`CloudFormation: Completed step: ${step.name}`);
       step.status = 'completed';
       step.endTime = new Date().toISOString();
       step.duration = new Date(step.endTime).getTime() - new Date(step.startTime!).getTime();
@@ -272,7 +272,7 @@ export class CloudFormationDeployer {
           })),
         });
       } catch (wsError) {
-        console.log('⚠️ WebSocket notification failed (non-critical):', wsError);
+        console.log('WebSocket notification failed (non-critical):', wsError);
       }
       
       await updateStatus({ 
@@ -282,7 +282,7 @@ export class CloudFormationDeployer {
       return result;
       
     } catch (error) {
-      console.error(`❌ CloudFormation: Failed step: ${step.name}`, error);
+      console.error(`CloudFormation: Failed step: ${step.name}`, error);
       step.status = 'failed';
       step.endTime = new Date().toISOString();
       step.duration = new Date(step.endTime).getTime() - new Date(step.startTime!).getTime();
@@ -315,7 +315,7 @@ export class CloudFormationDeployer {
           })),
         });
       } catch (wsError) {
-        console.log('⚠️ WebSocket notification failed (non-critical):', wsError);
+        console.log('WebSocket notification failed (non-critical):', wsError);
       }
       
       await updateStatus({ 
@@ -330,7 +330,7 @@ export class CloudFormationDeployer {
    * Validate CloudFormation template
    */
   private async validateTemplate(template: string): Promise<void> {
-    console.log('✅ CloudFormation: Template validation - skipped (will be validated during deployment)');
+    console.log('CloudFormation: Template validation - skipped (will be validated during deployment)');
     // CloudFormation validates templates automatically during deployment
     // We could add client-side validation here if needed
   }
@@ -339,14 +339,14 @@ export class CloudFormationDeployer {
    * Enable S3 EventBridge notifications if the template contains S3 trigger resources
    */
   private async enableS3EventBridgeIfNeeded(template: string): Promise<void> {
-    console.log('🔔 CloudFormation: Checking for S3 EventBridge trigger configuration...');
+    console.log('CloudFormation: Checking for S3 EventBridge trigger configuration...');
     
     try {
       const templateObj = JSON.parse(template);
       
       // Check if template has S3TriggerEventRule resource
       if (!templateObj.Resources?.S3TriggerEventRule) {
-        console.log('ℹ️ CloudFormation: No S3 trigger configured, skipping EventBridge setup');
+        console.log('ℹCloudFormation: No S3 trigger configured, skipping EventBridge setup');
         return;
       }
 
@@ -355,22 +355,22 @@ export class CloudFormationDeployer {
       const bucketName = eventPattern?.detail?.bucket?.name?.[0];
 
       if (!bucketName) {
-        console.log('⚠️ CloudFormation: S3 trigger found but no bucket name specified');
+        console.log('CloudFormation: S3 trigger found but no bucket name specified');
         return;
       }
 
-      console.log(`🔔 CloudFormation: Enabling EventBridge notifications on bucket: ${bucketName}`);
+      console.log(`CloudFormation: Enabling EventBridge notifications on bucket: ${bucketName}`);
       
       const s3EventBridgeService = new S3EventBridgeService();
       await s3EventBridgeService.enableEventBridgeNotifications(bucketName);
       
-      console.log(`✅ CloudFormation: EventBridge notifications enabled on bucket: ${bucketName}`);
+      console.log(`CloudFormation: EventBridge notifications enabled on bucket: ${bucketName}`);
     } catch (error) {
       if (error instanceof SyntaxError) {
-        console.error('❌ CloudFormation: Failed to parse template as JSON');
+        console.error('CloudFormation: Failed to parse template as JSON');
         throw error;
       }
-      console.error('❌ CloudFormation: Failed to enable S3 EventBridge notifications:', error);
+      console.error('CloudFormation: Failed to enable S3 EventBridge notifications:', error);
       throw new Error(`Failed to enable S3 EventBridge notifications: ${error instanceof Error ? error.message : 'Unknown error'}`);
     }
   }
@@ -383,7 +383,7 @@ export class CloudFormationDeployer {
     newTemplate: string,
     deploymentContext: DeploymentContext
   ): Promise<any> {
-    console.log(`🔍 CloudFormation: Detecting changes and drift for stack ${stackName}`);
+    console.log(`CloudFormation: Detecting changes and drift for stack ${stackName}`);
     
     const changeAnalysis = {
       stackExists: false,
@@ -404,7 +404,7 @@ export class CloudFormationDeployer {
       const stack = stackResponse.Stacks?.[0];
       if (stack) {
         changeAnalysis.stackExists = true;
-        console.log(`📋 CloudFormation: Stack exists with status: ${stack.StackStatus}`);
+        console.log(`CloudFormation: Stack exists with status: ${stack.StackStatus}`);
 
         // Get current template
         try {
@@ -419,11 +419,11 @@ export class CloudFormationDeployer {
           changeAnalysis.hasChanges = templateChanges.length > 0;
           changeAnalysis.changeType = changeAnalysis.hasChanges ? 'UPDATE' : 'NO_CHANGE';
           
-          console.log(`🔄 CloudFormation: Template changes detected: ${templateChanges.length}`);
+          console.log(`CloudFormation: Template changes detected: ${templateChanges.length}`);
           templateChanges.forEach(change => console.log(`  - ${change}`));
           
         } catch (templateError) {
-          console.warn('⚠️ CloudFormation: Could not retrieve current template:', templateError);
+          console.warn('CloudFormation: Could not retrieve current template:', templateError);
         }
 
         // Detect stack drift if stack exists and is in a stable state
@@ -433,36 +433,36 @@ export class CloudFormationDeployer {
             changeAnalysis.hasDrift = driftDetails.length > 0;
             changeAnalysis.driftDetails = driftDetails;
             
-            console.log(`🌊 CloudFormation: Stack drift detected: ${changeAnalysis.hasDrift}`);
+            console.log(`CloudFormation: Stack drift detected: ${changeAnalysis.hasDrift}`);
             if (changeAnalysis.hasDrift) {
               driftDetails.forEach(drift => 
                 console.log(`  - ${drift.resourceId}: ${drift.driftStatus} (${drift.resourceType})`)
               );
             }
           } catch (driftError) {
-            console.warn('⚠️ CloudFormation: Could not detect stack drift:', driftError);
+            console.warn('CloudFormation: Could not detect stack drift:', driftError);
           }
         } else {
-          console.log(`⏳ CloudFormation: Stack not in stable state (${stack.StackStatus}), skipping drift detection`);
+          console.log(`CloudFormation: Stack not in stable state (${stack.StackStatus}), skipping drift detection`);
         }
       } else {
-        console.log('🆕 CloudFormation: Stack does not exist, will create new stack');
+        console.log('CloudFormation: Stack does not exist, will create new stack');
         changeAnalysis.changeType = 'CREATE';
       }
 
     } catch (error: any) {
       if (error.name === 'ValidationError' && error.message.includes('does not exist')) {
-        console.log('🆕 CloudFormation: Stack does not exist, will create new stack');
+        console.log('CloudFormation: Stack does not exist, will create new stack');
         changeAnalysis.changeType = 'CREATE';
       } else {
-        console.warn('⚠️ CloudFormation: Error during change detection:', error);
+        console.warn('CloudFormation: Error during change detection:', error);
         // Continue with deployment, assume UPDATE to be safe
         changeAnalysis.changeType = 'UPDATE';
         changeAnalysis.hasChanges = true;
       }
     }
 
-    console.log('📊 CloudFormation: Change analysis completed:', {
+    console.log('CloudFormation: Change analysis completed:', {
       stackExists: changeAnalysis.stackExists,
       changeType: changeAnalysis.changeType,
       hasChanges: changeAnalysis.hasChanges,
@@ -524,7 +524,7 @@ export class CloudFormationDeployer {
       }
       
     } catch (error) {
-      console.warn('⚠️ CloudFormation: Error comparing templates:', error);
+      console.warn('CloudFormation: Error comparing templates:', error);
       changes.push('Template comparison failed - assuming changes exist');
     }
     
@@ -535,7 +535,7 @@ export class CloudFormationDeployer {
    * Detect stack drift
    */
   private async detectStackDrift(stackName: string): Promise<any[]> {
-    console.log(`🌊 CloudFormation: Starting drift detection for stack ${stackName}`);
+    console.log(`CloudFormation: Starting drift detection for stack ${stackName}`);
     
     try {
       // Start drift detection
@@ -544,7 +544,7 @@ export class CloudFormationDeployer {
       }));
       
       const detectionId = driftResponse.StackDriftDetectionId!;
-      console.log(`🔍 CloudFormation: Drift detection started with ID: ${detectionId}`);
+      console.log(`CloudFormation: Drift detection started with ID: ${detectionId}`);
       
       // Wait for drift detection to complete
       let detectionComplete = false;
@@ -560,7 +560,7 @@ export class CloudFormationDeployer {
         }));
         
         const detectionStatus = statusResponse.DetectionStatus;
-        console.log(`📊 CloudFormation: Drift detection status: ${detectionStatus}`);
+        console.log(`CloudFormation: Drift detection status: ${detectionStatus}`);
         
         if (detectionStatus === 'DETECTION_COMPLETE') {
           detectionComplete = true;
@@ -582,7 +582,7 @@ export class CloudFormationDeployer {
         drift => drift.StackResourceDriftStatus !== StackResourceDriftStatus.IN_SYNC
       ) || [];
       
-      console.log(`🌊 CloudFormation: Found ${driftedResources.length} drifted resources`);
+      console.log(`CloudFormation: Found ${driftedResources.length} drifted resources`);
       
       return driftedResources.map(drift => ({
         resourceId: drift.LogicalResourceId,
@@ -594,7 +594,7 @@ export class CloudFormationDeployer {
       }));
       
     } catch (error) {
-      console.warn('⚠️ CloudFormation: Drift detection failed:', error);
+      console.warn('CloudFormation: Drift detection failed:', error);
       return [];
     }
   }
@@ -619,7 +619,7 @@ export class CloudFormationDeployer {
     deploymentContext: DeploymentContext,
     changeAnalysis: any
   ): Promise<void> {
-    console.log('📚 CloudFormation: Recording deployment history');
+    console.log('CloudFormation: Recording deployment history');
     
     const historyRecord = {
       deploymentId: deploymentContext.deploymentId,
@@ -651,9 +651,9 @@ export class CloudFormationDeployer {
         },
       }));
       
-      console.log('✅ CloudFormation: Deployment history recorded successfully');
+      console.log('CloudFormation: Deployment history recorded successfully');
     } catch (error) {
-      console.warn('⚠️ CloudFormation: Failed to record deployment history:', error);
+      console.warn('CloudFormation: Failed to record deployment history:', error);
       // Don't fail deployment if history recording fails
     }
   }
@@ -667,8 +667,8 @@ export class CloudFormationDeployer {
     deploymentContext: DeploymentContext,
     changeAnalysis: any
   ): Promise<string> {
-    console.log(`🚀 CloudFormation: Deploying stack ${stackName} with change detection`);
-    console.log('📊 CloudFormation: Change analysis:', {
+    console.log(`CloudFormation: Deploying stack ${stackName} with change detection`);
+    console.log('CloudFormation: Change analysis:', {
       changeType: changeAnalysis.changeType,
       hasChanges: changeAnalysis.hasChanges,
       hasDrift: changeAnalysis.hasDrift,
@@ -676,7 +676,7 @@ export class CloudFormationDeployer {
 
     // If no changes detected and no drift, skip deployment
     if (changeAnalysis.changeType === 'NO_CHANGE' && !changeAnalysis.hasDrift) {
-      console.log('⏭️ CloudFormation: No changes detected, skipping deployment');
+      console.log('CloudFormation: No changes detected, skipping deployment');
       
       // Get existing stack ARN
       const stackResponse = await this.cfnClient.send(new DescribeStacksCommand({
@@ -697,9 +697,9 @@ export class CloudFormationDeployer {
     template: string, 
     deploymentContext: DeploymentContext
   ): Promise<string> {
-    console.log(`🚀 CloudFormation: Deploying stack ${stackName}`);
-    console.log('📊 CloudFormation: Template size:', template.length, 'characters');
-    console.log('📄 CloudFormation: Template content:');
+    console.log(`CloudFormation: Deploying stack ${stackName}`);
+    console.log('CloudFormation: Template size:', template.length, 'characters');
+    console.log('CloudFormation: Template content:');
     console.log('=' .repeat(80));
     console.log(template);
     console.log('=' .repeat(80));
@@ -729,13 +729,13 @@ export class CloudFormationDeployer {
 
     try {
       // Try to update existing stack first
-      console.log('🔄 CloudFormation: Attempting stack update...');
-      console.log('📋 CloudFormation: Stack name:', stackName);
-      console.log('📋 CloudFormation: Parameters:', JSON.stringify(parameters, null, 2));
-      console.log('🏷️ CloudFormation: Tags:', JSON.stringify(tags, null, 2));
-      console.log('🔧 CloudFormation: Capabilities: CAPABILITY_IAM, CAPABILITY_NAMED_IAM');
+      console.log('CloudFormation: Attempting stack update...');
+      console.log('CloudFormation: Stack name:', stackName);
+      console.log('CloudFormation: Parameters:', JSON.stringify(parameters, null, 2));
+      console.log('CloudFormation: Tags:', JSON.stringify(tags, null, 2));
+      console.log('CloudFormation: Capabilities: CAPABILITY_IAM, CAPABILITY_NAMED_IAM');
       
-      console.log('📡 CloudFormation: Sending UpdateStackCommand...');
+      console.log('CloudFormation: Sending UpdateStackCommand...');
       const updateResponse = await this.cfnClient.send(new UpdateStackCommand({
         StackName: stackName,
         TemplateBody: template,
@@ -743,27 +743,27 @@ export class CloudFormationDeployer {
         Tags: tags,
         Capabilities: ['CAPABILITY_IAM', 'CAPABILITY_NAMED_IAM'],
       }));
-      console.log('📡 CloudFormation: UpdateStackCommand completed successfully');
+      console.log('CloudFormation: UpdateStackCommand completed successfully');
 
-      console.log(`✅ CloudFormation: Stack update initiated: ${updateResponse.StackId}`);
+      console.log(`CloudFormation: Stack update initiated: ${updateResponse.StackId}`);
       await this.waitForStackCompletion(stackName, 'UPDATE');
       return updateResponse.StackId!;
 
     } catch (error: any) {
-      console.error('❌ CloudFormation: Stack update failed');
-      console.error('❌ CloudFormation: Error name:', error.name);
-      console.error('❌ CloudFormation: Error message:', error.message);
-      console.error('❌ CloudFormation: Error code:', error.Code || error.$metadata?.httpStatusCode);
-      console.error('❌ CloudFormation: Full error:', JSON.stringify(error, null, 2));
+      console.error('CloudFormation: Stack update failed');
+      console.error('CloudFormation: Error name:', error.name);
+      console.error('CloudFormation: Error message:', error.message);
+      console.error('CloudFormation: Error code:', error.Code || error.$metadata?.httpStatusCode);
+      console.error('CloudFormation: Full error:', JSON.stringify(error, null, 2));
       
       if (error.name === 'ValidationError' && error.message.includes('does not exist')) {
         // Stack doesn't exist, create it
-        console.log(`🆕 CloudFormation: Creating new stack ${stackName}`);
-        console.log('📋 CloudFormation: Create parameters:', JSON.stringify(parameters, null, 2));
-        console.log('🏷️ CloudFormation: Create tags:', JSON.stringify(tags, null, 2));
-        console.log('🔧 CloudFormation: OnFailure: ROLLBACK');
+        console.log(`CloudFormation: Creating new stack ${stackName}`);
+        console.log('CloudFormation: Create parameters:', JSON.stringify(parameters, null, 2));
+        console.log('CloudFormation: Create tags:', JSON.stringify(tags, null, 2));
+        console.log('CloudFormation: OnFailure: ROLLBACK');
         
-        console.log('📡 CloudFormation: Sending CreateStackCommand...');
+        console.log('CloudFormation: Sending CreateStackCommand...');
         const createResponse = await this.cfnClient.send(new CreateStackCommand({
           StackName: stackName,
           TemplateBody: template,
@@ -772,13 +772,13 @@ export class CloudFormationDeployer {
           Capabilities: ['CAPABILITY_IAM', 'CAPABILITY_NAMED_IAM'],
           OnFailure: 'ROLLBACK',
         }));
-        console.log('📡 CloudFormation: CreateStackCommand completed successfully');
+        console.log('CloudFormation: CreateStackCommand completed successfully');
 
-        console.log(`✅ CloudFormation: Stack creation initiated: ${createResponse.StackId}`);
+        console.log(`CloudFormation: Stack creation initiated: ${createResponse.StackId}`);
         await this.waitForStackCompletion(stackName, 'CREATE');
         return createResponse.StackId!;
       } else {
-        console.log('❌ CloudFormation: Unexpected error during stack creation:', error);
+        console.log('CloudFormation: Unexpected error during stack creation:', error);
         throw error;
       }
     }
@@ -811,10 +811,10 @@ export class CloudFormationDeployer {
         }
 
         const status = stack.StackStatus;
-        console.log(`📊 CloudFormation: Stack ${stackName} status: ${status}`);
+        console.log(`CloudFormation: Stack ${stackName} status: ${status}`);
 
         if (successStatuses.includes(status!)) {
-          console.log(`✅ CloudFormation: Stack ${operation.toLowerCase()} completed successfully`);
+          console.log(`CloudFormation: Stack ${operation.toLowerCase()} completed successfully`);
           return;
         }
 
@@ -867,7 +867,7 @@ export class CloudFormationDeployer {
    * Verify stack deployment and get outputs
    */
   private async verifyStack(stackName: string): Promise<Record<string, string>> {
-    console.log(`🔍 CloudFormation: Verifying stack ${stackName}`);
+    console.log(`CloudFormation: Verifying stack ${stackName}`);
 
     const response = await this.cfnClient.send(new DescribeStacksCommand({
       StackName: stackName,
@@ -890,7 +890,7 @@ export class CloudFormationDeployer {
       }
     });
 
-    console.log(`✅ CloudFormation: Stack verification completed. Outputs:`, outputs);
+    console.log(`CloudFormation: Stack verification completed. Outputs:`, outputs);
     return outputs;
   }
 
@@ -903,26 +903,26 @@ export class CloudFormationDeployer {
   ): Promise<void> {
     const WORKFLOWS_TABLE = process.env.WORKFLOWS_TABLE || 'WorkflowBuilder-Workflows';
     
-    console.log('📊 CloudFormation: Updating workflow status in database');
-    console.log('📋 CloudFormation: Workflow ID:', deploymentContext.workflowId);
-    console.log('📋 CloudFormation: User ID:', deploymentContext.userId);
-    console.log('📋 CloudFormation: Updates:', JSON.stringify(updates, null, 2));
+    console.log('CloudFormation: Updating workflow status in database');
+    console.log('CloudFormation: Workflow ID:', deploymentContext.workflowId);
+    console.log('CloudFormation: User ID:', deploymentContext.userId);
+    console.log('CloudFormation: Updates:', JSON.stringify(updates, null, 2));
 
     try {
       // First, get the current workflow to preserve important fields
-      console.log('📋 CloudFormation: Getting current workflow to preserve data...');
+      console.log('CloudFormation: Getting current workflow to preserve data...');
       const currentWorkflow = await this.getCurrentWorkflow(deploymentContext.userId, deploymentContext.workflowId);
       
       if (!currentWorkflow) {
-        console.error('❌ CloudFormation: Workflow not found for update');
-        console.error('❌ CloudFormation: User ID:', deploymentContext.userId);
-        console.error('❌ CloudFormation: Workflow ID:', deploymentContext.workflowId);
+        console.error('CloudFormation: Workflow not found for update');
+        console.error('CloudFormation: User ID:', deploymentContext.userId);
+        console.error('CloudFormation: Workflow ID:', deploymentContext.workflowId);
         throw new Error(`Workflow ${deploymentContext.workflowId} not found for user ${deploymentContext.userId}`);
       }
 
-      console.log('✅ CloudFormation: Current workflow found, preserving existing data');
-      console.log('📋 CloudFormation: Current deploymentStatus:', currentWorkflow.deploymentStatus);
-      console.log('📋 CloudFormation: Current isDeployed:', currentWorkflow.isDeployed);
+      console.log('CloudFormation: Current workflow found, preserving existing data');
+      console.log('CloudFormation: Current deploymentStatus:', currentWorkflow.deploymentStatus);
+      console.log('CloudFormation: Current isDeployed:', currentWorkflow.isDeployed);
 
       // Prepare safe updates while preserving existing data
       const safeUpdates = {
@@ -962,8 +962,8 @@ export class CloudFormationDeployer {
         }
       });
 
-      console.log('📋 CloudFormation: Executing DynamoDB update...');
-      console.log('📋 CloudFormation: Update expression:', updateExpression.join(', '));
+      console.log('CloudFormation: Executing DynamoDB update...');
+      console.log('CloudFormation: Update expression:', updateExpression.join(', '));
 
       await this.docClient.send(new UpdateCommand({
         TableName: WORKFLOWS_TABLE,
@@ -978,14 +978,14 @@ export class CloudFormationDeployer {
         ConditionExpression: 'attribute_exists(PK)',
       }));
 
-      console.log('✅ CloudFormation: Workflow status updated successfully');
-      console.log('📋 CloudFormation: New deploymentStatus: deployed');
-      console.log('📋 CloudFormation: New isDeployed: true');
-      console.log('📋 CloudFormation: New stepFunctionArn:', updates.stepFunctionArn);
+      console.log('CloudFormation: Workflow status updated successfully');
+      console.log('CloudFormation: New deploymentStatus: deployed');
+      console.log('CloudFormation: New isDeployed: true');
+      console.log('CloudFormation: New stepFunctionArn:', updates.stepFunctionArn);
       
     } catch (error) {
-      console.error('❌ CloudFormation: Failed to update workflow status:', error);
-      console.error('❌ CloudFormation: Error details:', JSON.stringify(error, null, 2));
+      console.error('CloudFormation: Failed to update workflow status:', error);
+      console.error('CloudFormation: Error details:', JSON.stringify(error, null, 2));
       
       // This is critical for the user experience - throw the error
       throw new Error(`Failed to update workflow status: ${error instanceof Error ? error.message : 'Unknown error'}`);
@@ -1009,7 +1009,7 @@ export class CloudFormationDeployer {
 
       return response.Item || null;
     } catch (error) {
-      console.error('❌ CloudFormation: Error fetching current workflow:', error);
+      console.error('CloudFormation: Error fetching current workflow:', error);
       return null;
     }
   }
@@ -1024,16 +1024,16 @@ export class CloudFormationDeployer {
     error?: any;
   }): Promise<void> {
     try {
-      console.log('🔄 Update deployment status event:', JSON.stringify(event, null, 2));
+      console.log('Update deployment status event:', JSON.stringify(event, null, 2));
       
       // Import and call the updateDeploymentStatus handler directly
       const { handler: updateDeploymentStatusHandler } = await import('../handlers/updateDeploymentStatus');
       
       const result = await updateDeploymentStatusHandler(event);
-      console.log('✅ UpdateDeploymentStatus handler completed:', result);
+      console.log('UpdateDeploymentStatus handler completed:', result);
       
     } catch (error) {
-      console.error('❌ Failed to call updateDeploymentStatus handler:', error);
+      console.error('Failed to call updateDeploymentStatus handler:', error);
       // Don't throw - this is supplementary to the main deployment flow
     }
   }

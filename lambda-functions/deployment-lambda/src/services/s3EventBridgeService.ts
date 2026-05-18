@@ -17,7 +17,7 @@ export class S3EventBridgeService {
    * This is required for EventBridge to receive S3 events
    */
   async enableEventBridgeNotifications(bucketName: string): Promise<void> {
-    console.log(`🔔 Enabling EventBridge notifications on bucket: ${bucketName}`);
+    console.log(`Enabling EventBridge notifications on bucket: ${bucketName}`);
 
     try {
       // Get current notification configuration
@@ -27,7 +27,7 @@ export class S3EventBridgeService {
 
       // Check if EventBridge is already enabled
       if (currentConfig.EventBridgeConfiguration) {
-        console.log(`✅ EventBridge notifications already enabled on bucket: ${bucketName}`);
+        console.log(`EventBridge notifications already enabled on bucket: ${bucketName}`);
         return;
       }
 
@@ -46,9 +46,9 @@ export class S3EventBridgeService {
         })
       );
 
-      console.log(`✅ EventBridge notifications enabled on bucket: ${bucketName}`);
+      console.log(`EventBridge notifications enabled on bucket: ${bucketName}`);
     } catch (error) {
-      console.error(`❌ Failed to enable EventBridge notifications on bucket ${bucketName}:`, error);
+      console.error(`Failed to enable EventBridge notifications on bucket ${bucketName}:`, error);
       throw new Error(
         `Failed to enable EventBridge notifications on bucket ${bucketName}: ${
           error instanceof Error ? error.message : 'Unknown error'

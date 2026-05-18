@@ -4,62 +4,64 @@
 
 import { CloudFormationTemplateGenerator } from '../cloudFormationTemplateGenerator';
 
-// Access private method for testing
-const normalizeLambdaCode = (CloudFormationTemplateGenerator as any).normalizeLambdaCode;
+// Access private static method for testing — bind to the class so internal `this` calls resolve
+const normalizeLambdaCode = (CloudFormationTemplateGenerator as any).normalizeLambdaCode.bind(CloudFormationTemplateGenerator);
 
 describe('Lambda Code Normalization', () => {
-  test('should normalize Python code with mixed indentation', () => {
+  test('should strip common leading indentation from Python code', () => {
+    // Code indented with 4 extra spaces (e.g. copy-pasted from inside a block)
     const messyPythonCode = `
-import json
-import re
-from datetime import datetime
+    import json
+    import re
+    from datetime import datetime
 
-def lambda_handler(event, context):
-"""AWS Lambda function"""
-try:
-hl7_message = ''
-if 'Body' in event:
-try:
-body_content = json.loads(event['Body'])
-hl7_message = body_content.get('hl7_message', '')
-except json.JSONDecodeError as e:
-return {
-'statusCode': 400,
-'body': json.dumps({'error': f'Invalid JSON: {str(e)}'})
-}
-else:
-hl7_message = event.get('hl7_message', '')
-return {
-'statusCode': 200,
-'body': json.dumps({'message': 'Success'})
-}
-except Exception as e:
-return {
-'statusCode': 500,
-'body': json.dumps({'error': str(e)})
-}
+    def lambda_handler(event, context):
+        """AWS Lambda function"""
+        try:
+            hl7_message = ''
+            if 'Body' in event:
+                try:
+                    body_content = json.loads(event['Body'])
+                    hl7_message = body_content.get('hl7_message', '')
+                except json.JSONDecodeError as e:
+                    return {
+                        'statusCode': 400,
+                        'body': json.dumps({'error': f'Invalid JSON: {str(e)}'})
+                    }
+            else:
+                hl7_message = event.get('hl7_message', '')
+            return {
+                'statusCode': 200,
+                'body': json.dumps({'message': 'Success'})
+            }
+        except Exception as e:
+            return {
+                'statusCode': 500,
+                'body': json.dumps({'error': str(e)})
+            }
     `.trim();
 
     const normalized = normalizeLambdaCode(messyPythonCode, 'python3.9');
-    
-    // Check that the code has proper indentation
+
+    // Common 4-space prefix should be stripped
     expect(normalized).toContain('def lambda_handler(event, context):');
     expect(normalized).toContain('    """AWS Lambda function"""');
     expect(normalized).toContain('    try:');
     expect(normalized).toContain('        hl7_message = \'\'');
     expect(normalized).toContain('        if \'Body\' in event:');
     expect(normalized).toContain('            try:');
-    
-    // Verify no tabs are present
+
+    // No tabs
     expect(normalized).not.toContain('\t');
-    
-    // Verify consistent 4-space indentation
+
+    // All indented lines should be multiples of 4 spaces
     const lines = normalized.split('\n');
-    const indentedLines = lines.filter(line => line.trim() && !line.startsWith('import') && !line.startsWith('from') && !line.startsWith('def lambda_handler'));
-    
-    indentedLines.forEach(line => {
+    const indentedLines = lines.filter(
+      (line) => line.trim() && !line.startsWith('import') && !line.startsWith('from') && !line.startsWith('def lambda_handler')
+    );
+    indentedLines.forEach((line) => {
       const leadingSpaces = line.match(/^ */)?.[0].length || 0;
-      expect(leadingSpaces % 4).toBe(0); // Should be multiple of 4
+      expect(leadingSpaces % 4).toBe(0);
     });
   });
 

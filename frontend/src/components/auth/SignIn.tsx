@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { authService } from '../../services/auth';
+import { useAuth } from '../../contexts/AuthContext';
 import { useDocumentTitle } from '../../hooks/useDocumentTitle';
 import './SignIn.css';
 
@@ -15,6 +15,7 @@ export default function SignIn({
   onSwitchToForgotPassword,
 }: SignInProps) {
   useDocumentTitle('Sign in');
+  const { signIn } = useAuth();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
@@ -27,7 +28,7 @@ export default function SignIn({
     setError(null);
 
     try {
-      await authService.signIn({ email, password });
+      await signIn(email, password);
       onSignInSuccess();
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Sign in failed');

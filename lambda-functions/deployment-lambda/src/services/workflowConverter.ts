@@ -18,7 +18,7 @@ export class WorkflowConverter {
     stepFunction: StepFunctionConfig;
     iamRoles: IAMRoleConfig[];
   } {
-    console.log('🔄 Converting workflow to AWS resources:', {
+    console.log('Converting workflow to AWS resources:', {
       workflowId: workflow.id,
       workflowName: workflow.name,
       nodeCount: workflow.nodes?.length || 0,
@@ -29,7 +29,7 @@ export class WorkflowConverter {
     const iamRoles = this.generateIAMRoles(workflow, deploymentContext);
     const stepFunction = this.generateStepFunction(workflow, deploymentContext, lambdaFunctions);
 
-    console.log('✅ AWS resources generated:', {
+    console.log('AWS resources generated:', {
       lambdaFunctions: lambdaFunctions.length,
       iamRoles: iamRoles.length,
       stepFunctionName: stepFunction.stateMachineName,

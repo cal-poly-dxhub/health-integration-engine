@@ -47,7 +47,7 @@ class DeploymentValidator {
       warnings: []
     };
 
-    console.log(chalk.blue.bold(`🔍 Validating deployment for ${this.options.environment} environment`));
+    console.log(chalk.blue.bold(`Validating deployment for ${this.options.environment} environment`));
     console.log('');
 
     try {
@@ -94,7 +94,7 @@ class DeploymentValidator {
       const isValid = await validateBackendDeployment(this.options.environment);
       
       if (isValid) {
-        console.log(chalk.green('✓ Backend deployment validation passed'));
+        console.log(chalk.green('Backend deployment validation passed'));
         return true;
       } else {
         result.errors.push('Backend deployment validation failed');
@@ -132,10 +132,10 @@ class DeploymentValidator {
       }
 
       if (validation.isValid) {
-        console.log(chalk.green('✓ Frontend configuration validation passed'));
+        console.log(chalk.green('Frontend configuration validation passed'));
         return true;
       } else {
-        console.log(chalk.red('✗ Frontend configuration validation failed'));
+        console.log(chalk.red('Frontend configuration validation failed'));
         return false;
       }
 
@@ -161,7 +161,7 @@ class DeploymentValidator {
       }
 
       if (securityResult.isValid) {
-        console.log(chalk.green('✓ Security validation passed'));
+        console.log(chalk.green('Security validation passed'));
         
         // Check if production approval is required
         if (this.options.environment === 'production') {
@@ -174,7 +174,7 @@ class DeploymentValidator {
         
         return true;
       } else {
-        console.log(chalk.red('✗ Security validation failed'));
+        console.log(chalk.red('Security validation failed'));
         return false;
       }
 
@@ -187,7 +187,7 @@ class DeploymentValidator {
 
   private displayResults(result: ValidationResult): void {
     console.log('');
-    console.log(chalk.cyan.bold('📋 Validation Results:'));
+    console.log(chalk.cyan.bold('Validation Results:'));
     console.log('');
 
     // Display check results
@@ -198,7 +198,7 @@ class DeploymentValidator {
 
     // Display errors
     if (result.errors.length > 0) {
-      console.log(chalk.red.bold('❌ Errors:'));
+      console.log(chalk.red.bold('Errors:'));
       for (const error of result.errors) {
         console.log(chalk.red(`  • ${error}`));
       }
@@ -207,7 +207,7 @@ class DeploymentValidator {
 
     // Display warnings
     if (result.warnings.length > 0) {
-      console.log(chalk.yellow.bold('⚠️  Warnings:'));
+      console.log(chalk.yellow.bold(' Warnings:'));
       for (const warning of result.warnings) {
         console.log(chalk.yellow(`  • ${warning}`));
       }
@@ -216,16 +216,16 @@ class DeploymentValidator {
 
     // Display final result
     if (result.success) {
-      console.log(chalk.green.bold('✅ Validation passed! Deployment is ready.'));
+      console.log(chalk.green.bold('Validation passed! Deployment is ready.'));
     } else {
-      console.log(chalk.red.bold('❌ Validation failed! Please address the errors above.'));
+      console.log(chalk.red.bold('Validation failed! Please address the errors above.'));
     }
 
     console.log('');
   }
 
   private getCheckIcon(passed: boolean): string {
-    return passed ? chalk.green('✓') : chalk.red('✗');
+    return passed ? chalk.green('') : chalk.red('');
   }
 }
 

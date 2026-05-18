@@ -131,7 +131,7 @@ export default function Dashboard({
       handleEditWorkflow(newWorkflow.id);
     } catch (error) {
       console.error('Failed to create workflow:', error);
-      alert('Failed to create workflow. Please try again.');
+      setDeleteError('Failed to create workflow. Please try again.');
     } finally {
       setIsCreating(false);
     }
@@ -140,16 +140,12 @@ export default function Dashboard({
   const handleEditWorkflow = (workflowId: string) => {
     if (onEditWorkflow) {
       onEditWorkflow(workflowId);
-    } else {
-      alert('Edit workflow functionality not implemented yet');
     }
   };
 
   const handleViewWorkflow = (workflowId: string) => {
     if (onViewWorkflow) {
       onViewWorkflow(workflowId);
-    } else {
-      console.log('Viewing workflow details for:', workflowId);
     }
   };
 
@@ -179,7 +175,7 @@ export default function Dashboard({
       setDeletionId(workflowId);
       setShowDeletionProgressModal(true);
     } catch (error) {
-      console.error('❌ Failed to delete workflow:', error);
+      console.error('Failed to delete workflow:', error);
       setDeleteError(
         error instanceof Error
           ? error.message
@@ -203,7 +199,7 @@ export default function Dashboard({
       handleEditWorkflow(duplicatedWorkflow.id);
     } catch (error) {
       console.error('Failed to duplicate workflow:', error);
-      alert('Failed to duplicate workflow. Please try again.');
+      setDeleteError('Failed to duplicate workflow. Please try again.');
     }
   };
 
@@ -453,7 +449,7 @@ export default function Dashboard({
             onClick={() => setDeleteSuccess(null)}
             aria-label="Dismiss"
           >
-            ✕
+            
           </button>
         </div>
       )}
@@ -472,7 +468,7 @@ export default function Dashboard({
             onClick={() => setDeleteError(null)}
             aria-label="Dismiss"
           >
-            ✕
+            
           </button>
         </div>
       )}

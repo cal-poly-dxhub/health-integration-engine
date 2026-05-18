@@ -47,7 +47,7 @@ export async function getLatestDeploymentOutputs(environment: string): Promise<B
     // Validate that we got the essential outputs
     validateBackendOutputs(backendOutputs, environment);
     
-    console.log(chalk.green(`✓ Retrieved backend configuration for ${environment}`));
+    console.log(chalk.green(`Retrieved backend configuration for ${environment}`));
     
     return backendOutputs;
     
@@ -272,7 +272,7 @@ function validateBackendOutputs(outputs: BackendOutputs, environment: string): v
   
   // Display warnings
   if (warnings.length > 0) {
-    console.log(chalk.yellow('⚠️  Backend Output Warnings:'));
+    console.log(chalk.yellow(' Backend Output Warnings:'));
     for (const warning of warnings) {
       console.log(chalk.yellow(`  • ${warning}`));
     }
@@ -280,7 +280,7 @@ function validateBackendOutputs(outputs: BackendOutputs, environment: string): v
   
   // Throw error if critical outputs are missing
   if (errors.length > 0) {
-    console.log(chalk.red('❌ Backend Output Errors:'));
+    console.log(chalk.red('Backend Output Errors:'));
     for (const error of errors) {
       console.log(chalk.red(`  • ${error}`));
     }

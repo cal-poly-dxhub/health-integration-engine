@@ -60,8 +60,8 @@ try {
     }
   }
   
-  console.log('✓ Deployment scripts compiled successfully');
-  console.log('✓ Scripts made executable');
+  console.log('Deployment scripts compiled successfully');
+  console.log('Scripts made executable');
   
 } catch (error) {
   console.error('Failed to build deployment scripts:', error.message);

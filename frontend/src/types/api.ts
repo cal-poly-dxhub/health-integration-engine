@@ -28,10 +28,10 @@ export interface PaginatedResponse<T = any> {
 }
 
 // Workflow API responses
-export interface WorkflowListResponse extends ApiResponse<PaginatedResponse<WorkflowMetadata>> {}
-export interface WorkflowResponse extends ApiResponse<Workflow> {}
-export interface WorkflowCreateResponse extends ApiResponse<Workflow> {}
-export interface WorkflowUpdateResponse extends ApiResponse<Workflow> {}
+export type WorkflowListResponse = ApiResponse<PaginatedResponse<WorkflowMetadata>>;
+export type WorkflowResponse = ApiResponse<Workflow>;
+export type WorkflowCreateResponse = ApiResponse<Workflow>;
+export type WorkflowUpdateResponse = ApiResponse<Workflow>;
 
 // Workflow deletion response
 export interface WorkflowDeleteResponse {
@@ -92,8 +92,8 @@ export interface DeploymentStep {
   };
 }
 
-export interface DeploymentResponse extends ApiResponse<DeploymentStatus> {}
-export interface DeploymentListResponse extends ApiResponse<PaginatedResponse<DeploymentStatus>> {}
+export type DeploymentResponse = ApiResponse<DeploymentStatus>;
+export type DeploymentListResponse = ApiResponse<PaginatedResponse<DeploymentStatus>>;
 
 // Authentication API responses
 export interface AuthUser {
@@ -114,12 +114,12 @@ export interface AuthTokens {
   tokenType: 'Bearer';
 }
 
-export interface AuthResponse extends ApiResponse<{
+export type AuthResponse = ApiResponse<{
   user: AuthUser;
   tokens: AuthTokens;
-}> {}
+}>;
 
-export interface RefreshTokenResponse extends ApiResponse<AuthTokens> {}
+export type RefreshTokenResponse = ApiResponse<AuthTokens>;
 
 // Error types
 export interface ValidationError {

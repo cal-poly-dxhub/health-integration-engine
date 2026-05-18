@@ -12,8 +12,8 @@ const DEPLOYMENTS_TABLE = process.env.DEPLOYMENTS_TABLE || 'WorkflowBuilder-Depl
  * Used by the deletion Step Function
  */
 export const handler = async (event: any) => {
-  console.log('🗑️ DELETE DATABASE RECORDS HANDLER INVOKED');
-  console.log('📋 Event received:', JSON.stringify(event, null, 2));
+  console.log('DELETE DATABASE RECORDS HANDLER INVOKED');
+  console.log('Event received:', JSON.stringify(event, null, 2));
 
   const { workflowId, userId } = event;
 
@@ -28,7 +28,7 @@ export const handler = async (event: any) => {
       deleteWorkflowFromDatabase(workflowId, userId)
     ]);
 
-    console.log('✅ Database cleanup completed successfully');
+    console.log('Database cleanup completed successfully');
 
     return {
       statusCode: 200,
@@ -38,7 +38,7 @@ export const handler = async (event: any) => {
     };
 
   } catch (error) {
-    console.error('❌ Database cleanup failed:', error);
+    console.error('Database cleanup failed:', error);
     throw error;
   }
 };
@@ -48,7 +48,7 @@ export const handler = async (event: any) => {
  */
 async function deleteDeploymentRecords(workflowId: string): Promise<void> {
   try {
-    console.log(`🗑️ Starting deletion of deployment records for workflow: ${workflowId}`);
+    console.log(`Starting deletion of deployment records for workflow: ${workflowId}`);
     
     let lastEvaluatedKey: any = undefined;
     let totalDeleted = 0;
@@ -65,7 +65,7 @@ async function deleteDeploymentRecords(workflowId: string): Promise<void> {
       }));
 
       if (scanResponse.Items && scanResponse.Items.length > 0) {
-        console.log(`🗑️ Found ${scanResponse.Items.length} deployment records in this batch`);
+        console.log(`Found ${scanResponse.Items.length} deployment records in this batch`);
         
         const deletePromises = scanResponse.Items.map(item =>
           docClient.send(new DeleteCommand({
@@ -79,19 +79,19 @@ async function deleteDeploymentRecords(workflowId: string): Promise<void> {
         
         await Promise.all(deletePromises);
         totalDeleted += scanResponse.Items.length;
-        console.log(`✅ Deleted ${scanResponse.Items.length} deployment records (${totalDeleted} total)`);
+        console.log(`Deleted ${scanResponse.Items.length} deployment records (${totalDeleted} total)`);
       }
       
       lastEvaluatedKey = scanResponse.LastEvaluatedKey;
     } while (lastEvaluatedKey);
     
     if (totalDeleted > 0) {
-      console.log(`✅ All ${totalDeleted} deployment records deleted successfully`);
+      console.log(`All ${totalDeleted} deployment records deleted successfully`);
     } else {
-      console.log('ℹ️ No deployment records found for this workflow');
+      console.log('ℹNo deployment records found for this workflow');
     }
   } catch (error) {
-    console.error('❌ Failed to delete deployment records:', error);
+    console.error('Failed to delete deployment records:', error);
     throw error;
   }
 }
@@ -109,9 +109,9 @@ async function deleteWorkflowFromDatabase(workflowId: string, userId: string): P
       },
     }));
     
-    console.log('✅ Workflow deleted from database');
+    console.log('Workflow deleted from database');
   } catch (error) {
-    console.error('❌ Failed to delete workflow from database:', error);
+    console.error('Failed to delete workflow from database:', error);
     throw error;
   }
 }

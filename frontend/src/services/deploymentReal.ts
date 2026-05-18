@@ -70,21 +70,6 @@ export class DeploymentService {
    */
   static async deployWorkflow(request: DeploymentRequest): Promise<DeploymentResponse> {
     try {
-      console.log('Real deployment request:', request);
-
-      // Debug: check if auth tokens are present. Failure to load tokens is
-      // logged but not fatal — the api layer will surface the real auth error.
-      try {
-        const authService = await import('./auth');
-        const tokens = await authService.authService.getTokens();
-        console.log('Auth tokens available:', !!tokens.accessToken);
-        console.log('Token preview:', tokens.accessToken?.substring(0, 20) + '...');
-      } catch (authError) {
-        console.error('Auth token error:', authError);
-      }
-
-      console.log('Making API call to /deployments...');
-
       const timeoutPromise = new Promise<never>((_, reject) => {
         setTimeout(
           () => reject(new Error(`Request timeout after ${REQUEST_TIMEOUT_MS / 1000} seconds`)),
@@ -94,7 +79,6 @@ export class DeploymentService {
 
       const apiPromise = apiService.post<DeploymentResponse>('/deployments', request);
       const response = await Promise.race([apiPromise, timeoutPromise]);
-      console.log('API call successful:', response);
       return response;
     } catch (error) {
       console.error('Failed to deploy workflow to AWS:', error);

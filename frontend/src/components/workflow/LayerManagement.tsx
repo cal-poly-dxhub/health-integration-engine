@@ -23,6 +23,13 @@ const LayerManagement: React.FC = () => {
   const [formFile, setFormFile] = useState<File | null>(null);
   const [formError, setFormError] = useState<string | null>(null);
 
+  const [pendingDelete, setPendingDelete] = useState<{
+    layerId: string;
+    layerName: string;
+    force: boolean;
+    conflictingWorkflows?: Array<{ id: string; name: string }>;
+  } | null>(null);
+
   const loadLayers = useCallback(async () => {
     try {
       setLoading(true);
@@ -137,11 +144,16 @@ const LayerManagement: React.FC = () => {
     }
   };
 
-  const handleDelete = async (layerId: string, layerName: string) => {
-    if (!window.confirm(`Delete layer "${layerName}"? This cannot be undone.`))
-      return;
+  const handleDelete = (layerId: string, layerName: string) => {
+    setPendingDelete({ layerId, layerName, force: false });
+  };
+
+  const confirmDelete = async () => {
+    if (!pendingDelete) return;
+    const { layerId, layerName, force } = pendingDelete;
+    setPendingDelete(null);
     try {
-      await layerApiService.deleteLayer(layerId);
+      await layerApiService.deleteLayer(layerId, force);
       setLayers((prev) => prev.filter((l) => l.id !== layerId));
     } catch (err: any) {
       const data = err?.response?.data;
@@ -149,24 +161,8 @@ const LayerManagement: React.FC = () => {
         | Array<{ id: string; name: string }>
         | undefined;
       if (err?.response?.status === 409 && deployed?.length) {
-        const names = deployed.map((w) => `• ${w.name}`).join('\n');
-        const ok = window.confirm(
-          `Layer "${layerName}" is attached to ${deployed.length} deployed workflow(s):\n\n${names}\n\n` +
-            `Force delete will detach it from those deployed Lambda functions and may leave the next stack update referencing a missing ARN. Continue?`
-        );
-        if (!ok) return;
-        try {
-          await layerApiService.deleteLayer(layerId, true);
-          setLayers((prev) => prev.filter((l) => l.id !== layerId));
-          return;
-        } catch (forceErr) {
-          setError(
-            forceErr instanceof Error
-              ? forceErr.message
-              : 'Failed to force-delete layer'
-          );
-          return;
-        }
+        setPendingDelete({ layerId, layerName, force: true, conflictingWorkflows: deployed });
+        return;
       }
       setError(err instanceof Error ? err.message : 'Failed to delete layer');
     }
@@ -185,6 +181,28 @@ const LayerManagement: React.FC = () => {
 
   return (
     <div className="lyr-root">
+      {pendingDelete && (
+        <div role="dialog" aria-modal="true" aria-label="Confirm deletion" className="lyr-confirm-overlay">
+          <div className="lyr-confirm">
+            {pendingDelete.conflictingWorkflows ? (
+              <>
+                <p className="lyr-confirm-title">Force delete layer "{pendingDelete.layerName}"?</p>
+                <p className="lyr-confirm-body">
+                  Attached to {pendingDelete.conflictingWorkflows.length} deployed workflow(s):{' '}
+                  {pendingDelete.conflictingWorkflows.map((w) => w.name).join(', ')}.
+                  This will detach it and may break the next stack update.
+                </p>
+              </>
+            ) : (
+              <p className="lyr-confirm-title">Delete layer "{pendingDelete.layerName}"? This cannot be undone.</p>
+            )}
+            <div className="lyr-confirm-actions">
+              <button type="button" className="lyr-btn lyr-btn--danger" onClick={confirmDelete}>Delete</button>
+              <button type="button" className="lyr-btn" onClick={() => setPendingDelete(null)}>Cancel</button>
+            </div>
+          </div>
+        </div>
+      )}
       <header className="lyr-header">
         <div>
           <h2 className="lyr-title">Lambda Layers</h2>

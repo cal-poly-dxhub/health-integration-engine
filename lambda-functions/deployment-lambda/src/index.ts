@@ -8,16 +8,9 @@ export { handler as listWorkflows } from './handlers/listWorkflows';
 export { handler as saveWorkflow } from './handlers/saveWorkflow';
 export { handler as deleteWorkflow } from './handlers/deleteWorkflow';
 export { handler as vpcCleanup } from './handlers/vpcCleanupHandler';
-export { handler as opensearchSearch } from './handlers/opensearchSearch';
-
-// Frontend deployment handlers
-export { handler as frontendDeploymentController } from './handlers/frontendDeploymentController';
-
-// Unified workflow handler
-export { handler as workflowHandler } from './handlers/workflowHandler';
 
 // Step Functions API handlers
-export { 
+export {
   listExecutions,
   describeExecution,
   getExecutionHistory,
@@ -33,11 +26,3 @@ export { handler as layerHandler } from './handlers/layerHandler';
 
 // EventBridge handlers
 export { eventBridgeHandler } from './handlers/eventbridge';
-
-// WebSocket handlers
-export { 
-  connectHandler,
-  disconnectHandler,
-  messageHandler,
-  cleanupHandler
-} from './handlers/websocketHandler';

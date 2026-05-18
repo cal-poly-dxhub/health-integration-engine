@@ -800,7 +800,7 @@ const NodeConfigModal: React.FC<NodeConfigModalProps> = ({
             onClick={onClose}
             aria-label="Close"
           >
-            ✕
+            
           </button>
         </div>
 

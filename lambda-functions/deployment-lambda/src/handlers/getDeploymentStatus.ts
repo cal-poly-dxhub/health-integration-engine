@@ -18,7 +18,6 @@ const DEPLOYMENTS_TABLE = process.env.DEPLOYMENTS_TABLE || 'WorkflowBuilder-Depl
 export const handler = async (
   event: APIGatewayProxyEvent
 ): Promise<APIGatewayProxyResult> => {
-  console.log('Get deployment status event:', JSON.stringify(event, null, 2));
 
   try {
     const deploymentId = event.pathParameters?.deploymentId;
@@ -37,7 +36,6 @@ export const handler = async (
     const userId = extractUserIdFromEvent(event);
     
     if (!userId) {
-      console.error('❌ No user ID found in JWT token');
       return createAuthErrorResponse('Valid authentication token required');
     }
 
@@ -79,9 +77,6 @@ export const handler = async (
  */
 async function getDeploymentStatusWithStepFunctions(deploymentId: string, userId: string): Promise<DeploymentStatus | null> {
   try {
-    console.log('🔍 Looking up deployment status for ID:', deploymentId);
-    
-    // Get basic deployment info from database with user ownership validation
     const response = await docClient.send(new ScanCommand({
       TableName: DEPLOYMENTS_TABLE,
       FilterExpression: 'deploymentId = :deploymentId AND userId = :userId',
@@ -92,22 +87,16 @@ async function getDeploymentStatusWithStepFunctions(deploymentId: string, userId
     }));
 
     if (!response.Items || response.Items.length === 0) {
-      console.log('❌ No deployment found with ID:', deploymentId);
       return null;
     }
 
     const deploymentRecord = response.Items[0];
-    console.log('✅ Found deployment record:', deploymentRecord.status);
 
-    // If we have a deployment execution ARN, get real-time status from Step Functions
     const executionArn = deploymentRecord.deploymentExecutionArn || deploymentRecord.stepFunctionArn;
     if (executionArn) {
-      console.log('🔄 Getting real-time status from Step Functions:', executionArn);
-      
       try {
         const stepFunctionStatus = await getStepFunctionStatus(executionArn);
-        
-        // Merge database record with Step Functions status
+
         const deploymentStatus: DeploymentStatus = {
           deploymentId: deploymentRecord.deploymentId,
           workflowId: deploymentRecord.workflowId,
@@ -120,11 +109,10 @@ async function getDeploymentStatusWithStepFunctions(deploymentId: string, userId
           ...(stepFunctionStatus.error && { error: stepFunctionStatus.error }),
         };
 
-        console.log('✅ Merged deployment status:', deploymentStatus.status, 'with', deploymentStatus.steps.length, 'steps');
         return deploymentStatus;
-        
+
       } catch (sfnError) {
-        console.error('❌ Error getting Step Functions status, falling back to database:', sfnError);
+        console.error('Error getting Step Functions status, falling back to database:', sfnError);
         // Fall back to database record
       }
     }
@@ -133,7 +121,7 @@ async function getDeploymentStatusWithStepFunctions(deploymentId: string, userId
     return deploymentRecord as DeploymentStatus;
     
   } catch (error) {
-    console.error('❌ Error fetching deployment status:', error);
+    console.error('Error fetching deployment status:', error);
     return null;
   }
 }
@@ -147,14 +135,9 @@ async function getStepFunctionStatus(executionArn: string): Promise<{
   steps: any[];
   error?: any;
 }> {
-  console.log('📊 Getting Step Functions execution details:', executionArn);
-  
-  // Get execution details
   const execution = await sfnClient.send(new DescribeExecutionCommand({
     executionArn: executionArn,
   }));
-
-  console.log('📋 Step Functions execution status:', execution.status);
 
   // Map Step Functions status to our deployment status
   let status: 'pending' | 'in_progress' | 'completed' | 'failed';
@@ -174,14 +157,11 @@ async function getStepFunctionStatus(executionArn: string): Promise<{
       status = 'pending';
   }
 
-  // Get execution history to build steps
   const history = await sfnClient.send(new GetExecutionHistoryCommand({
     executionArn: executionArn,
     maxResults: 100,
     reverseOrder: false,
   }));
-
-  console.log('📚 Got', history.events?.length || 0, 'execution events');
 
   // Parse execution history into deployment steps
   const steps = parseExecutionHistory(history.events || []);
@@ -305,6 +285,5 @@ function parseExecutionHistory(events: any[]): any[] {
   // Sort steps by start time
   steps.sort((a, b) => new Date(a.startTime).getTime() - new Date(b.startTime).getTime());
 
-  console.log('📋 Parsed', steps.length, 'deployment steps from execution history');
   return steps;
 }

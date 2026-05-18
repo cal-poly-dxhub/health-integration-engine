@@ -202,9 +202,7 @@ const ConnectionsRenderer: React.FC<ConnectionsRendererProps> = ({
               }}
               onClick={(e) => {
                 e.stopPropagation();
-                if (window.confirm('Delete this connection?')) {
-                  onDeleteConnection(connection.id);
-                }
+                onDeleteConnection(connection.id);
               }}
             />
 

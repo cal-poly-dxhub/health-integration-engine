@@ -15,9 +15,9 @@ const WORKFLOWS_TABLE = process.env.WORKFLOWS_TABLE || 'WorkflowBuilder-Workflow
  * This handler is called by the Step Functions state machine
  */
 export const handler = async (event: any): Promise<any> => {
-  console.log('🔄 UPDATE DEPLOYMENT STATUS HANDLER INVOKED');
-  console.log('📋 Event received:', JSON.stringify(event, null, 2));
-  console.log('🌍 Environment variables:', {
+  console.log('UPDATE DEPLOYMENT STATUS HANDLER INVOKED');
+  console.log('Event received:', JSON.stringify(event, null, 2));
+  console.log('Environment variables:', {
     DEPLOYMENTS_TABLE: process.env.DEPLOYMENTS_TABLE,
     WORKFLOWS_TABLE: process.env.WORKFLOWS_TABLE,
     AWS_REGION: process.env.AWS_REGION,
@@ -27,16 +27,16 @@ export const handler = async (event: any): Promise<any> => {
     const { deploymentId, status, cloudFormationStackArn, error } = event;
 
     if (!deploymentId) {
-      console.error('❌ Missing deploymentId in event');
-      console.error('❌ Event received instead:', JSON.stringify(event, null, 2));
-      console.error('❌ Event keys available:', Object.keys(event));
+      console.error('Missing deploymentId in event');
+      console.error('Event received instead:', JSON.stringify(event, null, 2));
+      console.error('Event keys available:', Object.keys(event));
       
       // Check if this is an API Gateway event (wrong Lambda being called)
       if (event.httpMethod && event.body) {
-        console.error('❌ CRITICAL: Received API Gateway event format');
-        console.error('❌ This means the Step Functions state machine is calling the WRONG Lambda function');
-        console.error('❌ Expected: Step Functions event with deploymentId, status, cloudFormationStackArn');
-        console.error('❌ Received: API Gateway event with httpMethod, path, body');
+        console.error('CRITICAL: Received API Gateway event format');
+        console.error('This means the Step Functions state machine is calling the WRONG Lambda function');
+        console.error('Expected: Step Functions event with deploymentId, status, cloudFormationStackArn');
+        console.error('Received: API Gateway event with httpMethod, path, body');
         
         return {
           statusCode: 400,
@@ -52,7 +52,7 @@ export const handler = async (event: any): Promise<any> => {
       throw new Error('Deployment ID is required');
     }
 
-    console.log('📊 Processing deployment status update:', { 
+    console.log('Processing deployment status update:', { 
       deploymentId, 
       status, 
       hasStackArn: !!cloudFormationStackArn,
@@ -60,16 +60,16 @@ export const handler = async (event: any): Promise<any> => {
     });
 
     // Get deployment record to find workflowId and userId
-    console.log('📋 Getting deployment record...');
+    console.log('Getting deployment record...');
     const deploymentRecord = await getDeploymentRecord(deploymentId);
     if (!deploymentRecord) {
-      console.error('❌ Deployment record not found:', deploymentId);
+      console.error('Deployment record not found:', deploymentId);
       throw new Error(`Deployment ${deploymentId} not found`);
     }
 
     const { workflowId, userId } = deploymentRecord;
-    console.log('✅ Found deployment record:', { workflowId, userId });
-    console.log('📋 Deployment record details:', JSON.stringify(deploymentRecord, null, 2));
+    console.log('Found deployment record:', { workflowId, userId });
+    console.log('Deployment record details:', JSON.stringify(deploymentRecord, null, 2));
 
     // Update deployment status
     await updateDeploymentStatus(deploymentId, workflowId, {
@@ -81,29 +81,29 @@ export const handler = async (event: any): Promise<any> => {
 
     // If deployment completed successfully, update workflow status and get Step Functions ARN
     if (status === 'completed' && cloudFormationStackArn) {
-      console.log('✅ Deployment completed successfully, updating workflow status');
-      console.log('📋 CloudFormation Stack ARN:', cloudFormationStackArn);
+      console.log('Deployment completed successfully, updating workflow status');
+      console.log('CloudFormation Stack ARN:', cloudFormationStackArn);
       
       try {
         // Get CloudFormation stack outputs to find the workflow Step Functions ARN
         const stackName = cloudFormationStackArn.split('/')[1]; // Extract stack name from ARN
-        console.log('📋 Extracted stack name:', stackName);
+        console.log('Extracted stack name:', stackName);
         
-        console.log('📋 Getting CloudFormation stack outputs...');
+        console.log('Getting CloudFormation stack outputs...');
         const stackOutputs = await getCloudFormationStackOutputs(stackName);
         
-        console.log('📋 CloudFormation stack outputs found:', Object.keys(stackOutputs));
-        console.log('📋 Full stack outputs:', JSON.stringify(stackOutputs, null, 2));
+        console.log('CloudFormation stack outputs found:', Object.keys(stackOutputs));
+        console.log('Full stack outputs:', JSON.stringify(stackOutputs, null, 2));
         
         // Check if we have the required Step Function ARN
         const stepFunctionArn = stackOutputs.StepFunctionAliasArn || stackOutputs.StepFunctionArn;
         if (!stepFunctionArn) {
-          console.error('❌ StepFunctionArn not found in stack outputs');
-          console.error('❌ Available outputs:', Object.keys(stackOutputs));
+          console.error('StepFunctionArn not found in stack outputs');
+          console.error('Available outputs:', Object.keys(stackOutputs));
           throw new Error('StepFunctionArn not found in CloudFormation stack outputs');
         }
         
-        console.log('✅ Step Function ARN found:', stepFunctionArn);
+        console.log('Step Function ARN found:', stepFunctionArn);
         
         // Prepare workflow updates
         const workflowUpdates = {
@@ -117,14 +117,14 @@ export const handler = async (event: any): Promise<any> => {
           updatedAt: new Date().toISOString(),
         };
         
-        console.log('📋 Workflow updates to apply:', JSON.stringify(workflowUpdates, null, 2));
+        console.log('Workflow updates to apply:', JSON.stringify(workflowUpdates, null, 2));
         
         // Update workflow status with deployment info
-        console.log('📊 Updating workflow status...');
+        console.log('Updating workflow status...');
         await updateWorkflowStatus(userId, workflowId, workflowUpdates);
 
-        console.log('✅ Workflow status updated successfully');
-        console.log('🎯 WORKFLOW UPDATE COMPLETE - UI should now show deployed status');
+        console.log('Workflow status updated successfully');
+        console.log('WORKFLOW UPDATE COMPLETE - UI should now show deployed status');
         
         // Enable S3 EventBridge notifications if the stack has an S3 trigger
         await enableS3EventBridgeIfNeeded(stackName);
@@ -138,8 +138,8 @@ export const handler = async (event: any): Promise<any> => {
         };
         
       } catch (workflowUpdateError) {
-        console.error('❌ Failed to update workflow status:', workflowUpdateError);
-        console.error('❌ Error details:', workflowUpdateError instanceof Error ? workflowUpdateError.message : 'Unknown error');
+        console.error('Failed to update workflow status:', workflowUpdateError);
+        console.error('Error details:', workflowUpdateError instanceof Error ? workflowUpdateError.message : 'Unknown error');
         
         // This is critical - the deployment succeeded but the workflow status wasn't updated
         // Return an error to indicate the issue
@@ -155,16 +155,16 @@ export const handler = async (event: any): Promise<any> => {
 
     // If deployment failed, update workflow status to failed
     if (status === 'failed') {
-      console.log('❌ Deployment failed, updating workflow status');
+      console.log('Deployment failed, updating workflow status');
       
       try {
         await updateWorkflowStatus(userId, workflowId, {
           deploymentStatus: 'failed',
           updatedAt: new Date().toISOString(),
         });
-        console.log('✅ Workflow status updated to failed');
+        console.log('Workflow status updated to failed');
       } catch (workflowUpdateError) {
-        console.error('❌ Failed to update workflow status to failed:', workflowUpdateError);
+        console.error('Failed to update workflow status to failed:', workflowUpdateError);
       }
     }
 
@@ -175,7 +175,7 @@ export const handler = async (event: any): Promise<any> => {
     };
 
   } catch (error) {
-    console.error('❌ Update deployment status error:', error);
+    console.error('Update deployment status error:', error);
     
     return {
       statusCode: 500,
@@ -258,7 +258,7 @@ async function updateWorkflowStatus(
   const currentWorkflow = await getCurrentWorkflow(userId, workflowId);
   
   if (!currentWorkflow) {
-    console.warn(`⚠️ Workflow ${workflowId} not found for user ${userId}`);
+    console.warn(`Workflow ${workflowId} not found for user ${userId}`);
     return;
   }
 
@@ -319,7 +319,7 @@ async function updateWorkflowStatus(
     ConditionExpression: 'attribute_exists(PK)',
   }));
 
-  console.log('✅ Workflow status updated with proper relationship maintenance and deployment history');
+  console.log('Workflow status updated with proper relationship maintenance and deployment history');
 }
 
 /**
@@ -370,7 +370,7 @@ async function getCloudFormationStackOutputs(stackName: string): Promise<Record<
  */
 async function enableS3EventBridgeIfNeeded(stackName: string): Promise<void> {
   try {
-    console.log('🔔 Checking if stack has S3 EventBridge trigger...');
+    console.log('Checking if stack has S3 EventBridge trigger...');
     
     const templateResponse = await cfnClient.send(new GetTemplateCommand({
       StackName: stackName,
@@ -381,22 +381,22 @@ async function enableS3EventBridgeIfNeeded(stackName: string): Promise<void> {
     const template = JSON.parse(templateResponse.TemplateBody);
     
     if (!template.Resources?.S3TriggerEventRule) {
-      console.log('ℹ️ No S3 trigger configured, skipping EventBridge setup');
+      console.log('ℹNo S3 trigger configured, skipping EventBridge setup');
       return;
     }
     
     const bucketName = template.Resources.S3TriggerEventRule.Properties?.EventPattern?.detail?.bucket?.name?.[0];
     if (!bucketName) {
-      console.log('⚠️ S3 trigger found but no bucket name specified');
+      console.log('S3 trigger found but no bucket name specified');
       return;
     }
     
-    console.log(`🔔 Enabling EventBridge notifications on bucket: ${bucketName}`);
+    console.log(`Enabling EventBridge notifications on bucket: ${bucketName}`);
     const s3EventBridgeService = new S3EventBridgeService();
     await s3EventBridgeService.enableEventBridgeNotifications(bucketName);
-    console.log(`✅ EventBridge notifications enabled on bucket: ${bucketName}`);
+    console.log(`EventBridge notifications enabled on bucket: ${bucketName}`);
   } catch (error) {
-    console.error('⚠️ Failed to enable S3 EventBridge notifications (non-fatal):', error);
+    console.error('Failed to enable S3 EventBridge notifications (non-fatal):', error);
     // Non-fatal: the deployment itself succeeded, this is a post-deployment enhancement
   }
 }

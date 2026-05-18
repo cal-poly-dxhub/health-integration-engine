@@ -25,17 +25,20 @@ class ErrorBoundary extends Component<Props, State> {
   public render() {
     if (this.state.hasError) {
       return (
-        <div style={{ 
-          padding: '20px', 
-          textAlign: 'center', 
-          fontFamily: 'Arial, sans-serif',
-          backgroundColor: '#f8f9fa',
-          minHeight: '100vh',
-          display: 'flex',
-          flexDirection: 'column',
-          justifyContent: 'center',
-          alignItems: 'center'
-        }}>
+        <div
+          role="alert"
+          style={{
+            padding: '20px',
+            textAlign: 'center',
+            fontFamily: 'Arial, sans-serif',
+            backgroundColor: '#f8f9fa',
+            minHeight: '100vh',
+            display: 'flex',
+            flexDirection: 'column',
+            justifyContent: 'center',
+            alignItems: 'center'
+          }}
+        >
           <h1 style={{ color: '#dc3545', marginBottom: '20px' }}>
             Something went wrong
           </h1>
@@ -61,7 +64,7 @@ class ErrorBoundary extends Component<Props, State> {
               wordBreak: 'break-word'
             }}>
               {this.state.error?.message}
-              {this.state.error?.stack}
+              {this.state.error?.stack ? `\n\n${this.state.error.stack}` : ''}
             </pre>
           </details>
           <button 

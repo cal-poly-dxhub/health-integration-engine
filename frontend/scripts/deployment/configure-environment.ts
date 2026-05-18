@@ -38,7 +38,7 @@ export async function configureEnvironment(environment: string): Promise<void> {
     // Update environment file
     await updateEnvironmentFile(environment, config);
     
-    console.log(chalk.green(`✓ Environment configuration updated for ${environment}`));
+    console.log(chalk.green(`Environment configuration updated for ${environment}`));
     
   } catch (error) {
     const errorMessage = error instanceof Error ? error.message : 'Unknown error';
@@ -125,7 +125,7 @@ async function updateEnvironmentFile(environment: string, config: EnvironmentCon
   
   // Write new environment file
   writeFileSync(envFilePath, envContent);
-  console.log(chalk.green(`✓ Updated ${envFileName}`));
+  console.log(chalk.green(`Updated ${envFileName}`));
 }
 
 function generateEnvFileContent(config: EnvironmentConfig): string {

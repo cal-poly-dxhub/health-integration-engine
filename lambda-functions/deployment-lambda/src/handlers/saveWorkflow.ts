@@ -108,9 +108,9 @@ export const handler = async (
     await saveWorkflowToDatabase(userId, workflow);
 
     // Status reconciliation is handled in listWorkflows for now
-    console.log('✅ Workflow saved, status reconciliation will occur on next list operation');
+    console.log('Workflow saved, status reconciliation will occur on next list operation');
 
-    console.log('✅ Workflow saved successfully:', { workflowId, userId, version: workflow.version });
+    console.log('Workflow saved successfully:', { workflowId, userId, version: workflow.version });
 
     return {
       statusCode: existingWorkflow ? 200 : 201,

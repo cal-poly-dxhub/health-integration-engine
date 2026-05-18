@@ -1967,7 +1967,7 @@ export class WorkflowBuilderStack extends cdk.Stack {
       const lambdaPath = codePath.replace('/dist', '');
       code = lambda.Code.fromAsset(lambdaPath, {
         bundling: {
-          image: lambda.Runtime.NODEJS_18_X.bundlingImage,
+          image: lambda.Runtime.NODEJS_22_X.bundlingImage,
           local: {
             tryBundle(outputDir: string): boolean {
               const execSync = require('child_process').execSync;
@@ -2017,7 +2017,7 @@ export class WorkflowBuilderStack extends cdk.Stack {
 
     const lambdaFunction = new lambda.Function(this, id, {
       functionName,
-      runtime: lambda.Runtime.NODEJS_18_X,
+      runtime: lambda.Runtime.NODEJS_22_X,
       handler,
       code,
       timeout: cdk.Duration.minutes(5),

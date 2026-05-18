@@ -38,6 +38,7 @@ const DeploymentStatusModal: React.FC<DeploymentStatusModalProps> = ({
   const [stepHistory, setStepHistory] = useState<DeploymentStep[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [confirmClose, setConfirmClose] = useState(false);
   const [redirectCountdown, setRedirectCountdown] = useState<number | null>(
     null
   );
@@ -350,10 +351,8 @@ const DeploymentStatusModal: React.FC<DeploymentStatusModalProps> = ({
 
   const handleClose = () => {
     if (!isTerminal) {
-      const confirmed = confirm(
-        `${operationLabel[operation]} is still in progress. Close this window? Progress will keep running in the background.`
-      );
-      if (!confirmed) return;
+      setConfirmClose(true);
+      return;
     }
     onClose();
   };
@@ -378,6 +377,21 @@ const DeploymentStatusModal: React.FC<DeploymentStatusModalProps> = ({
   const banner = getBanner(overallStatusKey, operation);
 
   return (
+    <>
+    {confirmClose && (
+      <div role="dialog" aria-modal="true" aria-label="Confirm close" className="dsm-confirm-overlay">
+        <div className="dsm-confirm">
+          <p className="dsm-confirm-title">
+            {operationLabel[operation]} is still in progress. Close this window?
+            Progress will keep running in the background.
+          </p>
+          <div className="dsm-confirm-actions">
+            <button type="button" className="dsm-confirm-btn dsm-confirm-btn--primary" onClick={() => { setConfirmClose(false); onClose(); }}>Close anyway</button>
+            <button type="button" className="dsm-confirm-btn" onClick={() => setConfirmClose(false)}>Keep open</button>
+          </div>
+        </div>
+      </div>
+    )}
     <div
       className="dsm-overlay"
       onClick={(e) => {
@@ -419,7 +433,7 @@ const DeploymentStatusModal: React.FC<DeploymentStatusModalProps> = ({
             onClick={handleClose}
             aria-label="Close"
           >
-            ✕
+            
           </button>
         </div>
 
@@ -493,10 +507,10 @@ const DeploymentStatusModal: React.FC<DeploymentStatusModalProps> = ({
             <div className="dsm-success">
               <p className="dsm-success-message">
                 {operation === 'delete'
-                  ? '🎉 Deletion completed. AWS resources and database records have been removed.'
+                  ? 'Deletion completed. AWS resources and database records have been removed.'
                   : operation === 'update'
-                  ? '🎉 Update applied. Your workflow changes are live.'
-                  : '🎉 Workflow deployed and ready to use.'}
+                  ? 'Update applied. Your workflow changes are live.'
+                  : 'Workflow deployed and ready to use.'}
               </p>
               {redirectCountdown !== null && (
                 <div className="dsm-success-actions">
@@ -540,6 +554,7 @@ const DeploymentStatusModal: React.FC<DeploymentStatusModalProps> = ({
         </div>
       </div>
     </div>
+    </>
   );
 };
 
@@ -555,7 +570,7 @@ interface StepRowProps {
 
 const StepRow: React.FC<StepRowProps> = ({ step }) => {
   const cleanName = step.name
-    .replace(/^[📝🏗️⚡🔄👀✨🎉❌🗑️🗄️✅⚠️📊🚀🔍📋⏳⏪⏭️⏸️🪣⏱️🎯⚙]\s*/u, '')
+    .replace(/^\s*/u, '')
     .trim();
 
   const status = step.status;
@@ -565,9 +580,9 @@ const StepRow: React.FC<StepRowProps> = ({ step }) => {
       <div className="dsm-step-rail" aria-hidden="true">
         <span className="dsm-step-dot">
           {status === 'completed'
-            ? '✓'
+            ? ''
             : status === 'failed'
-            ? '✕'
+            ? ''
             : status === 'pending'
             ? '○'
             : ''}
@@ -705,10 +720,10 @@ function getStepMessage(
   // Pass through messages already containing emojis
   if (
     message &&
-    (message.includes('🗑️') ||
-      message.includes('🗄️') ||
-      message.includes('✅') ||
-      message.includes('⚠️'))
+    (message.includes('') ||
+      message.includes('') ||
+      message.includes('') ||
+      message.includes(''))
   ) {
     return message;
   }
@@ -719,84 +734,84 @@ function getStepMessage(
   switch (status) {
     case 'initializing':
       return isUpdate
-        ? '🚀 Starting workflow update process…'
-        : '🚀 Starting workflow deployment process…';
+        ? 'Starting workflow update process…'
+        : 'Starting workflow deployment process…';
     case 'template_generated':
       return isUpdate
-        ? '📝 Workflow template generation (update)'
-        : '📝 Workflow template generation';
+        ? 'Workflow template generation (update)'
+        : 'Workflow template generation';
     case 'deploying_infrastructure':
       return isUpdate
-        ? '🚀 Workflow template deployment started (update)'
-        : '🚀 Workflow template deployment started';
+        ? 'Workflow template deployment started (update)'
+        : 'Workflow template deployment started';
     case 'stack_creating':
-      return '⚡ Workflow resources being deployed';
+      return 'Workflow resources being deployed';
     case 'stack_updating':
-      return '🔄 Workflow resources being updated';
+      return 'Workflow resources being updated';
     case 'monitoring_stack':
       if (message && message.includes('CloudFormation stack status:')) {
         const cfStatus = message.split('CloudFormation stack status:')[1]?.trim();
         if (cfStatus) {
           switch (cfStatus) {
             case 'CREATE_IN_PROGRESS':
-              return '⚡ CloudFormation: Creating AWS resources…';
+              return 'CloudFormation: Creating AWS resources…';
             case 'UPDATE_IN_PROGRESS':
-              return '🔄 CloudFormation: Updating AWS resources…';
+              return 'CloudFormation: Updating AWS resources…';
             case 'CREATE_COMPLETE':
-              return '✅ CloudFormation: Stack creation completed';
+              return 'CloudFormation: Stack creation completed';
             case 'UPDATE_COMPLETE':
-              return '✅ CloudFormation: Stack update completed';
+              return 'CloudFormation: Stack update completed';
             case 'ROLLBACK_IN_PROGRESS':
-              return '⏪ CloudFormation: Rolling back changes…';
+              return 'CloudFormation: Rolling back changes…';
             case 'UPDATE_ROLLBACK_IN_PROGRESS':
-              return '⏪ CloudFormation: Rolling back update…';
+              return 'CloudFormation: Rolling back update…';
             default:
-              return `📊 CloudFormation: ${cfStatus.replace(/_/g, ' ').toLowerCase()}`;
+              return `CloudFormation: ${cfStatus.replace(/_/g, ' ').toLowerCase()}`;
           }
         }
       }
       return isUpdate
-        ? '👀 Monitoring CloudFormation update progress'
-        : '👀 Monitoring CloudFormation stack progress';
+        ? 'Monitoring CloudFormation update progress'
+        : 'Monitoring CloudFormation stack progress';
     case 'finalizing':
       return isUpdate
-        ? '✨ Finalizing update and refreshing workflow status'
-        : '✨ Finalizing deployment and updating workflow status';
+        ? 'Finalizing update and refreshing workflow status'
+        : 'Finalizing deployment and updating workflow status';
     case 'completed':
-      if (isDeletion) return '🎉 Workflow deletion completed successfully';
+      if (isDeletion) return 'Workflow deletion completed successfully';
       return isUpdate
-        ? '🎉 Workflow deployed successfully (update)'
-        : '🎉 Workflow deployed successfully';
+        ? 'Workflow deployed successfully (update)'
+        : 'Workflow deployed successfully';
     case 'failed':
-      if (isDeletion) return '❌ Workflow deletion failed';
+      if (isDeletion) return 'Workflow deletion failed';
       return isUpdate
-        ? '❌ Workflow deployment failed (update)'
-        : '❌ Workflow deployment failed';
+        ? 'Workflow deployment failed (update)'
+        : 'Workflow deployment failed';
     case 'deleting':
-      return '🗑️ Starting workflow deletion process…';
+      return 'Starting workflow deletion process…';
     case 'deleting_aws_resources':
-      return '🗑️ Deleting AWS resources (CloudFormation, Lambdas, IAM)';
+      return 'Deleting AWS resources (CloudFormation, Lambdas, IAM)';
     case 'cleaning_database':
-      return '🗄️ Cleaning up database records (workflow not deployed)';
+      return 'Cleaning up database records (workflow not deployed)';
     case 'aws_resources_deleted':
-      return '✅ AWS resources deleted. Cleaning up database records…';
+      return 'AWS resources deleted. Cleaning up database records…';
     case 'aws_cleanup_failed':
-      return '⚠️ AWS resource cleanup failed. Continuing with database cleanup…';
+      return 'AWS resource cleanup failed. Continuing with database cleanup…';
     case 'deletion_completed':
-      return '🎉 Workflow deletion completed successfully';
+      return 'Workflow deletion completed successfully';
     case 'checking_deployment_status':
-      return '🔍 Checking if workflow is deployed to AWS…';
+      return 'Checking if workflow is deployed to AWS…';
     case 'skipping_aws_cleanup':
-      return '⏭️ Workflow not deployed — skipping AWS resource cleanup';
+      return 'Workflow not deployed — skipping AWS resource cleanup';
     case 'database_cleanup_complete':
-      return '✅ Database records successfully cleaned up';
+      return 'Database records successfully cleaned up';
     case 'database_cleanup_failed':
-      return '❌ Database cleanup failed';
+      return 'Database cleanup failed';
     default: {
       const formatted = status
         .replace(/_/g, ' ')
         .replace(/\b\w/g, (l) => l.toUpperCase());
-      return isDeletion ? `🗑️ ${formatted}` : `📋 ${formatted}`;
+      return isDeletion ? `${formatted}` : `${formatted}`;
     }
   }
 }

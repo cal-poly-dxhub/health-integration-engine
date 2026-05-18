@@ -317,19 +317,19 @@ function getDeploymentEventStatusMessage(status: string): string {
 function getDeletionStatusMessage(status: string): string {
   switch (status) {
     case 'deleting':
-      return '🗑️ Starting workflow deletion...';
+      return 'Starting workflow deletion...';
     case 'deleting_aws_resources':
-      return '🗑️ Deleting AWS resources (CloudFormation stack, Lambda functions, IAM roles)...';
+      return 'Deleting AWS resources (CloudFormation stack, Lambda functions, IAM roles)...';
     case 'aws_resources_deleted':
-      return '✅ AWS resources successfully deleted. Cleaning up database records...';
+      return 'AWS resources successfully deleted. Cleaning up database records...';
     case 'aws_cleanup_failed':
-      return '⚠️ AWS resource cleanup failed. Continuing with database cleanup...';
+      return 'AWS resource cleanup failed. Continuing with database cleanup...';
     case 'cleaning_database':
-      return '🗄️ Cleaning up database records...';
+      return 'Cleaning up database records...';
     case 'completed':
-      return '✅ Workflow deleted successfully!';
+      return 'Workflow deleted successfully!';
     case 'failed':
-      return '❌ Workflow deletion failed';
+      return 'Workflow deletion failed';
     default:
       return 'Deletion status updated';
   }

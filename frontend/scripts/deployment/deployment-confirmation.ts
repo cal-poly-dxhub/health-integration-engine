@@ -95,7 +95,7 @@ export class DeploymentConfirmation {
 
   static async confirmDeployment(options: DeploymentConfirmationOptions): Promise<boolean> {
     if (options.skipConfirmation || options.autoApprove) {
-      console.log(chalk.yellow('⚠️  Deployment confirmation skipped'));
+      console.log(chalk.yellow(' Deployment confirmation skipped'));
       return true;
     }
 
@@ -103,7 +103,7 @@ export class DeploymentConfirmation {
     const impact = this.DEPLOYMENT_IMPACTS[options.environment];
 
     console.log('');
-    console.log(chalk.cyan.bold('🚀 DEPLOYMENT CONFIRMATION'));
+    console.log(chalk.cyan.bold('DEPLOYMENT CONFIRMATION'));
     console.log('');
     console.log(`Environment: ${chalk.bold(options.environment.toUpperCase())}`);
     console.log('');
@@ -122,7 +122,7 @@ export class DeploymentConfirmation {
   }
 
   private static displayDeploymentImpact(impact: DeploymentImpact): void {
-    console.log(chalk.blue.bold('📊 Deployment Impact:'));
+    console.log(chalk.blue.bold('Deployment Impact:'));
     console.log('');
 
     const yesNo = (value: boolean) => value ? chalk.red('Yes') : chalk.green('No');
@@ -146,7 +146,7 @@ export class DeploymentConfirmation {
   private static displayDeploymentRisks(risks: DeploymentRisk[]): void {
     if (risks.length === 0) return;
 
-    console.log(chalk.yellow.bold('⚠️  Deployment Risks:'));
+    console.log(chalk.yellow.bold(' Deployment Risks:'));
     console.log('');
 
     for (const risk of risks) {
@@ -160,7 +160,7 @@ export class DeploymentConfirmation {
   }
 
   private static displayPreDeploymentChecklist(environment: string): void {
-    console.log(chalk.green.bold('✅ Pre-deployment Checklist:'));
+    console.log(chalk.green.bold('Pre-deployment Checklist:'));
     console.log('');
 
     const commonChecks = [
@@ -196,11 +196,11 @@ export class DeploymentConfirmation {
   }
 
   private static async getDeploymentConfirmation(environment: string): Promise<boolean> {
-    console.log(chalk.cyan.bold('🤔 Deployment Confirmation:'));
+    console.log(chalk.cyan.bold('Deployment Confirmation:'));
     console.log('');
 
     if (environment === 'production') {
-      console.log(chalk.red.bold('⚠️  PRODUCTION DEPLOYMENT WARNING'));
+      console.log(chalk.red.bold(' PRODUCTION DEPLOYMENT WARNING'));
       console.log(chalk.yellow('This deployment will affect the live production environment.'));
       console.log(chalk.yellow('Please ensure you have completed all pre-deployment checks.'));
       console.log('');
@@ -224,9 +224,9 @@ export class DeploymentConfirmation {
     const shouldProceed = environment !== 'production' || process.env.AUTO_APPROVE_PRODUCTION === 'true';
     
     if (shouldProceed) {
-      console.log(chalk.green('✅ Deployment confirmed'));
+      console.log(chalk.green('Deployment confirmed'));
     } else {
-      console.log(chalk.red('❌ Deployment cancelled'));
+      console.log(chalk.red('Deployment cancelled'));
     }
     
     return shouldProceed;
@@ -244,7 +244,7 @@ export class DeploymentConfirmation {
 
   static displayDeploymentSummary(environment: string, success: boolean): void {
     console.log('');
-    console.log(chalk.cyan.bold('📋 Deployment Summary:'));
+    console.log(chalk.cyan.bold('Deployment Summary:'));
     console.log('');
     console.log(`Environment: ${chalk.bold(environment.toUpperCase())}`);
     console.log(`Status: ${success ? chalk.green.bold('SUCCESS') : chalk.red.bold('FAILED')}`);
@@ -252,20 +252,20 @@ export class DeploymentConfirmation {
     console.log('');
 
     if (success) {
-      console.log(chalk.green.bold('🎉 Deployment completed successfully!'));
+      console.log(chalk.green.bold('Deployment completed successfully!'));
       
       if (environment === 'production') {
         console.log('');
-        console.log(chalk.yellow.bold('📊 Post-deployment Actions:'));
+        console.log(chalk.yellow.bold('Post-deployment Actions:'));
         console.log(chalk.yellow('  • Monitor application metrics and logs'));
         console.log(chalk.yellow('  • Verify user-facing functionality'));
         console.log(chalk.yellow('  • Check CloudFront cache invalidation status'));
         console.log(chalk.yellow('  • Notify stakeholders of successful deployment'));
       }
     } else {
-      console.log(chalk.red.bold('❌ Deployment failed!'));
+      console.log(chalk.red.bold('Deployment failed!'));
       console.log('');
-      console.log(chalk.yellow.bold('🔧 Next Steps:'));
+      console.log(chalk.yellow.bold('Next Steps:'));
       console.log(chalk.yellow('  • Review deployment logs for error details'));
       console.log(chalk.yellow('  • Check AWS CloudFormation stack status'));
       console.log(chalk.yellow('  • Verify AWS credentials and permissions'));
@@ -281,7 +281,7 @@ export class DeploymentConfirmation {
     }
 
     console.log('');
-    console.log(chalk.red.bold('🔄 ROLLBACK CONFIRMATION'));
+    console.log(chalk.red.bold('ROLLBACK CONFIRMATION'));
     console.log('');
     console.log(chalk.yellow('The deployment has failed or encountered issues.'));
     console.log(chalk.yellow('Would you like to initiate a rollback?'));

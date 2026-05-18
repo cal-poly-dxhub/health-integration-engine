@@ -65,7 +65,7 @@ class ApiService {
             // Refresh failed, redirect to login
             console.error('Token refresh failed:', refreshError);
             authService.signOut();
-            window.location.href = '/login';
+            window.location.href = '/signin';
           }
         }
         return Promise.reject(error);

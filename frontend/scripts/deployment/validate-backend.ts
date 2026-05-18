@@ -185,7 +185,7 @@ function displayValidationResults(validation: ValidationResult): void {
   
   // Display errors
   if (validation.errors.length > 0) {
-    console.log(chalk.red.bold('❌ Validation Errors:'));
+    console.log(chalk.red.bold('Validation Errors:'));
     for (const error of validation.errors) {
       console.log(chalk.red(`  • ${error}`));
     }
@@ -194,7 +194,7 @@ function displayValidationResults(validation: ValidationResult): void {
   
   // Display warnings
   if (validation.warnings.length > 0) {
-    console.log(chalk.yellow.bold('⚠️  Warnings:'));
+    console.log(chalk.yellow.bold(' Warnings:'));
     for (const warning of validation.warnings) {
       console.log(chalk.yellow(`  • ${warning}`));
     }
@@ -203,7 +203,7 @@ function displayValidationResults(validation: ValidationResult): void {
   
   // Display suggestions
   if (validation.suggestions.length > 0) {
-    console.log(chalk.blue.bold('💡 Suggestions:'));
+    console.log(chalk.blue.bold('Suggestions:'));
     for (const suggestion of validation.suggestions) {
       console.log(chalk.blue(`  • ${suggestion}`));
     }
@@ -212,9 +212,9 @@ function displayValidationResults(validation: ValidationResult): void {
   
   // Display final result
   if (validation.isValid) {
-    console.log(chalk.green.bold('✅ Backend validation passed!'));
+    console.log(chalk.green.bold('Backend validation passed!'));
   } else {
-    console.log(chalk.red.bold('❌ Backend validation failed!'));
+    console.log(chalk.red.bold('Backend validation failed!'));
   }
   
   console.log('');

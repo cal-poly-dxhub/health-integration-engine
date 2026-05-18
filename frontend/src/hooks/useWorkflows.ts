@@ -25,8 +25,6 @@ export const useWorkflows = (params: ListWorkflowsParams = {}) => {
   // Track active deployments for WebSocket subscriptions
   const [activeDeployments, setActiveDeployments] = useState<Set<string>>(new Set());
 
-  // Cache for optimistic updates (currently unused but kept for future enhancements)
-  // const [optimisticUpdates, setOptimisticUpdates] = useState<Map<string, Partial<WorkflowMetadata>>>(new Map());
 
   // Load workflows from API with localStorage fallback and Step Functions verification
   const loadWorkflows = useCallback(async (loadParams: ListWorkflowsParams = {}) => {
@@ -42,7 +40,7 @@ export const useWorkflows = (params: ListWorkflowsParams = {}) => {
       });
 
       // Convert full workflows to metadata
-      let workflowMetadata: WorkflowMetadata[] = response.workflows.map(workflow => ({
+      const workflowMetadata: WorkflowMetadata[] = response.workflows.map(workflow => ({
         id: workflow.id,
         name: workflow.name,
         description: workflow.description,
@@ -54,12 +52,6 @@ export const useWorkflows = (params: ListWorkflowsParams = {}) => {
         nodeCount: workflow.nodes?.length || 0,
       }));
 
-      console.log('✅ Loaded workflows from API:', workflowMetadata.length);
-
-      // Note: For the simplified two-tab approach, we don't verify deployment status here
-      // Tab 1 (Workflows) shows data from DynamoDB as-is
-      // Tab 2 (Deployed Workflows) will use Step Functions APIs directly
-      console.log('✅ Loaded workflows from database (no status verification for draft workflows)');
 
       setState(prev => ({
         ...prev,
@@ -70,7 +62,7 @@ export const useWorkflows = (params: ListWorkflowsParams = {}) => {
       }));
 
     } catch (error) {
-      console.error('❌ Failed to load workflows from API, falling back to localStorage:', error);
+      console.error('Failed to load workflows from API, falling back to localStorage:', error);
       
       // Fallback to localStorage
       try {
@@ -84,7 +76,6 @@ export const useWorkflows = (params: ListWorkflowsParams = {}) => {
             hasMore: false,
             nextToken: undefined,
           }));
-          console.log('✅ Loaded workflows from localStorage:', parsedWorkflows.length);
         } else {
           setState(prev => ({
             ...prev,
@@ -93,10 +84,9 @@ export const useWorkflows = (params: ListWorkflowsParams = {}) => {
             hasMore: false,
             nextToken: undefined,
           }));
-          console.log('✅ No workflows found in localStorage');
         }
       } catch (localStorageError) {
-        console.error('❌ Failed to load from localStorage:', localStorageError);
+        console.error('Failed to load from localStorage:', localStorageError);
         setState(prev => ({
           ...prev,
           workflows: [],
@@ -109,7 +99,6 @@ export const useWorkflows = (params: ListWorkflowsParams = {}) => {
 
   // Handle deployment status updates via WebSocket
   const handleDeploymentUpdate = useCallback((update: DeploymentUpdate) => {
-    console.log('📡 Received deployment update:', update);
     
     setState(prev => ({
       ...prev,
@@ -132,7 +121,6 @@ export const useWorkflows = (params: ListWorkflowsParams = {}) => {
     if (update.status === 'COMPLETED' || update.status === 'FAILED') {
       // Use a longer delay and debounce to prevent multiple rapid refreshes
       const timeoutId = setTimeout(() => {
-        console.log('🔄 Deployment completed, refreshing workflows...');
         loadWorkflows();
       }, 2000); // Longer delay to ensure backend has updated
       
@@ -149,14 +137,12 @@ export const useWorkflows = (params: ListWorkflowsParams = {}) => {
       return;
     }
 
-    console.log('✅ WebSocket service initialized (auto-connects)');
 
     // Cleanup on unmount
     return () => {
       activeDeployments.forEach(deploymentId => {
         webSocketService.unsubscribeFromDeployment(deploymentId, handleDeploymentUpdate);
       });
-      console.log('🔌 WebSocket subscriptions cleaned up');
     };
   }, []); // Empty dependency array - only setup once
 
@@ -178,39 +164,6 @@ export const useWorkflows = (params: ListWorkflowsParams = {}) => {
     loadWorkflows();
   }, []); // Empty dependency array - only run once on mount
 
-  // Auto refresh disabled - removed visibility change and focus refresh
-  // useEffect(() => {
-  //   let refreshTimeout: NodeJS.Timeout;
-  //   
-  //   const handleVisibilityChange = () => {
-  //     if (!document.hidden) {
-  //       // Page became visible, refresh workflows after a short delay to avoid rapid calls
-  //       console.log('🔄 Page became visible, scheduling workflow refresh...');
-  //       clearTimeout(refreshTimeout);
-  //       refreshTimeout = setTimeout(() => {
-  //         loadWorkflows();
-  //       }, 500); // 500ms delay to debounce
-  //     }
-  //   };
-
-  //   const handleFocus = () => {
-  //     // Window gained focus, refresh workflows after a delay to avoid duplicate calls
-  //     console.log('🔄 Window gained focus, scheduling workflow refresh...');
-  //     clearTimeout(refreshTimeout);
-  //     refreshTimeout = setTimeout(() => {
-  //       loadWorkflows();
-  //     }, 500); // 500ms delay to debounce
-  //   };
-
-  //   document.addEventListener('visibilitychange', handleVisibilityChange);
-  //   window.addEventListener('focus', handleFocus);
-
-  //   return () => {
-  //     clearTimeout(refreshTimeout);
-  //     document.removeEventListener('visibilitychange', handleVisibilityChange);
-  //     window.removeEventListener('focus', handleFocus);
-  //   };
-  // }, []); // Empty dependency array to prevent recreation
 
   // Create workflow with optimistic update
   const createWorkflow = useCallback(async (name: string, description?: string) => {
@@ -259,7 +212,6 @@ export const useWorkflows = (params: ListWorkflowsParams = {}) => {
         ),
       }));
 
-      console.log('✅ Created workflow:', response.workflow.id);
       return realWorkflowMetadata;
     } catch (error) {
       // Remove optimistic update on error
@@ -268,7 +220,7 @@ export const useWorkflows = (params: ListWorkflowsParams = {}) => {
         workflows: prev.workflows.filter(w => !w.id.startsWith('temp-')),
       }));
       
-      console.error('❌ Failed to create workflow:', error);
+      console.error('Failed to create workflow:', error);
       throw error;
     }
   }, []);
@@ -320,20 +272,10 @@ export const useWorkflows = (params: ListWorkflowsParams = {}) => {
         ),
       }));
 
-      console.log('✅ Updated workflow:', response.workflow.id);
       return realWorkflowMetadata;
     } catch (error) {
-      // Rollback optimistic update on error
-      // setOptimisticUpdates(prev => {
-      //   const newMap = new Map(prev);
-      //   newMap.delete(workflowId);
-      //   return newMap;
-      // });
-
-      // Reload workflows to get current state
       await loadWorkflows();
-      
-      console.error('❌ Failed to update workflow:', error);
+      console.error('Failed to update workflow:', error);
       throw error;
     }
   }, [loadWorkflows]);
@@ -348,23 +290,16 @@ export const useWorkflows = (params: ListWorkflowsParams = {}) => {
     }
     
     try {
-      // First, mark workflow as deleting (like deployment does)
-      console.log('🔄 Marking workflow as deleting:', workflowId);
       setState(prev => ({
         ...prev,
-        workflows: prev.workflows.map(w => 
-          w.id === workflowId 
+        workflows: prev.workflows.map(w =>
+          w.id === workflowId
             ? { ...w, status: 'deleting' as any, isDeleting: true }
             : w
         ),
       }));
-      
-      console.log('✅ Workflow marked as deleting, state updated');
 
-      // Start deletion process
       const response = await workflowApiService.deleteWorkflow(workflowId);
-      
-      console.log('✅ Deletion response:', response);
       
       // If deletion is async, keep showing progress
       if (response.status === 'DELETION_IN_PROGRESS') {
@@ -372,7 +307,6 @@ export const useWorkflows = (params: ListWorkflowsParams = {}) => {
         const webSocketService = getWebSocketService();
         if (webSocketService) {
           webSocketService.subscribeToDeletion(workflowId, (update) => {
-            console.log('🔄 Deletion WebSocket update received:', update);
             
             if (update.status === 'completed') {
               // Deletion completed - remove workflow from UI
@@ -431,7 +365,7 @@ export const useWorkflows = (params: ListWorkflowsParams = {}) => {
         };
       }
     } catch (error) {
-      console.error('❌ Failed to delete workflow:', error);
+      console.error('Failed to delete workflow:', error);
       
       // Restore workflow to original state (remove deleting status)
       setState(prev => ({
@@ -504,10 +438,9 @@ export const useWorkflows = (params: ListWorkflowsParams = {}) => {
         workflows: [duplicatedMetadata, ...prev.workflows],
       }));
 
-      console.log('✅ Duplicated workflow:', response.workflow.id);
       return duplicatedMetadata;
     } catch (error) {
-      console.error('❌ Failed to duplicate workflow:', error);
+      console.error('Failed to duplicate workflow:', error);
       throw error;
     }
   }, []);
@@ -517,14 +450,12 @@ export const useWorkflows = (params: ListWorkflowsParams = {}) => {
     try {
       return await workflowApiService.getWorkflow(workflowId);
     } catch (error) {
-      console.error('❌ Failed to get workflow:', error);
+      console.error('Failed to get workflow:', error);
       throw error;
     }
   }, []);
 
-  // Subscribe to deployment updates
   const subscribeToDeployment = useCallback((deploymentId: string) => {
-    console.log('🔔 Subscribing to deployment:', deploymentId);
     setActiveDeployments(prev => new Set([...prev, deploymentId]));
     
     const webSocketService = getWebSocketService();
@@ -533,9 +464,7 @@ export const useWorkflows = (params: ListWorkflowsParams = {}) => {
     }
   }, [handleDeploymentUpdate]);
 
-  // Unsubscribe from deployment updates
   const unsubscribeFromDeployment = useCallback((deploymentId: string) => {
-    console.log('🔕 Unsubscribing from deployment:', deploymentId);
     setActiveDeployments(prev => {
       const newSet = new Set(prev);
       newSet.delete(deploymentId);
@@ -554,10 +483,8 @@ export const useWorkflows = (params: ListWorkflowsParams = {}) => {
     return loadWorkflows();
   }, [loadWorkflows]);
 
-  // DISABLED: Deployment status verification no longer needed with event-driven updates
   const refreshDeploymentStatus = useCallback(async () => {
-    console.log('ℹ️ Deployment status verification disabled - using event-driven updates from Step Functions');
-    // No longer verifying status manually - status is maintained automatically by deployment events
+    // Status is maintained by deployment events; manual refresh is a no-op.
   }, []);
 
   return {
@@ -597,10 +524,8 @@ export const useWorkflow = (workflowId?: string) => {
       
       const workflowData = await workflowApiService.getWorkflow(id);
       setWorkflow(workflowData);
-      
-      console.log('✅ Loaded workflow:', workflowData.id, workflowData.name);
     } catch (err) {
-      console.error('❌ Failed to load workflow:', err);
+      console.error('Failed to load workflow:', err);
       setError(err instanceof Error ? err.message : 'Failed to load workflow');
     } finally {
       setLoading(false);
@@ -629,16 +554,14 @@ export const useWorkflow = (workflowId?: string) => {
       setWorkflow(updatedWorkflowData);
 
       // Save to backend - remove version to avoid conflicts
+      // eslint-disable-next-line @typescript-eslint/no-unused-vars
       const { version, ...workflowDataToSave } = updatedWorkflowData;
       const response = await workflowApiService.saveWorkflow(workflowDataToSave);
       
-      // Apply real data from backend
       setWorkflow(response.workflow);
-      
-      console.log('✅ Saved workflow:', response.workflow.id);
       return response.workflow;
     } catch (err) {
-      console.error('❌ Failed to save workflow:', err);
+      console.error('Failed to save workflow:', err);
       
       // Rollback optimistic update on error
       if (workflowId) {

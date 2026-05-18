@@ -58,8 +58,8 @@ const JsonViewer: React.FC<JsonViewerProps> = ({
 
   const renderValue = (
     value: any,
-    path: string = 'root',
-    depth: number = 0,
+    path = 'root',
+    depth = 0,
     key?: string
   ): React.ReactNode => {
     const indent = indentFor(depth);
@@ -156,7 +156,7 @@ const JsonViewer: React.FC<JsonViewerProps> = ({
                   isExpanded ? ' exd-json-arrow--expanded' : ''
                 }`}
               >
-                ▶
+                
               </span>
               <span className="exd-json-bracket">[</span>
               {!isExpanded && (
@@ -213,7 +213,7 @@ const JsonViewer: React.FC<JsonViewerProps> = ({
                   isExpanded ? ' exd-json-arrow--expanded' : ''
                 }`}
               >
-                ▶
+                
               </span>
               <span className="exd-json-brace">{'{'}</span>
               {!isExpanded && (
@@ -349,7 +349,7 @@ const EventRow: React.FC<EventRowProps> = ({
               isExpanded ? ' exd-expand-arrow--expanded' : ''
             }`}
           >
-            ▶
+            
           </span>
         </td>
         <td style={{ width: 60 }}>{event.id}</td>
@@ -359,11 +359,11 @@ const EventRow: React.FC<EventRowProps> = ({
               className={`exd-event-glyph-icon exd-event-glyph-icon--${variant}`}
             >
               {variant === 'success'
-                ? '✓'
+                ? ''
                 : variant === 'failed'
-                ? '✗'
+                ? ''
                 : variant === 'running'
-                ? '▶'
+                ? ''
                 : '•'}
             </span>
             <span>{event.type}</span>
@@ -1653,9 +1653,9 @@ const ExecutionDetails: React.FC<ExecutionDetailsProps> = ({
                                 className={`exd-step-name-cell-icon exd-step-name-cell-icon--${step.status}`}
                               >
                                 {step.status === 'succeeded'
-                                  ? '✓'
+                                  ? ''
                                   : step.status === 'failed'
-                                  ? '✗'
+                                  ? ''
                                   : step.status === 'running'
                                   ? '•'
                                   : '○'}
@@ -1907,7 +1907,7 @@ const ExecutionDetails: React.FC<ExecutionDetailsProps> = ({
                 onClick={() => setShowNewExecutionModal(false)}
                 aria-label="Close"
               >
-                ✕
+                
               </button>
             </div>
             <div className="exd-modal-body">

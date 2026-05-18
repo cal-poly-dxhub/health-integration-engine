@@ -33,8 +33,8 @@ try {
     cwd: path.join(__dirname, 'dist') 
   });
 
-  console.log('✅ Deployment Lambda build complete!');
+  console.log('Deployment Lambda build complete!');
 } catch (error) {
-  console.error('❌ Build failed:', error.message);
+  console.error('Build failed:', error.message);
   process.exit(1);
 }

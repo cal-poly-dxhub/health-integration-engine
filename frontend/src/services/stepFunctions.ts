@@ -138,19 +138,19 @@ export interface ExecutionHistoryResponse {
 }
 
 class StepFunctionsService {
-  async listExecutions(stateMachineArn: string, maxResults: number = 100): Promise<StepFunctionExecution[]> {
-    console.log('🔄 StepFunctionsService: Listing executions for state machine:', stateMachineArn);
+  async listExecutions(stateMachineArn: string, maxResults = 100): Promise<StepFunctionExecution[]> {
+    console.log('StepFunctionsService: Listing executions for state machine:', stateMachineArn);
     try {
       const data: ListExecutionsResponse = await apiService.post('/deployments/step-functions/list-executions', {
         stateMachineArn,
         maxResults
       });
-      console.log('✅ StepFunctionsService: List executions response:', data);
+      console.log('StepFunctionsService: List executions response:', data);
       const executions = data.executions || [];
-      console.log('✅ StepFunctionsService: Returning', executions.length, 'executions');
+      console.log('StepFunctionsService: Returning', executions.length, 'executions');
       return executions;
     } catch (error) {
-      console.error('❌ StepFunctionsService: Error listing executions:', error);
+      console.error('StepFunctionsService: Error listing executions:', error);
       return [];
     }
   }
@@ -158,7 +158,7 @@ class StepFunctionsService {
   async startExecution(
     stateMachineArn: string, 
     name?: string, 
-    input: string = '{}'
+    input = '{}'
   ): Promise<StartExecutionResponse | null> {
     try {
       return await apiService.post<StartExecutionResponse>('/deployments/step-functions/start-execution', {
@@ -187,33 +187,33 @@ class StepFunctionsService {
   }
 
   async describeExecution(executionArn: string): Promise<StepFunctionExecution | null> {
-    console.log('🔄 StepFunctionsService: Describing execution for:', executionArn);
+    console.log('StepFunctionsService: Describing execution for:', executionArn);
     try {
       const result = await apiService.post<StepFunctionExecution>('/deployments/step-functions/describe-execution', {
         executionArn
       });
-      console.log('✅ StepFunctionsService: Describe execution response:', result);
+      console.log('StepFunctionsService: Describe execution response:', result);
       return result;
     } catch (error) {
-      console.error('❌ StepFunctionsService: Error describing execution:', error);
+      console.error('StepFunctionsService: Error describing execution:', error);
       return null;
     }
   }
 
   async getExecutionHistory(executionArn: string): Promise<ExecutionHistoryEvent[]> {
-    console.log('🔄 StepFunctionsService: Getting execution history for:', executionArn);
+    console.log('StepFunctionsService: Getting execution history for:', executionArn);
     try {
       const data: ExecutionHistoryResponse = await apiService.post('/deployments/step-functions/execution-history', {
         executionArn,
         includeExecutionData: true,
         reverseOrder: false
       });
-      console.log('✅ StepFunctionsService: Execution history response:', data);
+      console.log('StepFunctionsService: Execution history response:', data);
       const events = data.events || [];
-      console.log('✅ StepFunctionsService: Returning', events.length, 'events');
+      console.log('StepFunctionsService: Returning', events.length, 'events');
       return events;
     } catch (error) {
-      console.error('❌ StepFunctionsService: Error getting execution history:', error);
+      console.error('StepFunctionsService: Error getting execution history:', error);
       return [];
     }
   }
@@ -230,29 +230,29 @@ class StepFunctionsService {
   }
 
   async describeStateMachineForExecution(executionArn: string): Promise<StateMachineDetails | null> {
-    console.log('🔄 StepFunctionsService: Describing state machine for execution:', executionArn);
+    console.log('StepFunctionsService: Describing state machine for execution:', executionArn);
     try {
       const result = await apiService.post<StateMachineDetails>('/deployments/step-functions/describe-state-machine-for-execution', {
         executionArn
       });
-      console.log('✅ StepFunctionsService: Describe state machine response:', result);
+      console.log('StepFunctionsService: Describe state machine response:', result);
       return result;
     } catch (error) {
-      console.error('❌ StepFunctionsService: Error describing state machine for execution:', error);
+      console.error('StepFunctionsService: Error describing state machine for execution:', error);
       return null;
     }
   }
 
   async redriveExecution(executionArn: string): Promise<{ redriveDate?: string } | null> {
-    console.log('🔄 StepFunctionsService: Redriving execution:', executionArn);
+    console.log('StepFunctionsService: Redriving execution:', executionArn);
     try {
       const result = await apiService.post<{ redriveDate?: string }>('/deployments/step-functions/redrive-execution', {
         executionArn
       });
-      console.log('✅ StepFunctionsService: Redrive execution response:', result);
+      console.log('StepFunctionsService: Redrive execution response:', result);
       return result;
     } catch (error) {
-      console.error('❌ StepFunctionsService: Error redriving execution:', error);
+      console.error('StepFunctionsService: Error redriving execution:', error);
       return null;
     }
   }
@@ -304,7 +304,7 @@ class DeploymentStatusService {
     }
 
     try {
-      console.log(`🔍 Checking deployment status for workflow ${workflowId} with ARN: ${stepFunctionArn}`);
+      console.log(`Checking deployment status for workflow ${workflowId} with ARN: ${stepFunctionArn}`);
       
       const stateMachineDetails = await stepFunctionsService.describeStateMachine(stepFunctionArn);
       
@@ -313,15 +313,15 @@ class DeploymentStatusService {
         result.status = 'deployed';
         result.isDeployed = true;
         result.stepFunctionStatus = stateMachineDetails.status;
-        console.log(`✅ Workflow ${workflowId} is deployed (Step Function status: ${stateMachineDetails.status})`);
+        console.log(`Workflow ${workflowId} is deployed (Step Function status: ${stateMachineDetails.status})`);
       } else {
         // Step Function doesn't exist or was deleted - mark as pending (not deployed)
         result.status = 'pending';
         result.isDeployed = false;
-        console.log(`❌ Workflow ${workflowId} Step Function not found - marking as pending`);
+        console.log(`Workflow ${workflowId} Step Function not found - marking as pending`);
       }
     } catch (error) {
-      console.error(`❌ Error checking deployment status for workflow ${workflowId}:`, error);
+      console.error(`Error checking deployment status for workflow ${workflowId}:`, error);
       
       // Check if it's a 404 (not found) vs other errors
       if (error && typeof error === 'object' && 'message' in error) {
@@ -353,7 +353,7 @@ class DeploymentStatusService {
       isDeployed?: boolean;
     }>
   ): Promise<BatchStatusCheckResult[]> {
-    console.log(`🔄 Batch checking deployment status for ${workflows.length} workflows`);
+    console.log(`Batch checking deployment status for ${workflows.length} workflows`);
     
     // Filter workflows that have Step Function ARNs and might be deployed
     const workflowsToCheck = workflows.filter(w => 
@@ -362,7 +362,7 @@ class DeploymentStatusService {
     );
 
     if (workflowsToCheck.length === 0) {
-      console.log('📝 No workflows need status verification');
+      console.log('No workflows need status verification');
       return workflows.map(w => ({
         workflowId: w.id,
         originalStatus: w.deploymentStatus || 'pending',
@@ -372,7 +372,7 @@ class DeploymentStatusService {
       }));
     }
 
-    console.log(`🔍 Checking ${workflowsToCheck.length} workflows with Step Function ARNs`);
+    console.log(`Checking ${workflowsToCheck.length} workflows with Step Function ARNs`);
 
     // Check status in parallel with concurrency limit
     const CONCURRENCY_LIMIT = 3;
@@ -435,7 +435,7 @@ class DeploymentStatusService {
     });
 
     const changedCount = results.filter(r => r.statusChanged).length;
-    console.log(`✅ Batch status check complete: ${changedCount} workflows had status changes`);
+    console.log(`Batch status check complete: ${changedCount} workflows had status changes`);
 
     return results;
   }

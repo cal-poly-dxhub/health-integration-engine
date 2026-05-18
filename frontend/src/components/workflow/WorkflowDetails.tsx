@@ -133,7 +133,7 @@ const WorkflowDetails: React.FC<WorkflowDetailsProps> = ({
 
   const loadExecutions = async (
     stateMachineArn: string,
-    silent: boolean = false
+    silent = false
   ) => {
     if (!silent) setExecutionsLoading(true);
 
@@ -910,7 +910,7 @@ const WorkflowDetails: React.FC<WorkflowDetailsProps> = ({
                 onClick={() => setShowBatchConfirmModal(false)}
                 aria-label="Close"
               >
-                ✕
+                
               </button>
             </div>
             <div className="wfd-modal-body">

@@ -3,19 +3,19 @@
 const fs = require('fs');
 const path = require('path');
 
-console.log('🔧 Setting up environment configuration...');
+console.log('Setting up environment configuration...');
 
 // Read the current .env file
 const envPath = path.join(__dirname, '..', '.env');
 const envProdPath = path.join(__dirname, '..', '.env.production');
 
 if (!fs.existsSync(envPath)) {
-  console.error('❌ .env file not found. Please create one based on .env.example');
+  console.error('.env file not found. Please create one based on .env.example');
   process.exit(1);
 }
 
 const envContent = fs.readFileSync(envPath, 'utf8');
-console.log('✅ Current .env file loaded');
+console.log('Current .env file loaded');
 
 // Parse environment variables
 const envVars = {};
@@ -49,7 +49,7 @@ requiredVars.forEach(varName => {
 });
 
 if (missingVars.length > 0) {
-  console.error('❌ Missing required environment variables:');
+  console.error('Missing required environment variables:');
   missingVars.forEach(varName => {
     console.error(`   - ${varName}`);
   });
@@ -85,15 +85,15 @@ VITE_LOG_LEVEL=error
 `;
 
 fs.writeFileSync(envProdPath, prodEnvContent);
-console.log('✅ Production environment file created');
+console.log('Production environment file created');
 
 // Validate configuration
-console.log('\n📋 Environment Configuration Summary:');
+console.log('\nEnvironment Configuration Summary:');
 console.log(`   AWS Region: ${envVars.VITE_AWS_REGION}`);
 console.log(`   API Gateway: ${envVars.VITE_API_GATEWAY_URL}`);
 console.log(`   WebSocket: ${envVars.VITE_WEBSOCKET_URL}`);
 console.log(`   User Pool: ${envVars.VITE_COGNITO_USER_POOL_ID}`);
 console.log(`   Cognito Domain: ${envVars.VITE_COGNITO_DOMAIN}`);
 
-console.log('\n✅ Environment setup complete!');
-console.log('💡 You can now run: npm run deploy:s3');
+console.log('\nEnvironment setup complete!');
+console.log('You can now run: npm run deploy:s3');

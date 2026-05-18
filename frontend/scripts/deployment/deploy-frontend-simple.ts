@@ -26,7 +26,7 @@ class SimpleFrontendDeployer {
 
   async deploy(): Promise<void> {
     try {
-      console.log(chalk.blue.bold(`🚀 Starting frontend deployment for ${this.options.environment} environment`));
+      console.log(chalk.blue.bold(`Starting frontend deployment for ${this.options.environment} environment`));
       
       // Step 1: Test backend integration
       console.log('Step 1: Testing backend integration...');
@@ -36,11 +36,11 @@ class SimpleFrontendDeployer {
       console.log('Step 2: Testing deployment confirmation...');
       await this.testDeploymentConfirmation();
       
-      console.log(chalk.green.bold('✅ Simple deployment test completed successfully!'));
+      console.log(chalk.green.bold('Simple deployment test completed successfully!'));
       
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : 'Unknown error occurred';
-      console.log(chalk.red.bold('❌ Simple deployment test failed!'));
+      console.log(chalk.red.bold('Simple deployment test failed!'));
       console.log(chalk.red(`Error: ${errorMessage}`));
       console.error('Full error:', error);
       throw error;

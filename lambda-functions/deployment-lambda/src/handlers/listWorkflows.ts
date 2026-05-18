@@ -50,7 +50,7 @@ export const handler = async (
     const sortBy = queryParams.sortBy || 'updatedAt'; // updatedAt, createdAt, name
     const sortOrder = queryParams.sortOrder || 'desc'; // asc, desc
 
-    console.log('📋 Query parameters:', { limit, search, deploymentStatus, sortBy, sortOrder });
+    console.log('Query parameters:', { limit, search, deploymentStatus, sortBy, sortOrder });
 
     // Query workflows for the user
     const workflows = await queryUserWorkflows(userId, {
@@ -62,7 +62,7 @@ export const handler = async (
       sortOrder,
     });
 
-    console.log('✅ Found', workflows.workflows.length, 'workflows for user:', userId);
+    console.log('Found', workflows.workflows.length, 'workflows for user:', userId);
 
     return {
       statusCode: 200,
@@ -128,7 +128,7 @@ async function queryUserWorkflows(
     queryParams.ExpressionAttributeValues[':deploymentStatus'] = deploymentStatus;
   }
 
-  console.log('🔍 Querying workflows with params:', {
+  console.log('Querying workflows with params:', {
     userId,
     limit: queryParams.Limit,
     hasNextToken: !!nextToken,
@@ -138,7 +138,7 @@ async function queryUserWorkflows(
   const response = await docClient.send(new QueryCommand(queryParams));
   let workflows = (response.Items || []) as Workflow[];
 
-  console.log('📊 Raw query returned', workflows.length, 'workflows');
+  console.log('Raw query returned', workflows.length, 'workflows');
 
   // Apply client-side filtering for search
   if (search) {
@@ -146,7 +146,7 @@ async function queryUserWorkflows(
       workflow.name.toLowerCase().includes(search) ||
       (workflow.description && workflow.description.toLowerCase().includes(search))
     );
-    console.log('🔍 After search filter:', workflows.length, 'workflows');
+    console.log('After search filter:', workflows.length, 'workflows');
   }
 
   // Sort workflows if not using default DynamoDB sort
@@ -190,7 +190,7 @@ async function queryUserWorkflows(
   // Note: Status is now updated via event-driven approach from deployment Step Functions
   // No need for real-time reconciliation as status is maintained by deployment events
   
-  console.log('📄 Returning', paginatedWorkflows.length, 'workflows, hasMore:', hasMore);
+  console.log('Returning', paginatedWorkflows.length, 'workflows, hasMore:', hasMore);
 
   return {
     workflows: paginatedWorkflows,

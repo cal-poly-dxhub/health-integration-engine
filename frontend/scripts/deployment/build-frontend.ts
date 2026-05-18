@@ -47,9 +47,9 @@ export async function buildFrontend(
           stdio: options.verbose ? 'inherit' : 'pipe',
           cwd: frontendDir 
         });
-        buildLogs.push('✓ Type check passed');
+        buildLogs.push('Type check passed');
       } catch (error) {
-        buildLogs.push('✗ Type check failed');
+        buildLogs.push('Type check failed');
         throw new Error('TypeScript type check failed. Please fix type errors before building.');
       }
     }
@@ -66,9 +66,9 @@ export async function buildFrontend(
           stdio: options.verbose ? 'inherit' : 'pipe',
           cwd: frontendDir 
         });
-        buildLogs.push('✓ Linting passed');
+        buildLogs.push('Linting passed');
       } catch (error) {
-        buildLogs.push('✗ Linting failed');
+        buildLogs.push('Linting failed');
         throw new Error('ESLint check failed. Please fix linting errors before building.');
       }
     }
@@ -92,9 +92,9 @@ export async function buildFrontend(
         cwd: frontendDir,
         env: buildEnv
       });
-      buildLogs.push('✓ Build completed successfully');
+      buildLogs.push('Build completed successfully');
     } catch (error) {
-      buildLogs.push('✗ Build failed');
+      buildLogs.push('Build failed');
       throw new Error('Frontend build failed. Please check the build errors.');
     }
 

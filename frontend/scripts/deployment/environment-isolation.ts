@@ -65,7 +65,7 @@ export class EnvironmentIsolationChecker {
   };
 
   static async validateEnvironmentIsolation(environment: string): Promise<EnvironmentIsolationResult> {
-    console.log(chalk.blue.bold(`🔒 Validating environment isolation for ${environment}`));
+    console.log(chalk.blue.bold(`Validating environment isolation for ${environment}`));
     console.log('');
 
     const convention = this.NAMING_CONVENTIONS[environment];
@@ -141,7 +141,7 @@ export class EnvironmentIsolationChecker {
         result.isIsolated = false;
       }
 
-      console.log(chalk.green('✓ Stack naming validation completed'));
+      console.log(chalk.green('Stack naming validation completed'));
 
     } catch (error) {
       // Stack may not exist yet, which is acceptable for new deployments
@@ -179,7 +179,7 @@ export class EnvironmentIsolationChecker {
         }
       }
 
-      console.log(chalk.green('✓ Resource naming validation completed'));
+      console.log(chalk.green('Resource naming validation completed'));
 
     } catch (error) {
       // Resources may not exist yet
@@ -212,7 +212,7 @@ export class EnvironmentIsolationChecker {
         }
       }
 
-      console.log(chalk.green('✓ Cross-environment reference validation completed'));
+      console.log(chalk.green('Cross-environment reference validation completed'));
 
     } catch (error) {
       // Stack may not exist yet
@@ -246,7 +246,7 @@ export class EnvironmentIsolationChecker {
       // Check for AWS account ID consistency (placeholder - would need actual implementation)
       result.recommendations.push('Ensure different environments use appropriate AWS accounts or account separation strategies');
 
-      console.log(chalk.green('✓ Account isolation validation completed'));
+      console.log(chalk.green('Account isolation validation completed'));
 
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : 'Unknown error';
@@ -299,7 +299,7 @@ export class EnvironmentIsolationChecker {
 
   private static displayIsolationResults(result: EnvironmentIsolationResult): void {
     console.log('');
-    console.log(chalk.cyan.bold('🔒 Environment Isolation Results:'));
+    console.log(chalk.cyan.bold('Environment Isolation Results:'));
     console.log('');
 
     // Display isolation status
@@ -310,7 +310,7 @@ export class EnvironmentIsolationChecker {
 
     // Display violations
     if (result.violations.length > 0) {
-      console.log(chalk.red.bold('❌ Isolation Violations:'));
+      console.log(chalk.red.bold('Isolation Violations:'));
       for (const violation of result.violations) {
         console.log(chalk.red(`  • ${violation}`));
       }
@@ -319,7 +319,7 @@ export class EnvironmentIsolationChecker {
 
     // Display warnings
     if (result.warnings.length > 0) {
-      console.log(chalk.yellow.bold('⚠️  Isolation Warnings:'));
+      console.log(chalk.yellow.bold(' Isolation Warnings:'));
       for (const warning of result.warnings) {
         console.log(chalk.yellow(`  • ${warning}`));
       }
@@ -328,7 +328,7 @@ export class EnvironmentIsolationChecker {
 
     // Display recommendations
     if (result.recommendations.length > 0) {
-      console.log(chalk.blue.bold('💡 Isolation Recommendations:'));
+      console.log(chalk.blue.bold('Isolation Recommendations:'));
       for (const recommendation of result.recommendations) {
         console.log(chalk.blue(`  • ${recommendation}`));
       }
@@ -337,9 +337,9 @@ export class EnvironmentIsolationChecker {
 
     // Display final result
     if (result.isIsolated) {
-      console.log(chalk.green.bold('✅ Environment isolation validation passed!'));
+      console.log(chalk.green.bold('Environment isolation validation passed!'));
     } else {
-      console.log(chalk.red.bold('❌ Environment isolation violations detected!'));
+      console.log(chalk.red.bold('Environment isolation violations detected!'));
       console.log(chalk.yellow('Please address the violations above to ensure proper environment isolation.'));
     }
 

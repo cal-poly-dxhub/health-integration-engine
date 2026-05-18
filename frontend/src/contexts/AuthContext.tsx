@@ -130,23 +130,15 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children, config }) 
     }
   };
 
-  // Sign out
+  // Sign out — clear state immediately so subsequent auth checks see a clean slate
   const signOut = async () => {
+    setUser(null);
+    setTokens(null);
+    setIsAuthenticated(false);
     try {
-      setIsLoading(true);
       await authService.signOut();
-      
-      setUser(null);
-      setTokens(null);
-      setIsAuthenticated(false);
     } catch (error) {
       console.error('Sign out error:', error);
-      // Clear state even if sign out fails
-      setUser(null);
-      setTokens(null);
-      setIsAuthenticated(false);
-    } finally {
-      setIsLoading(false);
     }
   };
 

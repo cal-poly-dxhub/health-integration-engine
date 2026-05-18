@@ -52,18 +52,18 @@ export function extractUserIdFromEvent(event: APIGatewayProxyEvent): string | nu
   const cognitoUserId = event.requestContext.authorizer?.claims?.sub;
   
   if (cognitoUserId && cognitoUserId !== 'demo-user') {
-    console.log('✅ Extracted user ID from authorizer claims:', cognitoUserId);
+    console.log('Extracted user ID from authorizer claims:', cognitoUserId);
     return cognitoUserId;
   }
 
   // Also try alternative claim fields
   const username = event.requestContext.authorizer?.claims?.['cognito:username'];
   if (username) {
-    console.log('✅ Extracted user ID from cognito:username:', username);
+    console.log('Extracted user ID from cognito:username:', username);
     return username;
   }
 
-  console.warn('❌ No valid user ID found in authorizer claims');
+  console.warn('No valid user ID found in authorizer claims');
   return null;
 }
 

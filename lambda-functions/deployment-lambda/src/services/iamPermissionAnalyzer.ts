@@ -8,13 +8,12 @@ export class IAMPermissionAnalyzer {
    * Analyze workflow and generate IAM policy statements for Step Functions role
    */
   static analyzeWorkflowPermissions(workflow: Workflow): any[] {
-    console.log('🔍 IAM ANALYZER: Analyzing workflow permissions...');
-    
     const policyStatements: any[] = [];
     const requiredPermissions = new Set<string>();
     const resourceArns = new Set<string>();
 
-    // Base permissions that all Step Functions need
+    // CloudWatch Logs delivery actions require Resource: '*' — AWS does not support
+    // resource-level restrictions for these specific log delivery APIs.
     policyStatements.push({
       Effect: 'Allow',
       Action: [
@@ -30,69 +29,57 @@ export class IAMPermissionAnalyzer {
       Resource: '*',
     });
 
-    // Analyze each node for specific permissions
     workflow.nodes.forEach(node => {
-      console.log(`  📦 Analyzing node: ${node.name || node.id} (type: ${node.type})`);
-      
-      const nodePermissions = this.getNodePermissions(node);
+      const nodePermissions = this.getNodePermissions(node, workflow.id);
       nodePermissions.actions.forEach(action => requiredPermissions.add(action));
       nodePermissions.resources.forEach(resource => resourceArns.add(resource));
-      
-      console.log(`    ➡️  Required actions: ${nodePermissions.actions.join(', ')}`);
-      console.log(`    🎯 Resource ARNs: ${nodePermissions.resources.join(', ')}`);
     });
 
-    // Group permissions by service for better organization
     const servicePermissions = this.groupPermissionsByService(Array.from(requiredPermissions));
-    
-    // Create policy statements for each service
+
     Object.entries(servicePermissions).forEach(([service, actions]) => {
       if (actions.length > 0) {
         const resources = this.getResourcesForService(service, Array.from(resourceArns), workflow);
-        
+
+        // Refuse to fall back to a global wildcard — require explicit ARNs
+        if (resources.length === 0) return;
+
         policyStatements.push({
           Effect: 'Allow',
           Action: actions,
-          Resource: resources.length > 0 ? resources : '*',
+          Resource: resources,
         });
-        
-        console.log(`  🔧 ${service.toUpperCase()} permissions:`, actions);
-        console.log(`  🎯 ${service.toUpperCase()} resources:`, resources);
       }
     });
 
-    console.log('✅ IAM ANALYZER: Permission analysis completed');
-    console.log('📊 IAM ANALYZER: Generated policy statements:', policyStatements.length);
-    
     return policyStatements;
   }
 
   /**
    * Get required permissions for a specific node type
    */
-  private static getNodePermissions(node: any): { actions: string[], resources: string[] } {
+  private static getNodePermissions(node: any, workflowId: string): { actions: string[], resources: string[] } {
     const nodeType = node.type;
     const config = node.config || {};
 
     switch (nodeType) {
       case 's3':
         return this.getS3Permissions(config);
-      
+
       case 'lambda':
-        return this.getLambdaPermissions(config);
-      
+        return this.getLambdaPermissions(workflowId);
+
       case 'database':
         return this.getDatabasePermissions(config);
-      
+
       case 'opensearch':
-        return this.getOpenSearchPermissions(config);
-      
+        return this.getOpenSearchPermissions(workflowId);
+
       case 'start':
       case 'end':
         return { actions: [], resources: [] };
-      
+
       default:
-        console.log(`  ⚠️  Unknown node type: ${nodeType}, no specific permissions required`);
         return { actions: [], resources: [] };
     }
   }
@@ -127,11 +114,9 @@ export class IAMPermissionAnalyzer {
   /**
    * Get Lambda-specific permissions
    */
-  private static getLambdaPermissions(config: any): { actions: string[], resources: string[] } {
-    // For Step Functions to invoke Lambda functions created by this workflow
-    // We use a wildcard pattern that matches the deployment naming convention
-    const functionArn = `arn:aws:lambda:*:*:function:*`;
-
+  private static getLambdaPermissions(workflowId: string): { actions: string[], resources: string[] } {
+    // workflowId is already in the form "workflow-<id>", so use it directly as the prefix
+    const functionArn = `arn:aws:lambda:*:*:function:${workflowId}-*`;
     return {
       actions: ['lambda:InvokeFunction'],
       resources: [functionArn],
@@ -160,12 +145,11 @@ export class IAMPermissionAnalyzer {
   /**
    * Get OpenSearch-specific permissions
    */
-  private static getOpenSearchPermissions(config: any): { actions: string[], resources: string[] } {
-    // OpenSearch operations are done via Lambda, so we need Lambda invoke permissions
-    // The Lambda itself will have aoss:* permissions
+  private static getOpenSearchPermissions(workflowId: string): { actions: string[], resources: string[] } {
+    // workflowId is already in the form "workflow-<id>", so use it directly
     return {
       actions: ['lambda:InvokeFunction'],
-      resources: ['arn:aws:lambda:*:*:function:*-opensearch-*'],
+      resources: [`arn:aws:lambda:*:*:function:${workflowId}-opensearch`],
     };
   }
 

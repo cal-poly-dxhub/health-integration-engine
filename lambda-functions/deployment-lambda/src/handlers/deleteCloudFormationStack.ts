@@ -5,8 +5,8 @@ import { CloudFormationStackManager } from '../services/cloudFormationStackManag
  * Used by the deletion Step Function
  */
 export const handler = async (event: any) => {
-  console.log('🗑️ DELETE CLOUDFORMATION STACK HANDLER INVOKED');
-  console.log('📋 Event received:', JSON.stringify(event, null, 2));
+  console.log('DELETE CLOUDFORMATION STACK HANDLER INVOKED');
+  console.log('Event received:', JSON.stringify(event, null, 2));
 
   const { workflowId, userId } = event;
 
@@ -18,13 +18,13 @@ export const handler = async (event: any) => {
     const stackManager = new CloudFormationStackManager();
     const stackName = `workflow-${workflowId}`;
     
-    console.log(`🗑️ Deleting CloudFormation stack: ${stackName}`);
+    console.log(`Deleting CloudFormation stack: ${stackName}`);
     
     const deletionResult = await stackManager.deleteStack(stackName, workflowId, userId);
     
     if (deletionResult.success) {
-      console.log('✅ CloudFormation stack deletion initiated successfully');
-      console.log('📋 Resources to be deleted:', deletionResult.deletedResources?.join(', '));
+      console.log('CloudFormation stack deletion initiated successfully');
+      console.log('Resources to be deleted:', deletionResult.deletedResources?.join(', '));
       
       return {
         statusCode: 200,
@@ -35,7 +35,7 @@ export const handler = async (event: any) => {
         warnings: deletionResult.warnings,
       };
     } else {
-      console.error('⚠️ CloudFormation stack deletion had issues:', deletionResult.message);
+      console.error('CloudFormation stack deletion had issues:', deletionResult.message);
       
       // Return partial success for Step Function to handle
       return {
@@ -49,7 +49,7 @@ export const handler = async (event: any) => {
     }
 
   } catch (error) {
-    console.error('❌ CloudFormation stack deletion failed:', error);
+    console.error('CloudFormation stack deletion failed:', error);
     throw error;
   }
 };

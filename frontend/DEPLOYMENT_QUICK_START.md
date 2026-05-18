@@ -1,6 +1,6 @@
 # Quick Deployment Guide
 
-## 🚀 Deploy to S3 + CloudFront (Recommended)
+## Deploy to S3 + CloudFront (Recommended)
 
 ### Option 1: Full Deployment (Recommended)
 ```bash
@@ -40,7 +40,7 @@ npm run deploy-build    # Build for production
 npm run deploy:s3-quick # Deploy to AWS
 ```
 
-## 🧪 Testing & Development
+## Testing & Development
 
 ### Test Build (with TypeScript check)
 ```bash
@@ -60,7 +60,7 @@ npm run dev
 ```
 This starts the local development server (unchanged).
 
-## 📋 Environment Setup
+## Environment Setup
 
 Make sure your `.env` file contains:
 ```env
@@ -74,21 +74,21 @@ VITE_COGNITO_DOMAIN=your-domain.auth.us-east-1.amazoncognito.com
 VITE_WEBSOCKET_URL=wss://your-websocket-api-url/prod
 ```
 
-## ⚠️ Important Notes
+## Important Notes
 
 1. **Local Development**: All changes preserve local development functionality
 2. **TypeScript Errors**: Deployment works even with TypeScript errors (for faster deployment)
 3. **Environment Variables**: Uses fallback values so local development continues to work
 4. **AWS CLI Required**: Make sure AWS CLI is installed and configured
 
-## 🔒 Security Features
+## Security Features
 
 - **Private S3 Bucket**: S3 bucket is kept private (no public access)
 - **CloudFront OAI**: CloudFront uses Origin Access Identity to securely access S3
 - **HTTPS Only**: CloudFront enforces HTTPS redirects
 - **No Direct S3 Access**: Files can only be accessed through CloudFront
 
-## 🔧 Troubleshooting
+## Troubleshooting
 
 ### If deployment fails:
 1. Check AWS CLI: `aws sts get-caller-identity`
@@ -106,14 +106,14 @@ VITE_WEBSOCKET_URL=wss://your-websocket-api-url/prod
 - **Region Issues**: Make sure AWS_REGION is set correctly
 - **Profile Issues**: Verify AWS_PROFILE is configured properly
 
-## 📁 Generated Files
+## Generated Files
 
 After deployment, you'll find:
 - `deployment-info.json` - Contains S3 and CloudFront URLs
 - `.env.production` - Production environment configuration
 - `dist/` - Built application files
 
-## 🌐 Accessing Your App
+## Accessing Your App
 
 After deployment:
 1. **S3 Website URL**: Available immediately

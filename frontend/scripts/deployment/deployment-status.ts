@@ -186,7 +186,7 @@ class DeploymentStatusChecker {
       return;
     }
 
-    console.log(chalk.blue.bold(`📊 Deployment Status for ${status.environment} environment`));
+    console.log(chalk.blue.bold(`Deployment Status for ${status.environment} environment`));
     console.log(chalk.gray(`Checked at: ${new Date(status.timestamp).toLocaleString()}`));
     console.log('');
 
@@ -227,7 +227,7 @@ class DeploymentStatusChecker {
 
     // Issues
     if (status.deployment.issues.length > 0) {
-      console.log(chalk.red.bold('❌ Issues:'));
+      console.log(chalk.red.bold('Issues:'));
       for (const issue of status.deployment.issues) {
         console.log(chalk.red(`  • ${issue}`));
       }
@@ -236,7 +236,7 @@ class DeploymentStatusChecker {
 
     // Warnings
     if (status.deployment.warnings.length > 0) {
-      console.log(chalk.yellow.bold('⚠️  Warnings:'));
+      console.log(chalk.yellow.bold(' Warnings:'));
       for (const warning of status.deployment.warnings) {
         console.log(chalk.yellow(`  • ${warning}`));
       }
@@ -245,14 +245,14 @@ class DeploymentStatusChecker {
 
     // Summary
     if (status.deployment.ready) {
-      console.log(chalk.green.bold('✅ Ready to deploy! Run: npm run deploy:frontend'));
+      console.log(chalk.green.bold('Ready to deploy! Run: npm run deploy:frontend'));
     } else {
-      console.log(chalk.red.bold('❌ Not ready to deploy. Please address the issues above.'));
+      console.log(chalk.red.bold('Not ready to deploy. Please address the issues above.'));
     }
   }
 
   private getStatusIcon(status: boolean): string {
-    return status ? chalk.green('✓') : chalk.red('✗');
+    return status ? chalk.green('') : chalk.red('');
   }
 }
 

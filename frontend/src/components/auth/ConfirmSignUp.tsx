@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { authService } from '../../services/auth';
+import { useAuth } from '../../contexts/AuthContext';
 import { useDocumentTitle } from '../../hooks/useDocumentTitle';
 import './ConfirmSignUp.css';
 
@@ -17,6 +18,7 @@ export default function ConfirmSignUp({
   onBackToSignUp,
 }: ConfirmSignUpProps) {
   useDocumentTitle('Verify email');
+  const { signIn } = useAuth();
   const [confirmationCode, setConfirmationCode] = useState('');
   const [loading, setLoading] = useState(false);
   const [resending, setResending] = useState(false);
@@ -33,7 +35,7 @@ export default function ConfirmSignUp({
       await authService.confirmSignUp({ username: email, confirmationCode });
 
       if (password) {
-        await authService.signIn({ email, password });
+        await signIn(email, password);
       }
 
       onConfirmSuccess();

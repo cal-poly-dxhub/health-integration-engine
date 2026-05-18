@@ -18,9 +18,9 @@ export class DeploymentOrchestrator {
     workflow: Workflow,
     updateStatus: (status: Partial<DeploymentStatus>) => Promise<void>
   ): Promise<DeploymentStatus> {
-    console.log('🎯 ORCHESTRATOR: Using CloudFormation deployment approach');
-    console.log('🎯 ORCHESTRATOR: Starting CloudFormation-based deployment');
-    console.log('📋 ORCHESTRATOR: Deployment context:', {
+    console.log('ORCHESTRATOR: Using CloudFormation deployment approach');
+    console.log('ORCHESTRATOR: Starting CloudFormation-based deployment');
+    console.log('ORCHESTRATOR: Deployment context:', {
       deploymentId: deploymentContext.deploymentId,
       workflowId: deploymentContext.workflowId,
       userId: deploymentContext.userId,
@@ -41,7 +41,7 @@ export class DeploymentOrchestrator {
     workflow: Workflow,
     updateStatus: (status: Partial<DeploymentStatus>) => Promise<void>
   ): Promise<DeploymentStatus> {
-    console.log('🎯 ORCHESTRATOR: Starting enhanced CloudFormation deployment with update functionality');
+    console.log('ORCHESTRATOR: Starting enhanced CloudFormation deployment with update functionality');
     
     // Initialize services
     const webSocketService = null; // WebSocketNotificationService.create();
@@ -58,7 +58,7 @@ export class DeploymentOrchestrator {
       }
 
       // Step 1: Validate workflow update behavior
-      console.log('🔍 ORCHESTRATOR: Validating workflow update behavior...');
+      console.log('ORCHESTRATOR: Validating workflow update behavior...');
       const updateValidation = await stackManager.validateWorkflowUpdateBehavior(
         deploymentContext.workflowId,
         deploymentContext
@@ -68,32 +68,32 @@ export class DeploymentOrchestrator {
         throw new Error(`Workflow update validation failed: ${updateValidation.issues.join(', ')}`);
       }
 
-      console.log('✅ ORCHESTRATOR: Workflow update validation passed:', {
+      console.log('ORCHESTRATOR: Workflow update validation passed:', {
         stackExists: updateValidation.stackExists,
         issues: updateValidation.issues.length,
       });
 
       // Step 2: Generate CloudFormation template
-      console.log('📝 ORCHESTRATOR: Generating CloudFormation template...');
+      console.log('ORCHESTRATOR: Generating CloudFormation template...');
       const template = await CloudFormationTemplateGenerator.generateTemplate(workflow, deploymentContext);
       
       // Step 3: Perform drift detection and reconciliation if stack exists
       let driftAnalysis = null;
       if (updateValidation.stackExists) {
-        console.log('🌊 ORCHESTRATOR: Performing drift detection and reconciliation...');
+        console.log('ORCHESTRATOR: Performing drift detection and reconciliation...');
         driftAnalysis = await stackManager.detectAndReconcileStackDrift(
           `workflow-${deploymentContext.workflowId}`,
           template
         );
 
-        console.log('📊 ORCHESTRATOR: Drift analysis completed:', {
+        console.log('ORCHESTRATOR: Drift analysis completed:', {
           hasDrift: driftAnalysis.hasDrift,
           reconciliationNeeded: driftAnalysis.reconciliationNeeded,
           actions: driftAnalysis.reconciliationActions.length,
         });
 
         if (driftAnalysis.reconciliationNeeded) {
-          console.log('⚠️ ORCHESTRATOR: Stack drift detected, will be reconciled during update');
+          console.log('ORCHESTRATOR: Stack drift detected, will be reconciled during update');
           driftAnalysis.reconciliationActions.forEach(action => 
             console.log(`  - ${action}`)
           );
@@ -101,7 +101,7 @@ export class DeploymentOrchestrator {
       }
 
       // Step 4: Deploy using enhanced CloudFormation deployer
-      console.log('🚀 ORCHESTRATOR: Deploying with enhanced CloudFormation deployer...');
+      console.log('ORCHESTRATOR: Deploying with enhanced CloudFormation deployer...');
       const cfnDeployer = new CloudFormationDeployer();
       const result = await cfnDeployer.deployWorkflow(deploymentContext, template, updateStatus);
 
@@ -129,11 +129,11 @@ export class DeploymentOrchestrator {
         });
       }
 
-      console.log('✅ ORCHESTRATOR: Enhanced CloudFormation deployment completed successfully');
+      console.log('ORCHESTRATOR: Enhanced CloudFormation deployment completed successfully');
       return result;
 
     } catch (error) {
-      console.error('❌ ORCHESTRATOR: Enhanced CloudFormation deployment failed:', error);
+      console.error('ORCHESTRATOR: Enhanced CloudFormation deployment failed:', error);
 
       // Send failure update via WebSocket
       if (webSocketService) {

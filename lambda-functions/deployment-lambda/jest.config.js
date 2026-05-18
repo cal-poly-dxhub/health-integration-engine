@@ -3,7 +3,7 @@ module.exports = {
   testEnvironment: 'node',
   roots: ['<rootDir>/src'],
   testMatch: ['**/__tests__/**/*.test.ts', '**/?(*.)+(spec|test).ts'],
-  testPathIgnorePatterns: ['<rootDir>/src/__tests__/jest.setup.ts'],
+  testPathIgnorePatterns: [],
   transform: {
     '^.+\\.ts$': 'ts-jest',
   },
@@ -16,5 +16,4 @@ module.exports = {
   ],
   coverageDirectory: 'coverage',
   coverageReporters: ['text', 'lcov', 'html'],
-  setupFilesAfterEnv: ['<rootDir>/src/__tests__/jest.setup.ts'],
 };

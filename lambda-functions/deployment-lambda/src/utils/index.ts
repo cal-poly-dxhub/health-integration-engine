@@ -4,5 +4,3 @@ export { WebSocketBroadcaster, MessageDeliveryResult, BroadcastResult, RetryConf
 
 // Existing utilities
 export { DeploymentLogger } from './deploymentLogger';
-export { DeploymentStatusTracker } from './deploymentStatusTracker';
-export { FrontendDeploymentDatabase } from './frontendDeploymentDatabase';

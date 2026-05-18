@@ -166,6 +166,8 @@ Workflows often need external libraries (`pandas`, `requests`, custom utilities,
    - Builds and deploys frontend to S3
    - Invalidates CloudFront cache
 
+   Once complete, the application is accessible at the **CloudFront URL** printed in the deployment output (e.g. `https://d1234abcd.cloudfront.net`). Use this URL to open the application in your browser.
+
 ## Configuration Reference
 
 All infrastructure settings are defined in `infrastructure/config.yaml`. The defaults work out of the box — customize only what you need.
@@ -215,12 +217,12 @@ Estimates assume **us-east-1** pricing and 1 million workflow executions per mon
 | Private Hosted Zone | Amazon Route 53 | $0.50 | Created by OpenSearch Serverless for DNS resolution |
 | **Subtotal (VPC)** | | **$47.95** | ~$15.10 if using `existing` mode (no NAT Gateway) |
 
-| | | **Total** | |
-|:--|:--|--:|:--|
-| Base + OpenSearch + VPC (`new`) | | **$729.73** | |
-| Base + OpenSearch + VPC (`existing`) | | **$696.88** | |
-| Base + OpenSearch (no VPC) | | **$681.78** | |
-| Base only | | **$155.94** | |
+| Configuration | Provisioned services | **Total** |
+|:--|:--|--:|
+| **Base only** | S3, CloudFront, Step Functions, Lambda, CloudWatch, API Gateway, Cognito, DynamoDB | **$155.94** |
+| **Base + OpenSearch (no VPC)** | All base services + OpenSearch Serverless (indexing & managed storage) | **$681.78** |
+| **Base + OpenSearch + VPC (`existing`)** | All base + OpenSearch + existing VPC networking (PrivateLink, Route 53 private zone) | **$696.88** |
+| **Base + OpenSearch + VPC (`new`)** | All base + OpenSearch + CDK-created VPC (NAT Gateway, PrivateLink, Route 53 private zone) | **$729.73** |
 
 > Costs are estimates based on [AWS pricing](https://aws.amazon.com/pricing/). Actual costs may vary. Use the [AWS Pricing Calculator](https://calculator.aws/) for a detailed estimate.
 

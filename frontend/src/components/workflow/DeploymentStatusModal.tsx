@@ -136,10 +136,7 @@ const DeploymentStatusModal: React.FC<DeploymentStatusModalProps> = ({
           }
           setLoading(false);
 
-          if (
-            !completedFiredRef.current &&
-            status.status === 'completed'
-          ) {
+          if (status.status === 'completed' && !completedFiredRef.current) {
             completedFiredRef.current = true;
             onComplete?.(status);
             startRedirectCountdown();
@@ -167,6 +164,10 @@ const DeploymentStatusModal: React.FC<DeploymentStatusModalProps> = ({
       update.status === 'COMPLETED' ||
       update.status.toLowerCase() === 'completed'
     ) {
+      // Claim the completion slot before any async work to prevent double-fire
+      if (completedFiredRef.current) return;
+      completedFiredRef.current = true;
+
       try {
         const detailed = await DeploymentService.getDeploymentStatus(
           update.deploymentId
@@ -175,12 +176,8 @@ const DeploymentStatusModal: React.FC<DeploymentStatusModalProps> = ({
           setDeploymentStatus(detailed);
           setStepHistory(detailed.steps);
           setLoading(false);
-
-          if (!completedFiredRef.current) {
-            completedFiredRef.current = true;
-            onComplete?.(detailed);
-            startRedirectCountdown();
-          }
+          onComplete?.(detailed);
+          startRedirectCountdown();
           return;
         }
       } catch (err) {

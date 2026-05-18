@@ -196,7 +196,7 @@ export class DeploymentWebSocketClient {
     const timestamp = new Date(log.timestamp).toLocaleTimeString();
     
     let logColor = chalk.white;
-    let logIcon = 'ℹ';
+    let logIcon = 'i';
     
     switch (log.level) {
       case 'error':
@@ -209,7 +209,7 @@ export class DeploymentWebSocketClient {
         break;
       case 'info':
         logColor = chalk.blue;
-        logIcon = 'ℹ';
+        logIcon = 'i';
         break;
       case 'debug':
         logColor = chalk.gray;
@@ -382,7 +382,7 @@ export class DeploymentWebSocketClient {
       case 'failed':
         return '';
       default:
-        return 'ℹ';
+        return 'i';
     }
   }
 

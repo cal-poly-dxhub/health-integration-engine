@@ -18,17 +18,12 @@ const ConnectionsRenderer: React.FC<ConnectionsRendererProps> = ({
   onDeleteConnection,
   isConnecting,
 }) => {
-  // Re-render on every animation frame for instant arrow updates
+  // Poll DOM positions at 100ms so arrows track node movement without burning CPU at 60fps
   const [, forceUpdate] = React.useReducer(x => x + 1, 0);
-  
+
   useEffect(() => {
-    let rafId: number;
-    const update = () => {
-      forceUpdate();
-      rafId = requestAnimationFrame(update);
-    };
-    rafId = requestAnimationFrame(update);
-    return () => cancelAnimationFrame(rafId);
+    const id = setInterval(forceUpdate, 100);
+    return () => clearInterval(id);
   }, []);
 
   // Helper function to get actual node handle positions from DOM

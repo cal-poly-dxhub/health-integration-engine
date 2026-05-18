@@ -56,7 +56,7 @@ const WorkflowCanvasContent: React.FC = () => {
   const [canvasError, setCanvasError] = useState<string | null>(null);
   const [confirmLeave, setConfirmLeave] = useState(false);
 
-  const canvasRef = useRef<HTMLDivElement>(null);
+  const canvasRef = useRef<HTMLDivElement | null>(null);
 
   useDocumentTitle(workflowName || 'Workflow editor');
 
@@ -112,11 +112,12 @@ const WorkflowCanvasContent: React.FC = () => {
     setConnections(workflow.connections || []);
     setHasUnsavedChanges(false);
 
-    setTimeout(() => setIsInitialLoad(false), 100);
-
     if (workflow.isDeployed && workflow.lastDeploymentId) {
       loadLastDeploymentStatus(workflow.lastDeploymentId);
     }
+
+    const t = setTimeout(() => setIsInitialLoad(false), 100);
+    return () => clearTimeout(t);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [workflow]);
 
@@ -337,9 +338,10 @@ const WorkflowCanvasContent: React.FC = () => {
       setCanvasError('Failed to save workflow. Please try again.');
     } finally {
       setIsSaving(false);
-      setTimeout(() => {
-        isSavingRefRef.current = false;
-      }, 1000);
+      // Brief debounce so rapid saves don't re-trigger while the last one settles
+      const t = setTimeout(() => { isSavingRefRef.current = false; }, 1000);
+      // No cleanup needed — isSavingRefRef is a ref, updating it on unmount is harmless
+      void t;
     }
   }, [
     workflowName,
@@ -716,7 +718,7 @@ const WorkflowCanvasContent: React.FC = () => {
 
         <div
           ref={(node) => {
-            (canvasRef as any).current = node;
+            canvasRef.current = node;
             drop(node);
           }}
           /* IMPORTANT: keep `.workflow-canvas` class — ConnectionsRenderer

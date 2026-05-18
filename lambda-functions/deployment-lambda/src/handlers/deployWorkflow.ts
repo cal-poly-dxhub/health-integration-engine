@@ -63,7 +63,16 @@ export const handler = async (
       };
     }
 
-    const requestBody = JSON.parse(apiEvent.body);
+    let requestBody: unknown;
+    try {
+      requestBody = JSON.parse(apiEvent.body);
+    } catch {
+      return {
+        statusCode: 400,
+        headers: createSuccessHeaders(),
+        body: JSON.stringify({ error: 'Invalid JSON in request body' }),
+      };
+    }
 
     if (!isDeploymentRequest(requestBody)) {
       return {

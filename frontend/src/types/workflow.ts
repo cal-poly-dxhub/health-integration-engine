@@ -65,6 +65,9 @@ export interface WorkflowMetadata {
   // Status checking fields
   statusLastChecked?: string;
   statusCheckError?: string;
+  // Transient UI-only deletion state
+  isDeleting?: boolean;
+  deletionStage?: string;
 }
 
 // Workflow creation/update request

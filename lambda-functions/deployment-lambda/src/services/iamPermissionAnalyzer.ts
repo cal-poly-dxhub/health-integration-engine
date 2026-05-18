@@ -41,8 +41,12 @@ export class IAMPermissionAnalyzer {
       if (actions.length > 0) {
         const resources = this.getResourcesForService(service, Array.from(resourceArns), workflow);
 
-        // Refuse to fall back to a global wildcard — require explicit ARNs
-        if (resources.length === 0) return;
+        if (resources.length === 0) {
+          // No ARNs resolved for this service — skip rather than granting wildcard access.
+          // This can happen if a node's config (e.g. tableName) was left empty.
+          console.warn(`IAM: no resource ARNs resolved for service "${service}" — skipping policy statement`);
+          return;
+        }
 
         policyStatements.push({
           Effect: 'Allow',

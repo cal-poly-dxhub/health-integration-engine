@@ -289,6 +289,12 @@ error.log
 cdk-outputs.json
 infrastructure/outputs.json
 
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+
 # Kiro
 .kiro/
 my-session-apr2.json

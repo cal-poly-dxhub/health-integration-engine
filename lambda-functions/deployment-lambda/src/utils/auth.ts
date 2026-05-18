@@ -50,20 +50,16 @@ export async function validateJWTToken(event: APIGatewayProxyEvent): Promise<Aut
 export function extractUserIdFromEvent(event: APIGatewayProxyEvent): string | null {
   // Get user ID from Cognito authorizer claims (set by API Gateway)
   const cognitoUserId = event.requestContext.authorizer?.claims?.sub;
-  
-  if (cognitoUserId && cognitoUserId !== 'demo-user') {
-    console.log('Extracted user ID from authorizer claims:', cognitoUserId);
+  if (cognitoUserId) {
     return cognitoUserId;
   }
 
-  // Also try alternative claim fields
+  // Fall back to cognito:username claim
   const username = event.requestContext.authorizer?.claims?.['cognito:username'];
   if (username) {
-    console.log('Extracted user ID from cognito:username:', username);
     return username;
   }
 
-  console.warn('No valid user ID found in authorizer claims');
   return null;
 }
 

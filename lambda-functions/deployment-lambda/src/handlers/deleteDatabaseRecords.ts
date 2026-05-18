@@ -88,7 +88,7 @@ async function deleteDeploymentRecords(workflowId: string): Promise<void> {
     if (totalDeleted > 0) {
       console.log(`All ${totalDeleted} deployment records deleted successfully`);
     } else {
-      console.log('ℹNo deployment records found for this workflow');
+      console.log('No deployment records found for this workflow');
     }
   } catch (error) {
     console.error('Failed to delete deployment records:', error);

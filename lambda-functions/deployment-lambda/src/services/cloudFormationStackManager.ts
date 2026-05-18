@@ -378,7 +378,7 @@ export class CloudFormationStackManager {
         }
       } catch (error: any) {
         if (error.name === 'ValidationError' && error.message.includes('does not exist')) {
-          console.log(`ℹCloudFormation Stack Manager: Stack ${stackName} does not exist`);
+          console.log(`CloudFormation Stack Manager: Stack ${stackName} does not exist`);
           result.warnings.push('CloudFormation stack does not exist - may have been deleted manually');
         } else {
           throw error;
@@ -675,7 +675,7 @@ export class CloudFormationStackManager {
 
           console.log('CloudFormation Stack Manager: Deployment records updated successfully');
         } else {
-          console.log('ℹCloudFormation Stack Manager: No deployment records found to clean up');
+          console.log('CloudFormation Stack Manager: No deployment records found to clean up');
         }
       } catch (deploymentError) {
         console.warn('CloudFormation Stack Manager: Failed to clean up deployment records:', deploymentError);
@@ -742,7 +742,7 @@ export class CloudFormationStackManager {
       console.log(`EventBridge rule cleaned up: ${ruleName}`);
     } catch (error: any) {
       if (error.name === 'ResourceNotFoundException') {
-        console.log(`ℹEventBridge rule ${ruleName} does not exist — skipping`);
+        console.log(`EventBridge rule ${ruleName} does not exist — skipping`);
         return;
       }
       throw error;

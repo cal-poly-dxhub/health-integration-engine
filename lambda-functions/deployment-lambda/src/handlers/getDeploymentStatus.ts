@@ -1,6 +1,6 @@
 import { APIGatewayProxyEvent, APIGatewayProxyResult } from 'aws-lambda';
 import { DynamoDBClient } from '@aws-sdk/client-dynamodb';
-import { DynamoDBDocumentClient, GetCommand, ScanCommand } from '@aws-sdk/lib-dynamodb';
+import { DynamoDBDocumentClient, QueryCommand } from '@aws-sdk/lib-dynamodb';
 import { SFNClient, DescribeExecutionCommand, GetExecutionHistoryCommand } from '@aws-sdk/client-sfn';
 
 import { DeploymentStatus } from '../types/deployment';
@@ -77,11 +77,13 @@ export const handler = async (
  */
 async function getDeploymentStatusWithStepFunctions(deploymentId: string, userId: string): Promise<DeploymentStatus | null> {
   try {
-    const response = await docClient.send(new ScanCommand({
+    // Query by PK (known from deploymentId) then validate ownership — avoids full-table scan
+    const response = await docClient.send(new QueryCommand({
       TableName: DEPLOYMENTS_TABLE,
-      FilterExpression: 'deploymentId = :deploymentId AND userId = :userId',
+      KeyConditionExpression: 'PK = :pk',
+      FilterExpression: 'userId = :userId',
       ExpressionAttributeValues: {
-        ':deploymentId': deploymentId,
+        ':pk': `DEPLOYMENT#${deploymentId}`,
         ':userId': userId,
       },
     }));

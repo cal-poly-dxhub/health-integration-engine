@@ -419,7 +419,7 @@
             "Detail": {
               "deploymentId.$": "$.deploymentContext.deploymentId",
               "status": "completed",
-              "message": "🎉 Workflow deployed successfully and is ready to use!",
+              "message": "Workflow deployed successfully and is ready to use!",
               "timestamp.$": "$$.State.EnteredTime"
             }
           }

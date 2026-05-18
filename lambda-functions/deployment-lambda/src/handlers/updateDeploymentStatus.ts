@@ -381,7 +381,7 @@ async function enableS3EventBridgeIfNeeded(stackName: string): Promise<void> {
     const template = JSON.parse(templateResponse.TemplateBody);
     
     if (!template.Resources?.S3TriggerEventRule) {
-      console.log('ℹNo S3 trigger configured, skipping EventBridge setup');
+      console.log('No S3 trigger configured, skipping EventBridge setup');
       return;
     }
     

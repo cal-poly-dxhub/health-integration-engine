@@ -346,7 +346,7 @@ export class CloudFormationDeployer {
       
       // Check if template has S3TriggerEventRule resource
       if (!templateObj.Resources?.S3TriggerEventRule) {
-        console.log('ℹCloudFormation: No S3 trigger configured, skipping EventBridge setup');
+        console.log('CloudFormation: No S3 trigger configured, skipping EventBridge setup');
         return;
       }
 

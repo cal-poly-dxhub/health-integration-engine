@@ -42,7 +42,7 @@ export default function Dashboard({
   const [isDeleting, setIsDeleting] = useState(false);
   const [isCreating, setIsCreating] = useState(false);
   const [activeTab, setActiveTab] = useState<TabKey>('workflows');
-  const [deleteError, setDeleteError] = useState<string | null>(null);
+  const [operationError, setOperationError] = useState<string | null>(null);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [deleteSuccess, setDeleteSuccess] = useState<string | null>(null);
   const [showDeletionProgressModal, setShowDeletionProgressModal] =
@@ -131,7 +131,7 @@ export default function Dashboard({
       handleEditWorkflow(newWorkflow.id);
     } catch (error) {
       console.error('Failed to create workflow:', error);
-      setDeleteError('Failed to create workflow. Please try again.');
+      setOperationError('Failed to create workflow. Please try again.');
     } finally {
       setIsCreating(false);
     }
@@ -153,7 +153,7 @@ export default function Dashboard({
     const workflow = workflows.find((w) => w.id === workflowId);
     if (workflow) {
       setWorkflowToDelete(workflow);
-      setDeleteError(null);
+      setOperationError(null);
       setDeleteSuccess(null);
     }
   };
@@ -163,7 +163,7 @@ export default function Dashboard({
 
     try {
       setIsDeleting(true);
-      setDeleteError(null);
+      setOperationError(null);
       setDashboardDeletionStatus('Initiating deletion...');
 
       await deleteWorkflow(workflowToDelete.id);
@@ -176,7 +176,7 @@ export default function Dashboard({
       setShowDeletionProgressModal(true);
     } catch (error) {
       console.error('Failed to delete workflow:', error);
-      setDeleteError(
+      setOperationError(
         error instanceof Error
           ? error.message
           : 'Failed to delete workflow. Please try again.'
@@ -189,7 +189,7 @@ export default function Dashboard({
   const handleCloseDeleteModal = () => {
     if (!isDeleting) {
       setWorkflowToDelete(null);
-      setDeleteError(null);
+      setOperationError(null);
     }
   };
 
@@ -199,7 +199,7 @@ export default function Dashboard({
       handleEditWorkflow(duplicatedWorkflow.id);
     } catch (error) {
       console.error('Failed to duplicate workflow:', error);
-      setDeleteError('Failed to duplicate workflow. Please try again.');
+      setOperationError('Failed to duplicate workflow. Please try again.');
     }
   };
 
@@ -295,11 +295,11 @@ export default function Dashboard({
               type="button"
               className="dash-search-btn"
               onClick={() => setActiveTab('search')}
-              title="Search messages across all workflows (⌘K)"
+              title="Search messages across all workflows (Cmd+K)"
             >
               <SearchIcon />
               <span className="dash-search-btn-text">Search messages</span>
-              <kbd className="dash-kbd">⌘K</kbd>
+              <kbd className="dash-kbd">Cmd+K</kbd>
             </button>
           )}
 
@@ -454,18 +454,18 @@ export default function Dashboard({
         </div>
       )}
 
-      {deleteError && (
+      {operationError && (
         <div
           className="dash-toast dash-toast--error"
           role="alert"
           aria-live="polite"
         >
           <AlertIcon />
-          <div className="dash-toast-body">{deleteError}</div>
+          <div className="dash-toast-body">{operationError}</div>
           <button
             type="button"
             className="dash-toast-close"
-            onClick={() => setDeleteError(null)}
+            onClick={() => setOperationError(null)}
             aria-label="Dismiss"
           >
             

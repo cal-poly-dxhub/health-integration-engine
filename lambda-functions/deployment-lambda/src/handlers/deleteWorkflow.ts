@@ -102,11 +102,7 @@ async function handleApiGatewayRequest(event: APIGatewayProxyEvent): Promise<API
     console.log('Found workflow:', workflow.name);
 
     // 2. Start Step Functions deletion workflow
-    console.log('Starting Step Functions deletion workflow');
-    
-    const DELETION_STATE_MACHINE_ARN = process.env.DELETION_STATE_MACHINE_ARN;
     if (!DELETION_STATE_MACHINE_ARN) {
-      console.error('DELETION_STATE_MACHINE_ARN environment variable not set');
       return {
         statusCode: 500,
         headers: createSuccessHeaders(),

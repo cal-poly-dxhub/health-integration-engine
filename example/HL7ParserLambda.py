@@ -21,19 +21,19 @@ def lambda_handler(event, context):
         hl7_message = ''
 
         # Debug: Print the input event structure
-        print(f"📋 Input event keys: {list(event.keys())}")
-        print(f"📋 Event type: {type(event)}")
+        print(f"Input event keys: {list(event.keys())}")
+        print(f"Event type: {type(event)}")
 
         # Handle Step Functions wrapper format
         actual_input = event
         if 'input' in event and isinstance(event['input'], dict):
-            print("📦 Found Step Functions 'input' wrapper, using nested data")
+            print("Found Step Functions 'input' wrapper, using nested data")
             actual_input = event['input']
-            print(f"📋 Actual input keys: {list(actual_input.keys())}")
+            print(f"Actual input keys: {list(actual_input.keys())}")
 
         # Check for S3 event-triggered workflow: file content is in s3Result.Body
         if 's3Result' in actual_input and 'Body' in actual_input['s3Result']:
-            print('📦 Found S3 trigger result, reading file content from s3Result.Body')
+            print('Found S3 trigger result, reading file content from s3Result.Body')
             body_raw = actual_input['s3Result']['Body']
             # Try parsing as JSON first (file may be JSON-wrapped)
             try:
@@ -47,34 +47,34 @@ def lambda_handler(event, context):
 
         # Check if input has Body parameter (S3 object format)
         elif 'Body' in actual_input:
-            print("📦 Found 'Body' field in actual input")
+            print("Found 'Body' field in actual input")
             body_raw = actual_input['Body']
-            print(f"📋 Body type: {type(body_raw)}")
-            print(f"📋 Body content (first 200 chars): {str(body_raw)[:200]}")
+            print(f"Body type: {type(body_raw)}")
+            print(f"Body content (first 200 chars): {str(body_raw)[:200]}")
 
             try:
                 # Parse the Body as JSON
                 body_content = json.loads(body_raw)
-                print(f"✅ Successfully parsed Body as JSON")
-                print(f"📋 Body JSON keys: {list(body_content.keys()) if isinstance(body_content, dict) else 'Not a dict'}")
+                print(f"Successfully parsed Body as JSON")
+                print(f"Body JSON keys: {list(body_content.keys()) if isinstance(body_content, dict) else 'Not a dict'}")
 
                 hl7_message = body_content.get('hl7_message', '')
-                print(f"📋 HL7 message length from Body: {len(hl7_message)}")
+                print(f"HL7 message length from Body: {len(hl7_message)}")
 
             except json.JSONDecodeError as e:
-                print(f"❌ JSON decode error: {str(e)}")
+                print(f"JSON decode error: {str(e)}")
                 return {
                     'error': f'Invalid JSON in Body parameter: {str(e)}',
                     'body_content': str(body_raw)[:500]  # First 500 chars for debugging
                 }
         else:
-            print("📋 No 'Body' field found, checking for direct hl7_message")
+            print("No 'Body' field found, checking for direct hl7_message")
             # Direct format - check both original event and actual_input
             hl7_message = actual_input.get('hl7_message', '') or event.get('hl7_message', '')
-            print(f"📋 Direct HL7 message length: {len(hl7_message)}")
+            print(f"Direct HL7 message length: {len(hl7_message)}")
 
         if not hl7_message:
-            print("❌ No HL7 message found after all checks")
+            print("No HL7 message found after all checks")
             return {
                 'error': 'No hl7_message found in request. Expected either "hl7_message" field or "Body" field containing JSON with "hl7_message"',
                 'debug_info': {
@@ -86,7 +86,7 @@ def lambda_handler(event, context):
                 }
             }
 
-        print(f"✅ Found HL7 message, length: {len(hl7_message)}")
+        print(f"Found HL7 message, length: {len(hl7_message)}")
 
         # Parse the HL7 message
         parser = HL7Parser()

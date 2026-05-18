@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { WorkflowMetadata, Workflow } from '../types/workflow';
 import { WorkflowDeleteResponse } from '../types/api';
 import { workflowApiService, ListWorkflowsParams } from '../services/workflowApi';
@@ -24,6 +24,7 @@ export const useWorkflows = (params: ListWorkflowsParams = {}) => {
 
   // Track active deployments for WebSocket subscriptions
   const [activeDeployments, setActiveDeployments] = useState<Set<string>>(new Set());
+  const refreshTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
 
   // Load workflows from API with localStorage fallback and Step Functions verification
@@ -109,7 +110,7 @@ export const useWorkflows = (params: ListWorkflowsParams = {}) => {
           // This is a simplified approach - in production, we'd track deployment-to-workflow mapping
           return {
             ...workflow,
-            deploymentStatus: update.status.toLowerCase() as any,
+            deploymentStatus: update.status.toLowerCase() as WorkflowMetadata['deploymentStatus'],
             updatedAt: update.timestamp,
           };
         }
@@ -119,13 +120,10 @@ export const useWorkflows = (params: ListWorkflowsParams = {}) => {
 
     // If deployment completed or failed, refresh the workflows to get accurate status
     if (update.status === 'COMPLETED' || update.status === 'FAILED') {
-      // Use a longer delay and debounce to prevent multiple rapid refreshes
-      const timeoutId = setTimeout(() => {
+      if (refreshTimeoutRef.current) clearTimeout(refreshTimeoutRef.current);
+      refreshTimeoutRef.current = setTimeout(() => {
         loadWorkflows();
-      }, 2000); // Longer delay to ensure backend has updated
-      
-      // Store timeout ID to allow cleanup if needed
-      return () => clearTimeout(timeoutId);
+      }, 2000);
     }
   }, [loadWorkflows]);
 
@@ -143,6 +141,7 @@ export const useWorkflows = (params: ListWorkflowsParams = {}) => {
       activeDeployments.forEach(deploymentId => {
         webSocketService.unsubscribeFromDeployment(deploymentId, handleDeploymentUpdate);
       });
+      if (refreshTimeoutRef.current) clearTimeout(refreshTimeoutRef.current);
     };
   }, []); // Empty dependency array - only setup once
 
@@ -294,7 +293,7 @@ export const useWorkflows = (params: ListWorkflowsParams = {}) => {
         ...prev,
         workflows: prev.workflows.map(w =>
           w.id === workflowId
-            ? { ...w, status: 'deleting' as any, isDeleting: true }
+            ? { ...w, deploymentStatus: 'deleting' as const, isDeleting: true }
             : w
         ),
       }));

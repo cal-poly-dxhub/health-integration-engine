@@ -236,6 +236,20 @@ Estimates assume **us-east-1** pricing and 1 million workflow executions per mon
 6. **Monitor**: View execution history and details from the workflow details page
 7. **Delete**: Delete a workflow from the dashboard or details page — deletion progress is shown in the same step-by-step modal as deployment
 
+## Workflow Deletion Behavior
+
+Deleting a workflow from the UI removes the workflow's CloudFormation stack — Lambda functions, IAM roles, Step Functions state machine, EventBridge rules, the OpenSearch indexer Lambda, and CloudWatch log groups owned by the stack — along with the workflow's record in DynamoDB.
+
+It does **not** clean up:
+
+- **S3 objects** in the input and output buckets used by the workflow's S3 nodes. The buckets are user-supplied and live outside the workflow stack, so any uploaded input files and generated output files remain in place after the workflow is deleted.
+- **OpenSearch indexed messages** produced during workflow executions. The OpenSearch Serverless collection is part of the shared infrastructure stack (not the per-workflow stack), so indexed documents persist after the workflow is deleted.
+
+If you need to remove these, do it manually:
+
+- **S3**: delete objects via the AWS console, `aws s3 rm s3://<bucket>/<prefix> --recursive`, or by configuring lifecycle rules on the buckets.
+- **OpenSearch**: issue a `_delete_by_query` against the `health-messages` index filtered on the deleted workflow's ID, or delete via the OpenSearch dashboard.
+
 ## Adding New Node Types
 
 1. Create a handler in [`lambda-functions/deployment-lambda/src/services/nodeHandlers/`](lambda-functions/deployment-lambda/src/services/nodeHandlers/)

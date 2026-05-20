@@ -364,7 +364,7 @@ export default function SignUp({
                     htmlFor="signup-organization"
                     className="signup-label"
                   >
-                    Organization
+                    Team
                   </label>
                   <span className="signup-optional">Optional</span>
                 </div>
@@ -376,7 +376,7 @@ export default function SignUp({
                   value={formData.organization}
                   onChange={handleChange}
                   disabled={loading}
-                  placeholder="Acme Health"
+                  placeholder="Acme Health Team"
                   className="signup-input"
                 />
               </div>

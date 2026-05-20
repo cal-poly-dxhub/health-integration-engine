@@ -417,7 +417,11 @@ export default function Dashboard({
 
             {activeTab === 'search' &&
               import.meta.env.VITE_ENABLE_OPENSEARCH !== 'false' && (
-                <OpenSearchPanel />
+                <OpenSearchPanel
+                  allowedWorkflowIds={workflows
+                    .filter((w) => w.deploymentStatus === 'deployed')
+                    .map((w) => w.id)}
+                />
               )}
           </div>
         </main>

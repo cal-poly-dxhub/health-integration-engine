@@ -22,11 +22,13 @@ interface SearchResult {
 interface OpenSearchPanelProps {
   indexName?: string;
   workflowId?: string;
+  allowedWorkflowIds?: string[];
 }
 
 const OpenSearchPanel: React.FC<OpenSearchPanelProps> = ({
   indexName: defaultIndex = 'health-messages',
   workflowId = '',
+  allowedWorkflowIds,
 }) => {
   const [indexName] = useState(defaultIndex);
   const [searchParams, setSearchParams] = useState({
@@ -66,6 +68,7 @@ const OpenSearchPanel: React.FC<OpenSearchPanelProps> = ({
       }>('/opensearch/search', {
         indexName,
         workflowId,
+        allowedWorkflowIds: allowedWorkflowIds ? allowedWorkflowIds : undefined,
         query: {
           searchText: searchParams.searchText || undefined,
           dataPartnerName: searchParams.dataPartnerName || undefined,
@@ -120,7 +123,7 @@ const OpenSearchPanel: React.FC<OpenSearchPanelProps> = ({
         <div>
           <h2 className="osp-title">Message Search</h2>
           <p className="osp-subtitle">
-            Search indexed messages across all workflows.
+            Search indexed messages across your deployed workflows.
           </p>
         </div>
       </header>

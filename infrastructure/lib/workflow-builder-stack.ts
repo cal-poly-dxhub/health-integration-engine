@@ -2218,15 +2218,16 @@ def lambda_handler(event, context):
         query_params = body.get('query', {})
         config = body.get('searchConfig', {})
         workflow_id = body.get('workflowId', '')
-        
+        allowed_workflow_ids = body.get('allowedWorkflowIds')
+
         if not endpoint or not index_name:
             return {'statusCode': 400, 'headers': CORS_HEADERS, 'body': json.dumps({'error': 'indexName required'})}
-        
+
         # Add workflowId filter if provided
         if workflow_id:
             query_params['workflowId'] = workflow_id
-        
-        query = build_query(query_params, config)
+
+        query = build_query(query_params, config, allowed_workflow_ids)
         url = f"{endpoint}/{index_name}/_search"
         data = json.dumps(query).encode('utf-8')
         body_hash = hashlib.sha256(data).hexdigest()
@@ -2258,10 +2259,10 @@ def lambda_handler(event, context):
     except Exception as e:
         return {'statusCode': 500, 'headers': CORS_HEADERS, 'body': json.dumps({'error': str(e)})}
 
-def build_query(params, config):
+def build_query(params, config, allowed_workflow_ids=None):
     must = []
     filters = []
-    
+
     if params.get('searchText'):
         must.append({'multi_match': {'query': params['searchText'], 'fields': ['*'], 'fuzziness': 'AUTO'}})
     if params.get('dataPartnerName'):
@@ -2274,11 +2275,16 @@ def build_query(params, config):
         must.append({'match': {'fillerOrderNumber': {'query': params['fillerOrderNumber'], 'fuzziness': 'AUTO'}}})
     if params.get('workflowId'):
         filters.append({'term': {'workflowId.keyword': params['workflowId']}})
-    
+    if allowed_workflow_ids is not None:
+        if len(allowed_workflow_ids) > 0:
+            filters.append({'terms': {'workflowId.keyword': allowed_workflow_ids}})
+        else:
+            filters.append({'term': {'workflowId.keyword': '__none__'}})
+
     date_field = config.get('dateRangeField', 'ingestedAt')
     date_days = config.get('dateRangeDays', 7)
     filters.append({'range': {date_field: {'gte': f'now-{date_days}d', 'lte': 'now'}}})
-    
+
     return {'query': {'bool': {'must': must if must else [{'match_all': {}}], 'filter': filters}}, 'size': 100}
 `.trim();
   }

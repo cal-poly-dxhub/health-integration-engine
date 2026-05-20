@@ -257,6 +257,7 @@
 .signup-field {
   display: grid;
   gap: 6px;
+  align-content: start;
 }
 
 .signup-label-row {

@@ -705,7 +705,7 @@ function getBanner(status: StepStatus, operation: Operation): BannerCopy {
         : operation === 'update'
         ? 'Updating workflow'
         : 'Deploying workflow',
-    subtitle: 'Please don’t close this window until it finishes.',
+    subtitle: "This will continue running in the background.",
   };
 }
 

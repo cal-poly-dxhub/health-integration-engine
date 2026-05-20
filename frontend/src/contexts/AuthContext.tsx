@@ -97,9 +97,8 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children, config }) 
   // Sign in
   const signIn = async (email: string, password: string) => {
     try {
-      setIsLoading(true);
       const result = await authService.signIn({ email, password });
-      
+
       setUser(result.user);
       setTokens(result.tokens);
       setIsAuthenticated(true);
@@ -108,8 +107,6 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children, config }) 
       setTokens(null);
       setIsAuthenticated(false);
       throw error;
-    } finally {
-      setIsLoading(false);
     }
   };
 

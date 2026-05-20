@@ -461,28 +461,29 @@ class AuthService {
    * Handle authentication errors
    */
   private handleAuthError(error: any): Error {
-    if (error.code === 'UserNotConfirmedException') {
+    const code = error.code || error.name;
+    if (code === 'UserNotConfirmedException') {
       return new Error('Please confirm your email address');
     }
-    if (error.code === 'NotAuthorizedException') {
-      return new Error('Invalid email or password');
+    if (code === 'NotAuthorizedException') {
+      return new Error('Incorrect username or password');
     }
-    if (error.code === 'UserNotFoundException') {
-      return new Error('User not found');
+    if (code === 'UserNotFoundException') {
+      return new Error('Incorrect username or password');
     }
-    if (error.code === 'UsernameExistsException') {
+    if (code === 'UsernameExistsException') {
       return new Error('An account with this email already exists');
     }
-    if (error.code === 'InvalidPasswordException') {
+    if (code === 'InvalidPasswordException') {
       return new Error('Password does not meet requirements');
     }
-    if (error.code === 'LimitExceededException') {
+    if (code === 'LimitExceededException') {
       return new Error('Too many attempts. Please try again later');
     }
-    if (error.code === 'CodeMismatchException') {
+    if (code === 'CodeMismatchException') {
       return new Error('Invalid verification code');
     }
-    if (error.code === 'ExpiredCodeException') {
+    if (code === 'ExpiredCodeException') {
       return new Error('Verification code has expired');
     }
 

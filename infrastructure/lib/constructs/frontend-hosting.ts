@@ -16,8 +16,9 @@ export class FrontendHosting extends Construct {
     super(scope, id);
 
     // S3 Bucket for frontend hosting
+    // No explicit bucketName — let CloudFormation generate one to avoid S3 naming
+    // conflicts when a same-named bucket is still being deleted by a prior rollback.
     this.bucket = new s3.Bucket(this, 'FrontendBucket', {
-      bucketName: `workflow-builder-frontend-${props.environment}-${cdk.Stack.of(this).account}`,
       versioned: true,
       removalPolicy: cdk.RemovalPolicy.DESTROY,
       autoDeleteObjects: true,

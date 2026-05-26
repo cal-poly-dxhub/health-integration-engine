@@ -1493,6 +1493,25 @@ export class WorkflowBuilderStack extends cdk.Stack {
                 `arn:aws:logs:${this.region}:${this.account}:log-group:/aws/stepfunctions/*:*`,
               ],
             }),
+            // EC2 Describe-only permissions. The deployment Lambda passes
+            // this role as the CloudFormation service role (RoleArn) when
+            // creating per-workflow stacks. CFN assumes the role and uses
+            // it to call ec2:DescribeSecurityGroups / DescribeSubnets /
+            // DescribeVpcs / DescribeNetworkInterfaces while validating
+            // VpcConfig on Lambda function resources. Mutating EC2
+            // permissions are intentionally not granted: the per-workflow
+            // CFN templates do not create AWS::EC2::* resources.
+            // Describe* actions do not support resource-level permissions.
+            new iam.PolicyStatement({
+              effect: iam.Effect.ALLOW,
+              actions: [
+                'ec2:DescribeSecurityGroups',
+                'ec2:DescribeSubnets',
+                'ec2:DescribeVpcs',
+                'ec2:DescribeNetworkInterfaces',
+              ],
+              resources: ['*'],
+            }),
           ],
         }),
       },

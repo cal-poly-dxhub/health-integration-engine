@@ -2216,10 +2216,14 @@ export class WorkflowBuilderStack extends cdk.Stack {
     //   - Per-workflow OpenSearch indexer Lambdas: read+write+create-index.
     //     CFN templates create their roles with name pattern
     //     OpenSearch-Lambda-Role-${WorkflowId} (see
-    //     cloudFormationTemplateGenerator.ts), which is matched by the
-    //     wildcard ARN below. AOSS data access policies support wildcards
-    //     in IAM principal role names.
-    const indexerRolePattern = `arn:aws:iam::${this.account}:role/OpenSearch-Lambda-Role-*`;
+    //     cloudFormationTemplateGenerator.ts), but AOSS data access
+    //     policies do NOT support wildcards in IAM role ARN principals,
+    //     and the per-workflow role names are not known at CDK synth
+    //     time. As a pragmatic compromise we keep the principal at
+    //     account root for this rule but tighten the permissions from
+    //     `aoss:*` to the specific data-plane actions the indexer needs.
+    //     A future change can move to dynamic UpdateAccessPolicy calls
+    //     from the deployment Lambda to enumerate exact role ARNs.
     const dataAccessPolicy = new cdk.aws_opensearchserverless.CfnAccessPolicy(this, 'OpenSearchDataAccessPolicy', {
       name: `health-msgs-access-${this.account.slice(-6)}`,
       type: 'data',
@@ -2264,7 +2268,7 @@ export class WorkflowBuilderStack extends cdk.Stack {
               ],
             },
           ],
-          Principal: [indexerRolePattern],
+          Principal: [`arn:aws:iam::${this.account}:root`],
         },
       ]),
     });

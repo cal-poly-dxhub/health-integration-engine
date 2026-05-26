@@ -9,7 +9,7 @@ export const handler = async (
     statusCode: 200,
     headers: {
       'Content-Type': 'application/json',
-      'Access-Control-Allow-Origin': '*',
+      'Access-Control-Allow-Origin': process.env.ALLOWED_ORIGIN || 'http://localhost:3000',
     },
     body: JSON.stringify({
       message: 'Workflow Lambda function is ready',

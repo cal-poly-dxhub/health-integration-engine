@@ -5,7 +5,7 @@ import { APIGatewayProxyEvent, APIGatewayProxyResult } from 'aws-lambda';
  * Just acknowledges any messages sent to the WebSocket
  */
 export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayProxyResult> => {
-  console.log('WebSocket Default Message:', JSON.stringify(event, null, 2));
+  console.log('WebSocket Default Message from:', event.requestContext.connectionId);
   
   const connectionId = event.requestContext.connectionId!;
   

@@ -13,7 +13,7 @@ const DEPLOYMENTS_TABLE = process.env.DEPLOYMENTS_TABLE || 'WorkflowBuilder-Depl
  */
 export const handler = async (event: any) => {
   console.log('DELETE DATABASE RECORDS HANDLER INVOKED');
-  console.log('Event received:', JSON.stringify(event, null, 2));
+  console.log('Event received:', JSON.stringify({ workflowId: event.workflowId, userId: event.userId }, null, 2));
 
   const { workflowId, userId } = event;
 

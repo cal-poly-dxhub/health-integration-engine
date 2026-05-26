@@ -25,7 +25,7 @@ interface ListWorkflowsResponse {
 export const handler = async (
   event: APIGatewayProxyEvent
 ): Promise<APIGatewayProxyResult> => {
-  console.log('List workflows event:', JSON.stringify(event, null, 2));
+  console.log('List workflows event:', JSON.stringify({ httpMethod: event.httpMethod, path: event.path, queryStringParameters: event.queryStringParameters }, null, 2));
 
   try {
     // Validate authentication - try API Gateway authorizer first, then JWT validation

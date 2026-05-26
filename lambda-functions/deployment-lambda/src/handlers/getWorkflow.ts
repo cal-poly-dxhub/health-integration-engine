@@ -18,7 +18,7 @@ const WORKFLOWS_TABLE = process.env.WORKFLOWS_TABLE || 'WorkflowBuilder-Workflow
 export const handler = async (
   event: APIGatewayProxyEvent
 ): Promise<APIGatewayProxyResult> => {
-  console.log('Get workflow event:', JSON.stringify(event, null, 2));
+  console.log('Get workflow event:', JSON.stringify({ httpMethod: event.httpMethod, path: event.path, pathParameters: event.pathParameters }, null, 2));
 
   try {
     const workflowId = event.pathParameters?.workflowId;

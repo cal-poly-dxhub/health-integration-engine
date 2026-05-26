@@ -24,7 +24,7 @@ export const handler = async (
   event: APIGatewayProxyEvent | any
 ): Promise<APIGatewayProxyResult | any> => {
   console.log('DELETE WORKFLOW HANDLER INVOKED');
-  console.log('Event received:', JSON.stringify(event, null, 2));
+  console.log('Event received:', JSON.stringify({ httpMethod: event.httpMethod, path: event.path, pathParameters: event.pathParameters }, null, 2));
 
   // Check if this is a Step Functions action call
   if (event.action) {

@@ -6,7 +6,6 @@ import { CloudFormationDeployer } from './cloudFormationDeployer';
 import { CloudFormationTemplateGenerator } from './cloudFormationTemplateGenerator';
 import { CloudFormationStackManager } from './cloudFormationStackManager';
 import { Workflow } from '../types/workflow';
-// import { WebSocketNotificationService } from './webSocketNotificationService';
 
 export class DeploymentOrchestrator {
   /**
@@ -44,18 +43,11 @@ export class DeploymentOrchestrator {
     console.log('ORCHESTRATOR: Starting enhanced CloudFormation deployment with update functionality');
     
     // Initialize services
-    const webSocketService = null; // WebSocketNotificationService.create();
     const stackManager = new CloudFormationStackManager();
 
     try {
       // Send initial deployment update
-      if (webSocketService) {
-        await webSocketService.notifyDeploymentUpdate(deploymentContext.deploymentId, {
-          status: 'IN_PROGRESS',
-          message: 'Starting CloudFormation deployment with update functionality...',
-          timestamp: new Date().toISOString(),
-        });
-      }
+      // WebSocket notifications handled by EventBridge
 
       // Step 1: Validate workflow update behavior
       console.log('ORCHESTRATOR: Validating workflow update behavior...');
@@ -114,20 +106,7 @@ export class DeploymentOrchestrator {
       }
 
       // Send completion update
-      if (webSocketService) {
-        await webSocketService.notifyDeploymentUpdate(deploymentContext.deploymentId, {
-          status: 'COMPLETED',
-          message: updateValidation.stackExists ? 
-            'CloudFormation stack updated successfully!' : 
-            'CloudFormation stack created successfully!',
-          timestamp: new Date().toISOString(),
-          details: {
-            ...result,
-            updateType: updateValidation.stackExists ? 'UPDATE' : 'CREATE',
-            driftReconciled: driftAnalysis?.reconciliationNeeded || false,
-          },
-        });
-      }
+      // WebSocket notifications handled by EventBridge
 
       console.log('ORCHESTRATOR: Enhanced CloudFormation deployment completed successfully');
       return result;
@@ -136,14 +115,7 @@ export class DeploymentOrchestrator {
       console.error('ORCHESTRATOR: Enhanced CloudFormation deployment failed:', error);
 
       // Send failure update via WebSocket
-      if (webSocketService) {
-        await webSocketService.notifyDeploymentUpdate(deploymentContext.deploymentId, {
-          status: 'FAILED',
-          message: `CloudFormation deployment failed: ${error instanceof Error ? error.message : 'Unknown error'}`,
-          timestamp: new Date().toISOString(),
-          details: error,
-        });
-      }
+      // WebSocket notifications handled by EventBridge
 
       const failedStatus: DeploymentStatus = {
         deploymentId: deploymentContext.deploymentId,

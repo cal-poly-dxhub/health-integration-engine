@@ -73,12 +73,7 @@ export function createAuthErrorResponse(message: string = 'Authentication requir
 } {
   return {
     statusCode: 401,
-    headers: {
-      'Content-Type': 'application/json',
-      'Access-Control-Allow-Origin': '*',
-      'Access-Control-Allow-Headers': 'Content-Type,Authorization',
-      'Access-Control-Allow-Methods': 'GET,POST,PUT,DELETE,OPTIONS',
-    },
+    headers: getCorsHeaders(),
     body: JSON.stringify({
       error: 'Unauthorized',
       message
@@ -90,9 +85,17 @@ export function createAuthErrorResponse(message: string = 'Authentication requir
  * Create standardized success response headers
  */
 export function createSuccessHeaders(): Record<string, string> {
+  return getCorsHeaders();
+}
+
+/**
+ * Get CORS headers using the configured allowed origin
+ */
+function getCorsHeaders(): Record<string, string> {
+  const allowedOrigin = process.env.ALLOWED_ORIGIN || 'http://localhost:3000';
   return {
     'Content-Type': 'application/json',
-    'Access-Control-Allow-Origin': '*',
+    'Access-Control-Allow-Origin': allowedOrigin,
     'Access-Control-Allow-Headers': 'Content-Type,Authorization',
     'Access-Control-Allow-Methods': 'GET,POST,PUT,DELETE,OPTIONS',
   };

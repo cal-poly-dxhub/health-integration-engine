@@ -3,7 +3,20 @@ param(
     [string]$Region = ""
 )
 
+function Assert-ExitCode {
+    param([string]$CommandName)
+    # Checks if the last executed command returned a failing exit code
+    if ($LASTEXITCODE -ne 0 -and $LASTEXITCODE -ne $null) {
+        Write-Error "❌ Error: '$CommandName' failed with exit code $LASTEXITCODE."
+        exit $LASTEXITCODE
+    }
+}
+
+
 $ErrorActionPreference = "Stop"
+
+# Give Node.js 4GB of RAM to prevent CDK Out-Of-Memory crashes
+$env:NODE_OPTIONS = "--max-old-space-size=4096"
 
 $RootDir = (Resolve-Path "$PSScriptRoot\..").Path
 

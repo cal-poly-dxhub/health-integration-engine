@@ -18,7 +18,7 @@ interface DeploymentHistoryResponse {
  */
 export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayProxyResult> => {
   try {
-    console.log('Get deployment history event:', JSON.stringify(event, null, 2));
+    console.log('Get deployment history event:', JSON.stringify({ httpMethod: event.httpMethod, path: event.path, pathParameters: event.pathParameters }, null, 2));
 
     // Validate authentication
     const userId = extractUserIdFromEvent(event);

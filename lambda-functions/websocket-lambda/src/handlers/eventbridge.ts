@@ -26,7 +26,7 @@ interface StepFunctionStateChangeEvent {
  * Following AWS sample pattern: https://github.com/aws-samples/aws-step-functions-progress-tracking
  */
 export const handler = async (event: EventBridgeEvent<string, any>): Promise<void> => {
-  console.log('EventBridge event received:', JSON.stringify(event, null, 2));
+  console.log('EventBridge event received:', JSON.stringify({ source: event.source, detailType: event['detail-type'], id: event.id }, null, 2));
 
   try {
     const { source, detail } = event;

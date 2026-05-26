@@ -7,23 +7,19 @@ const docClient = DynamoDBDocumentClient.from(dynamoClient);
 
 /**
  * WebSocket connect handler - simplified following AWS sample pattern
- * Stores connection ID in DynamoDB for later message broadcasting
+ * Stores connection ID in DynamoDB for later message broadcasting.
+ * The userId is extracted from the authorizer context (validated JWT).
  */
 export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayProxyResult> => {
-  console.log('WebSocket Connect:', JSON.stringify(event, null, 2));
-  
   const connectionId = event.requestContext.connectionId!;
   const tableName = process.env.CONNECTIONS_TABLE_NAME!;
   
   try {
-    console.log(`New WebSocket connection: ${connectionId}`);
-    
-    // Extract query parameters for deployment and user context
+    // Extract query parameters for deployment context
     const queryParams = event.queryStringParameters || {};
     const deploymentId = queryParams.deploymentId;
-    const userId = queryParams.userId;
-    
-    console.log('Connection parameters:', { connectionId, deploymentId, userId });
+    // userId comes from the authorizer (validated JWT), not raw query params
+    const userId = (event.requestContext.authorizer as any)?.userId || queryParams.userId;
     
     // Store connection in DynamoDB with deployment context
     const connectionData: any = {
@@ -32,7 +28,6 @@ export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayPr
       ttl: Math.floor(Date.now() / 1000) + (24 * 60 * 60), // 24 hours TTL
     };
     
-    // Add optional fields if provided
     if (deploymentId) {
       connectionData.deploymentId = deploymentId;
     }
@@ -45,19 +40,9 @@ export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayPr
       Item: connectionData,
     }));
     
-    console.log(`Connection ${connectionId} stored successfully with deployment context:`, {
-      deploymentId,
-      userId
-    });
-    
     return {
       statusCode: 200,
-      body: JSON.stringify({ 
-        message: 'Connected successfully',
-        connectionId,
-        deploymentId,
-        userId
-      }),
+      body: JSON.stringify({ message: 'Connected' }),
     };
   } catch (error) {
     console.error('Error storing connection:', error);

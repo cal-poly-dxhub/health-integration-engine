@@ -6,7 +6,7 @@ import { CloudFormationStackManager } from '../services/cloudFormationStackManag
  */
 export const handler = async (event: any) => {
   console.log('DELETE CLOUDFORMATION STACK HANDLER INVOKED');
-  console.log('Event received:', JSON.stringify(event, null, 2));
+  console.log('Event received:', JSON.stringify({ workflowId: event.workflowId, stackName: event.stackName }, null, 2));
 
   const { workflowId, userId } = event;
 

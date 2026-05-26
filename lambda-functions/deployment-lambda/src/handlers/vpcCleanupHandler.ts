@@ -43,7 +43,7 @@ import { paginateDescribeNetworkInterfaces } from '@aws-sdk/client-ec2';
 const HANDLER_DEADLINE_MS = 14 * 60 * 1000; // 14 min; Lambda timeout is 15 min
 
 export const handler = async (event: any): Promise<{ PhysicalResourceId: string }> => {
-  console.log('VPC CLEANUP: event', JSON.stringify(event));
+  console.log('VPC CLEANUP: event', JSON.stringify({ vpcId: event.vpcId, region: event.region }));
   const physicalResourceId = event.PhysicalResourceId || 'vpc-cleanup';
 
   if (event.RequestType !== 'Delete') {

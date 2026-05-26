@@ -48,8 +48,16 @@ export class WebSocketService {
   private stepListeners: Map<string, Set<(update: DeploymentStepUpdate) => void>> = new Map();
   private deletionListeners: Map<string, Set<(update: any) => void>> = new Map();
   private connectionPromise: Promise<void> | null = null;
+  private authToken: string | null = null;
 
   constructor(private webSocketUrl: string) {}
+
+  /**
+   * Set the auth token for WebSocket connection authentication
+   */
+  setAuthToken(token: string): void {
+    this.authToken = token;
+  }
 
   /**
    * Connect to WebSocket - simplified approach following AWS sample
@@ -73,6 +81,10 @@ export class WebSocketService {
         let wsUrl = this.webSocketUrl;
         const params = new URLSearchParams();
         
+        // Include auth token for WebSocket authorizer
+        if (this.authToken) {
+          params.append('token', this.authToken);
+        }
         if (deploymentId) {
           params.append('deploymentId', deploymentId);
         }
@@ -423,8 +435,20 @@ export const getWebSocketService = (): WebSocketService | null => {
       return null;
     }
     webSocketService = new WebSocketService(webSocketUrl);
-    
-    // Don't auto-connect here - let the subscription handle connection with proper context
   }
+
+  // Update auth token from stored tokens on each access
+  try {
+    const storedTokens = localStorage.getItem('auth_tokens');
+    if (storedTokens) {
+      const tokens = JSON.parse(storedTokens);
+      if (tokens.idToken) {
+        webSocketService.setAuthToken(tokens.idToken);
+      }
+    }
+  } catch {
+    // Token not available yet - connection will fail at authorizer
+  }
+
   return webSocketService;
 };

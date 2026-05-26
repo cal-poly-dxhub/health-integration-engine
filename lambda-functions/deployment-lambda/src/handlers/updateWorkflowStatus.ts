@@ -1,10 +1,8 @@
 import { DynamoDBClient } from '@aws-sdk/client-dynamodb';
 import { DynamoDBDocumentClient, UpdateCommand } from '@aws-sdk/lib-dynamodb';
-import { WebSocketNotificationService } from '../services/webSocketNotificationService';
 
 const dynamoClient = new DynamoDBClient({ region: process.env.AWS_REGION });
 const docClient = DynamoDBDocumentClient.from(dynamoClient);
-const webSocketService = WebSocketNotificationService.create();
 
 const WORKFLOWS_TABLE = process.env.WORKFLOWS_TABLE || 'WorkflowBuilder-Workflows';
 
@@ -31,7 +29,7 @@ export interface WorkflowStatusUpdateResult {
  * Called by Step Functions deployment and deletion workflows
  */
 export const handler = async (event: WorkflowStatusUpdateEvent): Promise<WorkflowStatusUpdateResult> => {
-  console.log('Updating workflow status:', JSON.stringify(event, null, 2));
+  console.log('Updating workflow status:', JSON.stringify({ workflowId: event.workflowId, status: event.status }, null, 2));
 
   try {
     const { workflowId, userId, status, stateMachineArn, stackName, errorMessage, message, timestamp } = event;
@@ -176,16 +174,8 @@ async function sendWebSocketNotification(
         notificationMessage = message || `Workflow status updated to ${status}`;
     }
 
-    // Send WebSocket notification
-    await webSocketService.sendDeletionUpdate(userId, {
-      type: notificationType,
-      workflowId,
-      status,
-      message: notificationMessage,
-      timestamp: new Date().toISOString(),
-    });
-
-    console.log('WebSocket notification sent successfully');
+    // WebSocket notifications are handled by EventBridge -> eventbridge handler
+    console.log('Workflow status update notification:', { type: notificationType, workflowId, status });
   } catch (error) {
     console.error('Failed to send WebSocket notification:', error);
     // Don't throw - WebSocket notifications are non-critical

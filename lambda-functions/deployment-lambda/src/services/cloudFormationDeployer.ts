@@ -216,27 +216,7 @@ export class CloudFormationDeployer {
     step.status = 'in_progress';
     step.startTime = new Date().toISOString();
     
-    // Send WebSocket notification for step start
-    try {
-      const { WebSocketNotificationService } = await import('./webSocketNotificationService');
-      const wsService = WebSocketNotificationService.create();
-      await wsService.notifyDeploymentStepUpdate(deploymentStatus.deploymentId, {
-        stepId: step.id,
-        stepName: step.name,
-        status: 'in_progress',
-        startTime: step.startTime,
-        allSteps: deploymentStatus.steps.map(s => ({
-          id: s.id,
-          name: s.name,
-          status: s.status,
-          startTime: s.startTime,
-          endTime: s.endTime,
-          duration: s.duration,
-        })),
-      });
-    } catch (wsError) {
-      console.log('WebSocket notification failed (non-critical):', wsError);
-    }
+    // Step progress is tracked via EventBridge -> WebSocket handler
     
     await updateStatus({ 
       steps: deploymentStatus.steps,
@@ -250,30 +230,6 @@ export class CloudFormationDeployer {
       step.status = 'completed';
       step.endTime = new Date().toISOString();
       step.duration = new Date(step.endTime).getTime() - new Date(step.startTime!).getTime();
-      
-      // Send WebSocket notification for step completion
-      try {
-        const { WebSocketNotificationService } = await import('./webSocketNotificationService');
-        const wsService = WebSocketNotificationService.create();
-        await wsService.notifyDeploymentStepUpdate(deploymentStatus.deploymentId, {
-          stepId: step.id,
-          stepName: step.name,
-          status: 'completed',
-          startTime: step.startTime,
-          endTime: step.endTime,
-          duration: step.duration,
-          allSteps: deploymentStatus.steps.map(s => ({
-            id: s.id,
-            name: s.name,
-            status: s.status,
-            startTime: s.startTime,
-            endTime: s.endTime,
-            duration: s.duration,
-          })),
-        });
-      } catch (wsError) {
-        console.log('WebSocket notification failed (non-critical):', wsError);
-      }
       
       await updateStatus({ 
         steps: deploymentStatus.steps,
@@ -291,32 +247,6 @@ export class CloudFormationDeployer {
         message: error instanceof Error ? error.message : 'Unknown step error',
         details: error,
       };
-      
-      // Send WebSocket notification for step failure
-      try {
-        const { WebSocketNotificationService } = await import('./webSocketNotificationService');
-        const wsService = WebSocketNotificationService.create();
-        await wsService.notifyDeploymentStepUpdate(deploymentStatus.deploymentId, {
-          stepId: step.id,
-          stepName: step.name,
-          status: 'failed',
-          startTime: step.startTime,
-          endTime: step.endTime,
-          duration: step.duration,
-          error: step.error,
-          allSteps: deploymentStatus.steps.map(s => ({
-            id: s.id,
-            name: s.name,
-            status: s.status,
-            startTime: s.startTime,
-            endTime: s.endTime,
-            duration: s.duration,
-            error: s.error,
-          })),
-        });
-      } catch (wsError) {
-        console.log('WebSocket notification failed (non-critical):', wsError);
-      }
       
       await updateStatus({ 
         steps: deploymentStatus.steps,
@@ -1024,7 +954,7 @@ export class CloudFormationDeployer {
     error?: any;
   }): Promise<void> {
     try {
-      console.log('Update deployment status event:', JSON.stringify(event, null, 2));
+      console.log('Update deployment status event:', JSON.stringify({ deploymentId: event.deploymentId, status: event.status }, null, 2));
       
       // Import and call the updateDeploymentStatus handler directly
       const { handler: updateDeploymentStatusHandler } = await import('../handlers/updateDeploymentStatus');

@@ -10,7 +10,7 @@ const docClient = DynamoDBDocumentClient.from(dynamoClient);
  * Removes connection from DynamoDB when client disconnects
  */
 export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayProxyResult> => {
-  console.log('WebSocket Disconnect:', JSON.stringify(event, null, 2));
+  console.log('WebSocket Disconnect:', event.requestContext.connectionId);
   
   const connectionId = event.requestContext.connectionId!;
   const tableName = process.env.CONNECTIONS_TABLE_NAME!;

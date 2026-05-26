@@ -8,7 +8,7 @@ const tagName = (tags?: Tag[]): string => tags?.find(t => t.Key === 'Name')?.Val
 export const handler = async (
   _event: APIGatewayProxyEvent
 ): Promise<APIGatewayProxyResult> => {
-  const headers = { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' };
+  const headers = { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': process.env.ALLOWED_ORIGIN || 'http://localhost:3000' };
 
   try {
     const [vpcsRes, subnetsRes, sgsRes] = await Promise.all([

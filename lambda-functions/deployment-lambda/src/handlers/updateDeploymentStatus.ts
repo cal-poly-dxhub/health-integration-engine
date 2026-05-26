@@ -16,7 +16,7 @@ const WORKFLOWS_TABLE = process.env.WORKFLOWS_TABLE || 'WorkflowBuilder-Workflow
  */
 export const handler = async (event: any): Promise<any> => {
   console.log('UPDATE DEPLOYMENT STATUS HANDLER INVOKED');
-  console.log('Event received:', JSON.stringify(event, null, 2));
+  console.log('Event received:', JSON.stringify({ deploymentId: event.deploymentId, status: event.status }, null, 2));
   console.log('Environment variables:', {
     DEPLOYMENTS_TABLE: process.env.DEPLOYMENTS_TABLE,
     WORKFLOWS_TABLE: process.env.WORKFLOWS_TABLE,

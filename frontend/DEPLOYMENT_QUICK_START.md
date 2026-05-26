@@ -23,13 +23,13 @@ This uses a simpler CloudFront setup without OAI complications.
 ### Option 4: Using Different AWS Profile/Region
 ```bash
 # Windows CMD
-set AWS_PROFILE=mr && set AWS_REGION=us-east-1 && npm run deploy:s3-simple
+set AWS_PROFILE=my-profile && set AWS_REGION=us-east-1 && npm run deploy:s3-simple
 
 # PowerShell
-$env:AWS_PROFILE="mr"; $env:AWS_REGION="us-east-1"; npm run deploy:s3-simple
+$env:AWS_PROFILE="my-profile"; $env:AWS_REGION="us-east-1"; npm run deploy:s3-simple
 
 # Or set them separately
-set AWS_PROFILE=mr
+set AWS_PROFILE=my-profile
 set AWS_REGION=us-east-1
 npm run deploy:s3-simple
 ```

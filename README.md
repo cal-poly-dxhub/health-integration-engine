@@ -123,6 +123,14 @@ Workflows often need external libraries (`pandas`, `requests`, custom utilities,
    ```
 5. **AWS CLI** — [Installation Guide](https://docs.aws.amazon.com/cli/latest/userguide/getting-started-install.html)
 6. **Git** — [Download here](https://git-scm.com/)
+7. **Python 3** with **PyYAML** — Required by the deploy script to parse `config.yaml`:
+   ```bash
+   pip install pyyaml
+   ```
+8. **jq** — Required by the deploy script to parse CDK outputs:
+   - macOS: `brew install jq`
+   - Ubuntu/Debian: `sudo apt-get install jq`
+   - Windows: [Download here](https://jqlang.github.io/jq/download/)
 
 ## AWS Configuration
 

@@ -2,6 +2,7 @@ import * as cdk from 'aws-cdk-lib';
 import * as apigateway from 'aws-cdk-lib/aws-apigateway';
 import * as apigatewayv2 from 'aws-cdk-lib/aws-apigatewayv2';
 import * as apigatewayv2Integrations from 'aws-cdk-lib/aws-apigatewayv2-integrations';
+import * as apigatewayv2Authorizers from 'aws-cdk-lib/aws-apigatewayv2-authorizers';
 import * as cognito from 'aws-cdk-lib/aws-cognito';
 import * as dynamodb from 'aws-cdk-lib/aws-dynamodb';
 import * as ec2 from 'aws-cdk-lib/aws-ec2';
@@ -32,6 +33,11 @@ export class WorkflowBuilderStack extends cdk.Stack {
   private readonly vpcConfigEnv: Record<string, string>;
   private readonly resolvedSubnetIds: string[];
   private readonly resolvedSecurityGroupIds: string[];
+  // Explicit IAM role for the OpenSearch search Lambda. Created in
+  // createOpenSearchServerlessCollection() so its ARN can be granted
+  // narrow read-only access in the AOSS data access policy. Consumed when
+  // the search Lambda function is constructed alongside the API Gateway.
+  private opensearchSearchLambdaRole?: iam.Role;
 
   constructor(scope: Construct, id: string, props?: cdk.StackProps) {
     super(scope, id, props);
@@ -97,6 +103,11 @@ export class WorkflowBuilderStack extends cdk.Stack {
       this.vpcConfigEnv = { VPC_CONFIG: JSON.stringify({ mode: 'none' }) };
     }
 
+    // Create Frontend Hosting (S3 + CloudFront) - needed for CORS origin configuration
+    this.frontendHosting = new FrontendHosting(this, 'FrontendHosting', {
+      environment: this.config.environment,
+    });
+
     // Create API Gateway first (needed for Identity Pool permissions)
     this.api = this.createApiGateway();
     
@@ -111,19 +122,14 @@ export class WorkflowBuilderStack extends cdk.Stack {
     
     // Cognito authorizer will be created lazily when needed
     
-    // Set up CORS configuration
-    this.setupCorsConfiguration();
-    
     // Create deployment endpoints
     this.createDeploymentEndpoints();
     
     // Create WebSocket API for real-time deployment updates
     this.createWebSocketApi();
     
-    // Create Frontend Hosting (S3 + CloudFront)
-    this.frontendHosting = new FrontendHosting(this, 'FrontendHosting', {
-      environment: this.config.environment,
-    });
+    // Set up CORS configuration (must be after frontendHosting is created)
+    this.setupCorsConfiguration();
     
     // Output important values
     this.createOutputs();
@@ -276,7 +282,7 @@ export class WorkflowBuilderStack extends cdk.Stack {
                 'cognito-identity:GetCredentialsForIdentity',
                 'cognito-identity:GetId',
               ],
-              resources: ['*'],
+              resources: ['*'], // Cognito Identity actions do not support resource-level permissions
             }),
             new iam.PolicyStatement({
               effect: iam.Effect.ALLOW,
@@ -360,7 +366,10 @@ export class WorkflowBuilderStack extends cdk.Stack {
         }),
       },
       defaultCorsPreflightOptions: {
-        allowOrigins: apigateway.Cors.ALL_ORIGINS, // Restrict in production
+        allowOrigins: [
+          `https://${this.frontendHosting.distribution.distributionDomainName}`,
+          'http://localhost:3000',
+        ],
         allowMethods: apigateway.Cors.ALL_METHODS,
         allowHeaders: [
           'Content-Type',
@@ -382,11 +391,13 @@ export class WorkflowBuilderStack extends cdk.Stack {
     // CORS is already configured in the API Gateway creation
     // Additional CORS configuration can be added here if needed
     
+    const allowedOrigin = `https://${this.frontendHosting.distribution.distributionDomainName}`;
+
     // Add a gateway response for CORS on 4xx errors
     this.api.addGatewayResponse('Default4xxResponse', {
       type: apigateway.ResponseType.DEFAULT_4XX,
       responseHeaders: {
-        'Access-Control-Allow-Origin': "'*'",
+        'Access-Control-Allow-Origin': `'${allowedOrigin}'`,
         'Access-Control-Allow-Headers': "'Content-Type,X-Amz-Date,Authorization,X-Api-Key,X-Amz-Security-Token'",
         'Access-Control-Allow-Methods': "'GET,POST,PUT,DELETE,OPTIONS'",
       },
@@ -396,7 +407,7 @@ export class WorkflowBuilderStack extends cdk.Stack {
     this.api.addGatewayResponse('Default5xxResponse', {
       type: apigateway.ResponseType.DEFAULT_5XX,
       responseHeaders: {
-        'Access-Control-Allow-Origin': "'*'",
+        'Access-Control-Allow-Origin': `'${allowedOrigin}'`,
         'Access-Control-Allow-Headers': "'Content-Type,X-Amz-Date,Authorization,X-Api-Key,X-Amz-Security-Token'",
         'Access-Control-Allow-Methods': "'GET,POST,PUT,DELETE,OPTIONS'",
       },
@@ -453,7 +464,10 @@ export class WorkflowBuilderStack extends cdk.Stack {
       cors: [
         {
           allowedMethods: [s3.HttpMethods.PUT],
-          allowedOrigins: ['*'],
+          allowedOrigins: [
+            `https://${this.frontendHosting.distribution.distributionDomainName}`,
+            'http://localhost:3000',
+          ],
           allowedHeaders: ['*'],
           exposedHeaders: ['ETag'],
           maxAge: 3000,
@@ -550,7 +564,7 @@ export class WorkflowBuilderStack extends cdk.Stack {
           's3:GetBucketNotification',
           's3:PutBucketNotification',
         ],
-        resources: ['*'],
+        resources: [`arn:aws:s3:::workflow-*`],
       })
     );
 
@@ -577,11 +591,11 @@ export class WorkflowBuilderStack extends cdk.Stack {
     );
 
     // Grant permissions for CloudFormation to create resources on our behalf
+    // Split into separate statements for proper resource scoping
     deploymentLambda.addToRolePolicy(
       new iam.PolicyStatement({
         effect: iam.Effect.ALLOW,
         actions: [
-          // IAM permissions for CloudFormation to create roles
           'iam:CreateRole',
           'iam:GetRole',
           'iam:DeleteRole',
@@ -592,21 +606,62 @@ export class WorkflowBuilderStack extends cdk.Stack {
           'iam:PassRole',
           'iam:TagRole',
           'iam:UntagRole',
-          // Step Functions permissions
+        ],
+        resources: [
+          `arn:aws:iam::${this.account}:role/SF-Role-*`,
+          `arn:aws:iam::${this.account}:role/Lambda-Role-*`,
+          `arn:aws:iam::${this.account}:role/Lambda-*-Role-*`,
+          `arn:aws:iam::${this.account}:role/StepFunction-*`,
+          `arn:aws:iam::${this.account}:role/workflow-*`,
+          `arn:aws:iam::${this.account}:role/*-workflow-*`,
+        ],
+      })
+    );
+
+    deploymentLambda.addToRolePolicy(
+      new iam.PolicyStatement({
+        effect: iam.Effect.ALLOW,
+        actions: [
           'states:CreateStateMachine',
           'states:UpdateStateMachine',
           'states:DeleteStateMachine',
           'states:DescribeStateMachine',
           'states:TagResource',
           'states:UntagResource',
-          // CloudWatch Logs permissions
+        ],
+        resources: [
+          `arn:aws:states:${this.region}:${this.account}:stateMachine:SF-*`,
+          `arn:aws:states:${this.region}:${this.account}:stateMachine:workflow-*`,
+        ],
+      })
+    );
+
+    deploymentLambda.addToRolePolicy(
+      new iam.PolicyStatement({
+        effect: iam.Effect.ALLOW,
+        actions: [
           'logs:CreateLogGroup',
           'logs:DeleteLogGroup',
           'logs:DescribeLogGroups',
           'logs:TagLogGroup',
           'logs:UntagLogGroup',
           'logs:PutRetentionPolicy',
-          // Lambda permissions for CloudFormation to create Lambda functions
+        ],
+        resources: [
+          `arn:aws:logs:${this.region}:${this.account}:log-group:/aws/lambda/*`,
+          `arn:aws:logs:${this.region}:${this.account}:log-group:/aws/stepfunctions/*`,
+        ],
+      })
+    );
+
+    // Scope Lambda mutations to functions whose names start with `workflow-`
+    // (the prefix used by the deployment pipeline; see saveWorkflow.ts and
+    // cloudFormationTemplateGenerator.ts). `lambda:GetLayerVersion` covers
+    // any layer the user references, so layer ARNs remain unscoped.
+    deploymentLambda.addToRolePolicy(
+      new iam.PolicyStatement({
+        effect: iam.Effect.ALLOW,
+        actions: [
           'lambda:CreateFunction',
           'lambda:UpdateFunctionCode',
           'lambda:UpdateFunctionConfiguration',
@@ -615,50 +670,34 @@ export class WorkflowBuilderStack extends cdk.Stack {
           'lambda:GetLayerVersion',
           'lambda:TagResource',
           'lambda:UntagResource',
-          // EC2/VPC permissions for CloudFormation to create VPC resources and attach Lambdas to VPCs
-          'ec2:CreateVpc',
-          'ec2:DeleteVpc',
-          'ec2:DescribeVpcs',
-          'ec2:ModifyVpcAttribute',
-          'ec2:CreateSubnet',
-          'ec2:DeleteSubnet',
-          'ec2:DescribeSubnets',
-          'ec2:ModifySubnetAttribute',
-          'ec2:CreateSecurityGroup',
-          'ec2:DeleteSecurityGroup',
-          'ec2:DescribeSecurityGroups',
-          'ec2:AuthorizeSecurityGroupEgress',
-          'ec2:RevokeSecurityGroupEgress',
-          'ec2:CreateInternetGateway',
-          'ec2:DeleteInternetGateway',
-          'ec2:AttachInternetGateway',
-          'ec2:DetachInternetGateway',
-          'ec2:DescribeInternetGateways',
-          'ec2:AllocateAddress',
-          'ec2:ReleaseAddress',
-          'ec2:DescribeAddresses',
-          'ec2:CreateNatGateway',
-          'ec2:DeleteNatGateway',
-          'ec2:DescribeNatGateways',
-          'ec2:CreateRouteTable',
-          'ec2:DeleteRouteTable',
-          'ec2:DescribeRouteTables',
-          'ec2:CreateRoute',
-          'ec2:DeleteRoute',
-          'ec2:AssociateRouteTable',
-          'ec2:DisassociateRouteTable',
-          'ec2:DescribeAvailabilityZones',
-          'ec2:CreateNetworkInterface',
-          'ec2:DeleteNetworkInterface',
-          'ec2:DescribeNetworkInterfaces',
-          'ec2:CreateTags',
-          'ec2:DeleteTags',
-          'ec2:DescribeVpcGatewayAttachments',
         ],
         resources: [
-          '*', // CloudFormation needs broad permissions to create resources
-          `arn:aws:iam::${this.account}:role/SF-Role-*`, // For Step Functions roles created by direct deployment
-        ]
+          `arn:aws:lambda:${this.region}:${this.account}:function:workflow-*`,
+          `arn:aws:lambda:${this.region}:${this.account}:layer:*:*`,
+        ],
+      })
+    );
+
+    // EC2 permissions actually used at runtime by the deployment Lambda:
+    // vpcCleanupHandler.ts calls DescribeNetworkInterfaces and
+    // DeleteNetworkInterface to drain Lambda Hyperplane ENIs before VPC
+    // deletion. CloudFormation templates created by this project do not
+    // provision any EC2 resources, so VPC/Subnet/SG/IGW/NAT/RouteTable/EIP
+    // mutations are not required. Describe* actions do not support
+    // resource-level permissions; DeleteNetworkInterface is left unscoped
+    // because Hyperplane ENIs are created by the Lambda service and are
+    // not tagged by this project.
+    deploymentLambda.addToRolePolicy(
+      new iam.PolicyStatement({
+        effect: iam.Effect.ALLOW,
+        actions: [
+          'ec2:DescribeNetworkInterfaces',
+          'ec2:DescribeSubnets',
+          'ec2:DescribeSecurityGroups',
+          'ec2:DescribeVpcs',
+          'ec2:DeleteNetworkInterface',
+        ],
+        resources: ['*'],
       })
     );
 
@@ -770,7 +809,8 @@ export class WorkflowBuilderStack extends cdk.Stack {
           `arn:aws:iam::${this.account}:role/*-workflow-*`,
           // Additional patterns for generated role names
           `arn:aws:iam::${this.account}:role/Lambda-*-Role-*`,
-          `arn:aws:iam::${this.account}:role/*Role*`,
+          `arn:aws:iam::${this.account}:role/EventBridge-SF-Role-*`,
+          `arn:aws:iam::${this.account}:role/OpenSearch-Lambda-Role-*`,
           // CloudWatch Logs
           `arn:aws:logs:${this.region}:${this.account}:log-group:/aws/lambda/*`,
           `arn:aws:logs:${this.region}:${this.account}:log-group:/aws/stepfunctions/*`,
@@ -970,12 +1010,12 @@ export class WorkflowBuilderStack extends cdk.Stack {
       }
     );
     
-    // Grant IAM list permissions
+    // Grant IAM list permissions (ListRoles does not support resource-level permissions)
     iamRolesLambda.addToRolePolicy(
       new iam.PolicyStatement({
         effect: iam.Effect.ALLOW,
         actions: ['iam:ListRoles', 'tag:GetResources'],
-        resources: ['*'],
+        resources: ['*'], // List operations do not support resource-level permissions
       })
     );
     
@@ -997,7 +1037,7 @@ export class WorkflowBuilderStack extends cdk.Stack {
       new iam.PolicyStatement({
         effect: iam.Effect.ALLOW,
         actions: ['ec2:DescribeVpcs', 'ec2:DescribeSubnets', 'ec2:DescribeSecurityGroups'],
-        resources: ['*'],
+        resources: ['*'], // EC2 Describe actions do not support resource-level permissions
       })
     );
 
@@ -1036,7 +1076,11 @@ export class WorkflowBuilderStack extends cdk.Stack {
           'lambda:ListTags',
           'lambda:UpdateFunctionConfiguration',
         ],
-        resources: ['*'],
+        resources: [
+          `arn:aws:lambda:${this.region}:${this.account}:function:*`,
+          `arn:aws:lambda:${this.region}:${this.account}:layer:*`,
+          `arn:aws:lambda:${this.region}:${this.account}:layer:*:*`,
+        ],
       })
     );
 
@@ -1057,9 +1101,13 @@ export class WorkflowBuilderStack extends cdk.Stack {
       code: lambda.Code.fromInline(this.getOpenSearchSearchCode()),
       timeout: cdk.Duration.seconds(30),
       memorySize: 256,
+      // Use the explicit role created in createOpenSearchServerlessCollection()
+      // so the AOSS data access policy principal matches by exact ARN.
+      role: this.opensearchSearchLambdaRole,
       ...this.lambdaVpcProps,
       environment: {
         OPENSEARCH_ENDPOINT: opensearchCollection.attrCollectionEndpoint,
+        ALLOWED_ORIGIN: `https://${this.frontendHosting.distribution.distributionDomainName}`,
       },
     });
     
@@ -1068,7 +1116,7 @@ export class WorkflowBuilderStack extends cdk.Stack {
       new iam.PolicyStatement({
         effect: iam.Effect.ALLOW,
         actions: ['aoss:APIAccessAll'],
-        resources: ['*'],
+        resources: [opensearchCollection.attrArn],
       })
     );
     
@@ -1194,7 +1242,8 @@ export class WorkflowBuilderStack extends cdk.Stack {
           `arn:aws:iam::${this.account}:role/*-workflow-*`,
           // Additional patterns for generated role names
           `arn:aws:iam::${this.account}:role/Lambda-*-Role-*`,
-          `arn:aws:iam::${this.account}:role/*Role*`,
+          `arn:aws:iam::${this.account}:role/EventBridge-SF-Role-*`,
+          `arn:aws:iam::${this.account}:role/OpenSearch-Lambda-Role-*`,
           // CloudWatch Logs
           `arn:aws:logs:${this.region}:${this.account}:log-group:/aws/lambda/*`,
           `arn:aws:logs:${this.region}:${this.account}:log-group:/aws/stepfunctions/*`,
@@ -1292,7 +1341,7 @@ export class WorkflowBuilderStack extends cdk.Stack {
       inlinePolicies: {
         StepFunctionsExecutionPolicy: new iam.PolicyDocument({
           statements: [
-            // Lambda invoke permissions
+            // Lambda invoke permissions - scoped to this account's functions
             new iam.PolicyStatement({
               effect: iam.Effect.ALLOW,
               actions: [
@@ -1307,9 +1356,12 @@ export class WorkflowBuilderStack extends cdk.Stack {
                 'lambda:TagResource',
                 'lambda:UntagResource',
               ],
-              resources: ['*'],
+              resources: [
+                `arn:aws:lambda:${this.region}:${this.account}:function:*`,
+                `arn:aws:lambda:${this.region}:${this.account}:layer:*:*`,
+              ],
             }),
-            // CloudFormation permissions
+            // CloudFormation permissions - scoped to workflow stacks
             new iam.PolicyStatement({
               effect: iam.Effect.ALLOW,
               actions: [
@@ -1323,9 +1375,11 @@ export class WorkflowBuilderStack extends cdk.Stack {
                 'cloudformation:ListStacks',
                 'cloudformation:ValidateTemplate',
               ],
-              resources: ['*'],
+              resources: [
+                `arn:aws:cloudformation:${this.region}:${this.account}:stack/workflow-*/*`,
+              ],
             }),
-            // IAM permissions for CloudFormation to create roles and policies
+            // IAM permissions - scoped to workflow-generated role name patterns
             new iam.PolicyStatement({
               effect: iam.Effect.ALLOW,
               actions: [
@@ -1343,9 +1397,16 @@ export class WorkflowBuilderStack extends cdk.Stack {
                 'iam:UntagRole',
                 'iam:UpdateAssumeRolePolicy',
               ],
-              resources: ['*'],
+              resources: [
+                `arn:aws:iam::${this.account}:role/SF-Role-*`,
+                `arn:aws:iam::${this.account}:role/Lambda-Role-*`,
+                `arn:aws:iam::${this.account}:role/Lambda-*-Role-*`,
+                `arn:aws:iam::${this.account}:role/StepFunction-*`,
+                `arn:aws:iam::${this.account}:role/workflow-*`,
+                `arn:aws:iam::${this.account}:role/*-workflow-*`,
+              ],
             }),
-            // Step Functions permissions for CloudFormation to create state machines
+            // Step Functions permissions - scoped to workflow state machines
             new iam.PolicyStatement({
               effect: iam.Effect.ALLOW,
               actions: [
@@ -1363,9 +1424,12 @@ export class WorkflowBuilderStack extends cdk.Stack {
                 'states:TagResource',
                 'states:UntagResource',
               ],
-              resources: ['*'],
+              resources: [
+                `arn:aws:states:${this.region}:${this.account}:stateMachine:SF-*`,
+                `arn:aws:states:${this.region}:${this.account}:stateMachine:workflow-*`,
+              ],
             }),
-            // S3 permissions for CloudFormation templates and workflow resources
+            // S3 permissions - scoped to workflow buckets and the code bucket
             new iam.PolicyStatement({
               effect: iam.Effect.ALLOW,
               actions: [
@@ -1385,9 +1449,14 @@ export class WorkflowBuilderStack extends cdk.Stack {
                 's3:GetObject',
                 's3:DeleteObject',
               ],
-              resources: ['*'],
+              resources: [
+                `arn:aws:s3:::workflow-*`,
+                `arn:aws:s3:::workflow-*/*`,
+                `arn:aws:s3:::${PROJECT.s3.lambdaCodeBucket}-${this.account}-${this.region}`,
+                `arn:aws:s3:::${PROJECT.s3.lambdaCodeBucket}-${this.account}-${this.region}/*`,
+              ],
             }),
-            // EventBridge permissions
+            // EventBridge permissions (does not support resource-level permissions)
             new iam.PolicyStatement({
               effect: iam.Effect.ALLOW,
               actions: [
@@ -1398,7 +1467,7 @@ export class WorkflowBuilderStack extends cdk.Stack {
                 'events:PutTargets',
                 'events:RemoveTargets',
               ],
-              resources: ['*'],
+              resources: ['*'], // EventBridge does not support resource-level permissions for PutEvents
             }),
             // CloudWatch Logs permissions
             new iam.PolicyStatement({
@@ -1417,52 +1486,12 @@ export class WorkflowBuilderStack extends cdk.Stack {
                 'logs:TagResource',
                 'logs:UntagResource',
               ],
-              resources: ['*'],
-            }),
-            // EC2/VPC permissions for CloudFormation to create/delete VPC resources for workflows
-            new iam.PolicyStatement({
-              effect: iam.Effect.ALLOW,
-              actions: [
-                'ec2:CreateVpc',
-                'ec2:DeleteVpc',
-                'ec2:DescribeVpcs',
-                'ec2:ModifyVpcAttribute',
-                'ec2:CreateSubnet',
-                'ec2:DeleteSubnet',
-                'ec2:DescribeSubnets',
-                'ec2:ModifySubnetAttribute',
-                'ec2:CreateSecurityGroup',
-                'ec2:DeleteSecurityGroup',
-                'ec2:DescribeSecurityGroups',
-                'ec2:AuthorizeSecurityGroupEgress',
-                'ec2:RevokeSecurityGroupEgress',
-                'ec2:CreateInternetGateway',
-                'ec2:DeleteInternetGateway',
-                'ec2:AttachInternetGateway',
-                'ec2:DetachInternetGateway',
-                'ec2:DescribeInternetGateways',
-                'ec2:AllocateAddress',
-                'ec2:ReleaseAddress',
-                'ec2:DescribeAddresses',
-                'ec2:CreateNatGateway',
-                'ec2:DeleteNatGateway',
-                'ec2:DescribeNatGateways',
-                'ec2:CreateRouteTable',
-                'ec2:DeleteRouteTable',
-                'ec2:DescribeRouteTables',
-                'ec2:CreateRoute',
-                'ec2:DeleteRoute',
-                'ec2:AssociateRouteTable',
-                'ec2:DisassociateRouteTable',
-                'ec2:DescribeAvailabilityZones',
-                'ec2:CreateNetworkInterface',
-                'ec2:DeleteNetworkInterface',
-                'ec2:DescribeNetworkInterfaces',
-                'ec2:CreateTags',
-                'ec2:DeleteTags',
-                'ec2:DescribeVpcGatewayAttachments',
+              resources: [
+                `arn:aws:logs:${this.region}:${this.account}:log-group:/aws/lambda/*`,
+                `arn:aws:logs:${this.region}:${this.account}:log-group:/aws/stepfunctions/*`,
+                `arn:aws:logs:${this.region}:${this.account}:log-group:/aws/lambda/*:*`,
+                `arn:aws:logs:${this.region}:${this.account}:log-group:/aws/stepfunctions/*:*`,
               ],
-              resources: ['*'],
             }),
           ],
         }),
@@ -1534,7 +1563,9 @@ export class WorkflowBuilderStack extends cdk.Stack {
           'cloudformation:DescribeStackResources',
           'cloudformation:ListStackResources',
         ],
-        resources: ['*'],
+        resources: [
+          `arn:aws:cloudformation:${this.region}:${this.account}:stack/workflow-*/*`,
+        ],
       })
     );
 
@@ -1547,7 +1578,10 @@ export class WorkflowBuilderStack extends cdk.Stack {
           'states:DeleteStateMachine',
           'states:ListStateMachines',
         ],
-        resources: ['*'],
+        resources: [
+          `arn:aws:states:${this.region}:${this.account}:stateMachine:SF-*`,
+          `arn:aws:states:${this.region}:${this.account}:stateMachine:workflow-*`,
+        ],
       })
     );
 
@@ -1560,7 +1594,9 @@ export class WorkflowBuilderStack extends cdk.Stack {
           'lambda:GetFunction',
           'lambda:ListFunctions',
         ],
-        resources: ['*'],
+        resources: [
+          `arn:aws:lambda:${this.region}:${this.account}:function:*`,
+        ],
       })
     );
 
@@ -1576,7 +1612,14 @@ export class WorkflowBuilderStack extends cdk.Stack {
           'iam:ListRolePolicies',
           'iam:ListAttachedRolePolicies',
         ],
-        resources: ['*'],
+        resources: [
+          `arn:aws:iam::${this.account}:role/SF-Role-*`,
+          `arn:aws:iam::${this.account}:role/Lambda-Role-*`,
+          `arn:aws:iam::${this.account}:role/Lambda-*-Role-*`,
+          `arn:aws:iam::${this.account}:role/StepFunction-*`,
+          `arn:aws:iam::${this.account}:role/workflow-*`,
+          `arn:aws:iam::${this.account}:role/*-workflow-*`,
+        ],
       })
     );
 
@@ -1591,7 +1634,10 @@ export class WorkflowBuilderStack extends cdk.Stack {
           'logs:TagResource',
           'logs:UntagResource',
         ],
-        resources: ['*'],
+        resources: [
+          `arn:aws:logs:${this.region}:${this.account}:log-group:/aws/lambda/*`,
+          `arn:aws:logs:${this.region}:${this.account}:log-group:/aws/stepfunctions/*`,
+        ],
       })
     );
 
@@ -1604,7 +1650,7 @@ export class WorkflowBuilderStack extends cdk.Stack {
           'events:RemoveTargets',
           'events:DeleteRule',
         ],
-        resources: ['*'],
+        resources: ['*'], // EventBridge does not support resource-level permissions for these actions
       })
     );
 
@@ -1651,7 +1697,12 @@ export class WorkflowBuilderStack extends cdk.Stack {
                 'logs:DescribeLogGroups',
                 'logs:DescribeLogStreams',
               ],
-              resources: ['*'],
+              resources: [
+                `arn:aws:logs:${this.region}:${this.account}:log-group:/aws/vendedlogs/*`,
+                `arn:aws:logs:${this.region}:${this.account}:log-group:/aws/vendedlogs/*:*`,
+                `arn:aws:logs:${this.region}:${this.account}:log-group:${PROJECT.stepFunctions.deletionLogGroup}`,
+                `arn:aws:logs:${this.region}:${this.account}:log-group:${PROJECT.stepFunctions.deletionLogGroup}:*`,
+              ],
             }),
             // EventBridge permissions for publishing events
             new iam.PolicyStatement({
@@ -1758,6 +1809,23 @@ export class WorkflowBuilderStack extends cdk.Stack {
     webSocketConnectionsTable.grantReadWriteData(disconnectHandler);
     webSocketConnectionsTable.grantReadWriteData(eventBridgeHandler);
 
+    // Create WebSocket authorizer Lambda
+    const webSocketAuthorizerHandler = this.createLambdaFunction(
+      'WebSocketAuthorizer',
+      'websocket-authorizer',
+      '../lambda-functions/websocket-lambda/dist',
+      'handlers/authorize.handler',
+      {}
+    );
+
+    const webSocketAuthorizer = new apigatewayv2Authorizers.WebSocketLambdaAuthorizer(
+      'WebSocketConnectAuthorizer',
+      webSocketAuthorizerHandler,
+      {
+        identitySource: ['route.request.querystring.token'],
+      }
+    );
+
     // Create WebSocket API
     const webSocketApi = new apigatewayv2.WebSocketApi(this, 'DeploymentWebSocketApi', {
       apiName: 'workflow-deployment-websocket',
@@ -1767,6 +1835,7 @@ export class WorkflowBuilderStack extends cdk.Stack {
           'ConnectIntegration',
           connectHandler
         ),
+        authorizer: webSocketAuthorizer,
       },
       disconnectRouteOptions: {
         integration: new apigatewayv2Integrations.WebSocketLambdaIntegration(
@@ -2027,6 +2096,7 @@ export class WorkflowBuilderStack extends cdk.Stack {
         NODE_ENV: 'production',
         USER_POOL_ID: this.userPool.userPoolId,
         USER_POOL_CLIENT_ID: this.userPoolClient.userPoolClientId,
+        ALLOWED_ORIGIN: `https://${this.frontendHosting.distribution.distributionDomainName}`,
         ...environment,
       },
       logGroup,
@@ -2057,30 +2127,9 @@ export class WorkflowBuilderStack extends cdk.Stack {
   ): apigateway.Method {
     const integration = new apigateway.LambdaIntegration(lambdaFunction, {
       requestTemplates: { 'application/json': '{ "statusCode": "200" }' },
-      integrationResponses: [
-        {
-          statusCode: '200',
-          responseParameters: {
-            'method.response.header.Access-Control-Allow-Origin': "'*'",
-            'method.response.header.Access-Control-Allow-Headers': "'Content-Type,X-Amz-Date,Authorization,X-Api-Key,X-Amz-Security-Token'",
-            'method.response.header.Access-Control-Allow-Methods': "'GET,POST,PUT,DELETE,OPTIONS'",
-          },
-        },
-      ],
     });
 
-    let methodOptions: apigateway.MethodOptions = {
-      methodResponses: [
-        {
-          statusCode: '200',
-          responseParameters: {
-            'method.response.header.Access-Control-Allow-Origin': true,
-            'method.response.header.Access-Control-Allow-Headers': true,
-            'method.response.header.Access-Control-Allow-Methods': true,
-          },
-        },
-      ],
-    };
+    let methodOptions: apigateway.MethodOptions = {};
 
     if (requireAuth) {
       methodOptions = {
@@ -2146,25 +2195,78 @@ export class WorkflowBuilderStack extends cdk.Stack {
       policy: networkPolicyJson,
     });
 
-    // Data access policy - allow all IAM principals in the account
+    // Pre-create an explicit IAM role for the OpenSearch search Lambda.
+    // The function itself is constructed later (alongside the API Gateway
+    // resources) and consumes this role via `role: this.opensearchSearchLambdaRole`.
+    // Creating the role here lets the data access policy below grant it
+    // narrow read-only access by exact ARN. The role name is left to CDK
+    // because `this.account` is a token at synth time.
+    this.opensearchSearchLambdaRole = new iam.Role(this, 'OpenSearchSearchLambdaRole', {
+      assumedBy: new iam.ServicePrincipal('lambda.amazonaws.com'),
+      managedPolicies: [
+        iam.ManagedPolicy.fromAwsManagedPolicyName('service-role/AWSLambdaBasicExecutionRole'),
+        iam.ManagedPolicy.fromAwsManagedPolicyName('service-role/AWSLambdaVPCAccessExecutionRole'),
+      ],
+    });
+
+    // Data access policy - scoped to specific Lambda principals with
+    // narrowly-defined permissions instead of `aoss:*` to the account root.
+    //   - Search Lambda: read-only on the collection (exact role ARN; CDK
+    //     resolves the token to the concrete ARN at deploy time).
+    //   - Per-workflow OpenSearch indexer Lambdas: read+write+create-index.
+    //     CFN templates create their roles with name pattern
+    //     OpenSearch-Lambda-Role-${WorkflowId} (see
+    //     cloudFormationTemplateGenerator.ts), which is matched by the
+    //     wildcard ARN below. AOSS data access policies support wildcards
+    //     in IAM principal role names.
+    const indexerRolePattern = `arn:aws:iam::${this.account}:role/OpenSearch-Lambda-Role-*`;
     const dataAccessPolicy = new cdk.aws_opensearchserverless.CfnAccessPolicy(this, 'OpenSearchDataAccessPolicy', {
       name: `health-msgs-access-${this.account.slice(-6)}`,
       type: 'data',
-      policy: JSON.stringify([{
-        Rules: [
-          {
-            ResourceType: 'index',
-            Resource: [`index/${collectionName}/*`],
-            Permission: ['aoss:*'],
-          },
-          {
-            ResourceType: 'collection',
-            Resource: [`collection/${collectionName}`],
-            Permission: ['aoss:*'],
-          },
-        ],
-        Principal: [`arn:aws:iam::${this.account}:root`],
-      }]),
+      policy: JSON.stringify([
+        {
+          Description: 'Read-only access for the OpenSearch search Lambda',
+          Rules: [
+            {
+              ResourceType: 'index',
+              Resource: [`index/${collectionName}/*`],
+              Permission: ['aoss:DescribeIndex', 'aoss:ReadDocument'],
+            },
+            {
+              ResourceType: 'collection',
+              Resource: [`collection/${collectionName}`],
+              Permission: ['aoss:DescribeCollectionItems'],
+            },
+          ],
+          Principal: [this.opensearchSearchLambdaRole.roleArn],
+        },
+        {
+          Description: 'Read+write access for per-workflow OpenSearch indexer Lambdas',
+          Rules: [
+            {
+              ResourceType: 'index',
+              Resource: [`index/${collectionName}/*`],
+              Permission: [
+                'aoss:CreateIndex',
+                'aoss:UpdateIndex',
+                'aoss:DescribeIndex',
+                'aoss:ReadDocument',
+                'aoss:WriteDocument',
+              ],
+            },
+            {
+              ResourceType: 'collection',
+              Resource: [`collection/${collectionName}`],
+              Permission: [
+                'aoss:CreateCollectionItems',
+                'aoss:UpdateCollectionItems',
+                'aoss:DescribeCollectionItems',
+              ],
+            },
+          ],
+          Principal: [indexerRolePattern],
+        },
+      ]),
     });
 
     // Create the collection
@@ -2201,7 +2303,7 @@ from botocore.awsrequest import AWSRequest
 from urllib.parse import urlparse
 
 CORS_HEADERS = {
-    'Access-Control-Allow-Origin': '*',
+    'Access-Control-Allow-Origin': os.environ.get('ALLOWED_ORIGIN', 'http://localhost:3000'),
     'Access-Control-Allow-Headers': 'Content-Type,Authorization',
     'Access-Control-Allow-Methods': 'POST,OPTIONS',
     'Content-Type': 'application/json'

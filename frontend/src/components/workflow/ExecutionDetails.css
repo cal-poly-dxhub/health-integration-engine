@@ -7,8 +7,8 @@
   --exd-accent-soft: rgba(99, 102, 241, 0.12);
   --exd-accent-fg: #4338ca;
   --exd-text: #0f172a;
-  --exd-text-muted: #64748b;
-  --exd-text-subtle: #94a3b8;
+  --exd-text-muted: #475569;
+  --exd-text-subtle: #64748b;
   --exd-border: #e2e8f0;
   --exd-border-strong: #cbd5e1;
   --exd-surface: #ffffff;
@@ -71,8 +71,29 @@
 .exd-nav-left {
   display: flex;
   align-items: center;
-  gap: 12px;
+  gap: 14px;
   min-width: 0;
+  flex: 1;
+}
+
+.exd-nav-title {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  min-width: 0;
+}
+
+.exd-name {
+  font-size: 16px;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  margin: 0;
+  color: var(--exd-text);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 460px;
 }
 
 .exd-back {
@@ -95,28 +116,6 @@
 .exd-back:hover {
   background: var(--exd-surface-hover);
   border-color: var(--exd-border-strong);
-}
-
-.exd-crumbs {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  font-size: 13px;
-  color: var(--exd-text-muted);
-  min-width: 0;
-}
-
-.exd-crumbs-sep {
-  color: var(--exd-text-subtle);
-}
-
-.exd-crumbs-current {
-  color: var(--exd-text);
-  font-weight: 500;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  max-width: 360px;
 }
 
 .exd-nav-right {
@@ -212,32 +211,7 @@
   gap: 0;
 }
 
-/* ---------- Summary card ---------- */
-.exd-summary-card {
-  flex: none;
-  background: var(--exd-surface);
-  border: 1px solid var(--exd-border);
-  border-radius: var(--exd-radius-md);
-  padding: 14px 18px;
-  margin-bottom: 14px;
-  box-shadow: var(--exd-shadow-sm);
-}
-
-.exd-summary-head {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  flex-wrap: wrap;
-  margin-bottom: 12px;
-}
-
-.exd-summary-title {
-  font-size: 16px;
-  font-weight: 600;
-  letter-spacing: -0.015em;
-  margin: 0;
-}
-
+/* ---------- Summary grid (used inside Details/overview tab) ---------- */
 .exd-summary-grid {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));

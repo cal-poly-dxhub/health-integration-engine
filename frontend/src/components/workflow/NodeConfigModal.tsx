@@ -91,17 +91,6 @@ const NodeConfigModal: React.FC<NodeConfigModalProps> = ({
             (node.config as any)?.triggerOnUpload ?? true,
         });
         break;
-      case 'database':
-        setConfig({
-          connectionType: (node.config as any)?.connectionType || 'mysql',
-          host: (node.config as any)?.host || '',
-          port: (node.config as any)?.port || '3306',
-          database: (node.config as any)?.database || '',
-          query: (node.config as any)?.query || '',
-          username: (node.config as any)?.username || '',
-          password: (node.config as any)?.password || '',
-        });
-        break;
       case 'lambda':
         setConfig({
           functionName: (node.config as any)?.functionName || '',
@@ -134,12 +123,6 @@ const NodeConfigModal: React.FC<NodeConfigModalProps> = ({
       case 's3':
         if (!config.bucketName)
           newErrors.bucketName = 'Bucket name is required';
-        break;
-      case 'database':
-        if (!config.host) newErrors.host = 'Host is required';
-        if (!config.database) newErrors.database = 'Database name is required';
-        if (!config.query) newErrors.query = 'SQL query is required';
-        if (!config.username) newErrors.username = 'Username is required';
         break;
       case 'lambda':
         if (!config.functionName)
@@ -322,126 +305,6 @@ const NodeConfigModal: React.FC<NodeConfigModalProps> = ({
           EventBridge notifications will be enabled on the bucket during
           deployment.
         </p>
-      </div>
-    </div>
-  );
-
-  /* ---------- Database form ---------- */
-  const renderDatabaseConfig = () => (
-    <div className="ncm-form">
-      <div className="ncm-field">
-        <label htmlFor="ncm-db-type" className="ncm-label">
-          Database type
-        </label>
-        <select
-          id="ncm-db-type"
-          value={config.connectionType || 'mysql'}
-          onChange={(e) =>
-            handleInputChange('connectionType', e.target.value)
-          }
-          className="ncm-select"
-        >
-          <option value="mysql">MySQL</option>
-          <option value="postgresql">PostgreSQL</option>
-          <option value="dynamodb">DynamoDB</option>
-          <option value="mongodb">MongoDB</option>
-        </select>
-      </div>
-
-      <div className="ncm-row">
-        <div className="ncm-field">
-          <label htmlFor="ncm-host" className="ncm-label">
-            Host <span className="ncm-required">*</span>
-          </label>
-          <input
-            id="ncm-host"
-            type="text"
-            value={config.host || ''}
-            onChange={(e) => handleInputChange('host', e.target.value)}
-            placeholder="localhost"
-            className={`ncm-input${errors.host ? ' error' : ''}`}
-          />
-          {errors.host && (
-            <span className="ncm-error-text">{errors.host}</span>
-          )}
-        </div>
-        <div className="ncm-field">
-          <label htmlFor="ncm-port" className="ncm-label">
-            Port
-          </label>
-          <input
-            id="ncm-port"
-            type="number"
-            value={config.port || ''}
-            onChange={(e) => handleInputChange('port', e.target.value)}
-            placeholder="3306"
-            className="ncm-input"
-          />
-        </div>
-      </div>
-
-      <div className="ncm-field">
-        <label htmlFor="ncm-db-name" className="ncm-label">
-          Database name <span className="ncm-required">*</span>
-        </label>
-        <input
-          id="ncm-db-name"
-          type="text"
-          value={config.database || ''}
-          onChange={(e) => handleInputChange('database', e.target.value)}
-          placeholder="my_database"
-          className={`ncm-input${errors.database ? ' error' : ''}`}
-        />
-        {errors.database && (
-          <span className="ncm-error-text">{errors.database}</span>
-        )}
-      </div>
-
-      <div className="ncm-row">
-        <div className="ncm-field">
-          <label htmlFor="ncm-user" className="ncm-label">
-            Username <span className="ncm-required">*</span>
-          </label>
-          <input
-            id="ncm-user"
-            type="text"
-            value={config.username || ''}
-            onChange={(e) => handleInputChange('username', e.target.value)}
-            className={`ncm-input${errors.username ? ' error' : ''}`}
-          />
-          {errors.username && (
-            <span className="ncm-error-text">{errors.username}</span>
-          )}
-        </div>
-        <div className="ncm-field">
-          <label htmlFor="ncm-pass" className="ncm-label">
-            Password
-          </label>
-          <input
-            id="ncm-pass"
-            type="password"
-            value={config.password || ''}
-            onChange={(e) => handleInputChange('password', e.target.value)}
-            className="ncm-input"
-          />
-        </div>
-      </div>
-
-      <div className="ncm-field">
-        <label htmlFor="ncm-query" className="ncm-label">
-          SQL query <span className="ncm-required">*</span>
-        </label>
-        <textarea
-          id="ncm-query"
-          value={config.query || ''}
-          onChange={(e) => handleInputChange('query', e.target.value)}
-          placeholder="SELECT * FROM users WHERE id = ?"
-          rows={5}
-          className={`ncm-textarea${errors.query ? ' error' : ''}`}
-        />
-        {errors.query && (
-          <span className="ncm-error-text">{errors.query}</span>
-        )}
       </div>
     </div>
   );
@@ -766,8 +629,6 @@ const NodeConfigModal: React.FC<NodeConfigModalProps> = ({
     switch (node.type) {
       case 's3':
         return 'Configure S3 operation';
-      case 'database':
-        return 'Configure database query';
       case 'lambda':
         return 'Configure Lambda function';
       default:
@@ -806,7 +667,6 @@ const NodeConfigModal: React.FC<NodeConfigModalProps> = ({
 
         <div className="ncm-body">
           {node.type === 's3' && renderS3Config()}
-          {node.type === 'database' && renderDatabaseConfig()}
           {node.type === 'lambda' && renderLambdaConfig()}
         </div>
 
@@ -875,8 +735,6 @@ function getNodeColor(type: WorkflowNode['type']): string {
   switch (type) {
     case 's3':
       return '#f59e0b';
-    case 'database':
-      return '#8b5cf6';
     case 'lambda':
       return '#3b82f6';
     case 'opensearch':
@@ -890,8 +748,6 @@ function getNodeIcon(type: WorkflowNode['type']): React.ReactNode {
   switch (type) {
     case 's3':
       return <BucketIcon />;
-    case 'database':
-      return <DatabaseIcon />;
     case 'lambda':
       return <BoltIcon />;
     case 'opensearch':
@@ -906,16 +762,6 @@ function BucketIcon() {
     <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
       <path d="M4 6h16l-1.5 12.6a2 2 0 0 1-2 1.4H7.5a2 2 0 0 1-2-1.4Z" />
       <path d="M4 6V4h16v2" />
-    </svg>
-  );
-}
-
-function DatabaseIcon() {
-  return (
-    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-      <ellipse cx="12" cy="5" rx="9" ry="3" />
-      <path d="M3 5v14a9 3 0 0 0 18 0V5" />
-      <path d="M3 12a9 3 0 0 0 18 0" />
     </svg>
   );
 }

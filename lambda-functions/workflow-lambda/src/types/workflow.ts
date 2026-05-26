@@ -3,7 +3,7 @@ import { z } from 'zod';
 // Base node interface
 export interface WorkflowNode {
   id: string;
-  type: 'start' | 's3' | 'database' | 'lambda' | 'opensearch' | 'end';
+  type: 'start' | 's3' | 'lambda' | 'opensearch' | 'end';
   name: string;
   position: {
     x: number;
@@ -14,7 +14,7 @@ export interface WorkflowNode {
 }
 
 // Node configuration types
-export type NodeConfig = S3NodeConfig | DatabaseNodeConfig | LambdaNodeConfig | OpenSearchNodeConfig;
+export type NodeConfig = S3NodeConfig | LambdaNodeConfig | OpenSearchNodeConfig;
 
 // S3 Node Configuration
 export interface S3NodeConfig {
@@ -30,29 +30,6 @@ export interface S3NodeConfig {
   };
   versioning?: boolean;
   metadata?: Record<string, string>;
-}
-
-// Database Node Configuration
-export interface DatabaseNodeConfig {
-  type: 'database';
-  engine: 'mysql' | 'postgresql' | 'mongodb' | 'dynamodb' | 'redis';
-  operation: 'select' | 'insert' | 'update' | 'delete' | 'query';
-  connection: {
-    host?: string;
-    port?: number;
-    database?: string;
-    username?: string;
-    password?: string;
-    ssl?: boolean;
-    connectionString?: string;
-  };
-  query?: string;
-  parameters?: Record<string, any>;
-  timeout?: number;
-  retryConfig?: {
-    maxRetries: number;
-    backoffMultiplier: number;
-  };
 }
 
 // Lambda Function Configuration
@@ -164,7 +141,7 @@ export interface WorkflowRequest {
 // Zod validation schemas
 export const WorkflowNodeSchema = z.object({
   id: z.string().min(1),
-  type: z.enum(['start', 's3', 'database', 'lambda', 'opensearch', 'end']),
+  type: z.enum(['start', 's3', 'lambda', 'opensearch', 'end']),
   name: z.string().min(1).max(100),
   position: z.object({
     x: z.number(),

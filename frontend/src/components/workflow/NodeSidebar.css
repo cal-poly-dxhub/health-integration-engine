@@ -5,8 +5,8 @@
   --nsb-accent: #6366f1;
   --nsb-accent-soft: rgba(99, 102, 241, 0.12);
   --nsb-text: #0f172a;
-  --nsb-text-muted: #64748b;
-  --nsb-text-subtle: #94a3b8;
+  --nsb-text-muted: #475569;
+  --nsb-text-subtle: #64748b;
   --nsb-border: #e2e8f0;
   --nsb-border-strong: #cbd5e1;
   --nsb-surface: #ffffff;
@@ -33,6 +33,34 @@
   padding: 14px 16px 10px;
   border-bottom: 1px solid var(--nsb-border);
   background: var(--nsb-surface-alt);
+}
+
+.nsb-head-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.nsb-hide {
+  flex: none;
+  width: 28px;
+  height: 28px;
+  border-radius: 6px;
+  border: 0;
+  background: transparent;
+  color: var(--nsb-text-muted);
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  transition: background 0.15s ease, color 0.15s ease;
+}
+
+.nsb-hide:hover {
+  background: var(--nsb-surface-hover);
+  color: var(--nsb-text);
 }
 
 .nsb-title {

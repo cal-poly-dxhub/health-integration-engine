@@ -26,7 +26,7 @@ interface BatchProgress {
   running: boolean;
 }
 
-type TabKey = 'executions' | 'definition' | 'search';
+type TabKey = 'executions' | 'definition' | 'details' | 'search';
 
 const WorkflowDetails: React.FC<WorkflowDetailsProps> = ({
   workflow: propWorkflow,
@@ -59,7 +59,6 @@ const WorkflowDetails: React.FC<WorkflowDetailsProps> = ({
   const [isDeleting, setIsDeleting] = useState(false);
   const [showDeploymentModal, setShowDeploymentModal] = useState(false);
   const [deploymentId, setDeploymentId] = useState<string>('');
-  const [detailsCollapsed, setDetailsCollapsed] = useState(false);
   const [deletionStatus, setDeletionStatus] = useState<string>('');
 
   const [selectedExecutions, setSelectedExecutions] = useState<Set<string>>(
@@ -410,6 +409,7 @@ const WorkflowDetails: React.FC<WorkflowDetailsProps> = ({
   const tabsList: Array<{ key: TabKey; label: string; enabled: boolean }> = [
     { key: 'executions', label: 'Executions', enabled: true },
     { key: 'definition', label: 'Definition', enabled: true },
+    { key: 'details', label: 'Details', enabled: true },
     {
       key: 'search',
       label: 'Message Search',
@@ -434,10 +434,15 @@ const WorkflowDetails: React.FC<WorkflowDetailsProps> = ({
             <ArrowLeftIcon />
             Dashboard
           </button>
-          <span className="wfd-crumbs">
-            <span className="wfd-crumbs-sep">/</span>
-            <span className="wfd-crumbs-current">{workflow.name}</span>
-          </span>
+          <div className="wfd-nav-title">
+            <div className="wfd-nav-title-row">
+              <h1 className="wfd-name">{workflow.name}</h1>
+              <DeploymentBadge workflow={workflow} />
+            </div>
+            {workflow.description && (
+              <p className="wfd-description">{workflow.description}</p>
+            )}
+          </div>
         </div>
 
         <div className="wfd-nav-right">
@@ -463,66 +468,6 @@ const WorkflowDetails: React.FC<WorkflowDetailsProps> = ({
       {/* ---------- Body ---------- */}
       <div className="wfd-body">
         <div className="wfd-page">
-          {/* Summary card */}
-          <section className="wfd-summary-card">
-            <div className="wfd-summary-head">
-              <div className="wfd-summary-title">
-                <h1 className="wfd-name">{workflow.name}</h1>
-                <DeploymentBadge workflow={workflow} />
-              </div>
-              <button
-                type="button"
-                className="wfd-toggle-details"
-                onClick={() => setDetailsCollapsed((s) => !s)}
-                aria-expanded={!detailsCollapsed}
-              >
-                {detailsCollapsed ? '▸ Show details' : '▾ Hide details'}
-              </button>
-            </div>
-
-            {!detailsCollapsed && (
-              <div className="wfd-summary-grid">
-                <div>
-                  <span className="wfd-info-label">Status</span>
-                  <span className="wfd-info-value">
-                    {stateMachineDetails?.status ||
-                      (workflow.isDeployed ? 'Active' : 'Draft')}
-                  </span>
-                </div>
-                <div>
-                  <span className="wfd-info-label">Type</span>
-                  <span className="wfd-info-value">
-                    {stateMachineDetails?.type || 'Standard'}
-                  </span>
-                </div>
-                <div>
-                  <span className="wfd-info-label">Created</span>
-                  <span className="wfd-info-value">
-                    {stateMachineDetails?.creationDate
-                      ? formatDate(stateMachineDetails.creationDate)
-                      : formatDate(workflow.createdAt)}
-                  </span>
-                </div>
-                <div style={{ gridColumn: '1 / -1' }}>
-                  <span className="wfd-info-label">
-                    State machine ARN
-                  </span>
-                  <span className="wfd-info-value wfd-info-mono">
-                    {workflow.stepFunctionArn || 'Not deployed'}
-                  </span>
-                </div>
-                {stateMachineDetails?.roleArn && (
-                  <div style={{ gridColumn: '1 / -1' }}>
-                    <span className="wfd-info-label">IAM role ARN</span>
-                    <span className="wfd-info-value wfd-info-mono">
-                      {stateMachineDetails.roleArn}
-                    </span>
-                  </div>
-                )}
-              </div>
-            )}
-          </section>
-
           {/* Tabs */}
           <div className="wfd-tabs" role="tablist">
             {tabsList
@@ -809,33 +754,6 @@ const WorkflowDetails: React.FC<WorkflowDetailsProps> = ({
               </div>
               {stateMachineDetails ? (
                 <div className="wfd-def-grid">
-                  <div className="wfd-def-meta">
-                    <div>
-                      <span className="wfd-info-label">Name</span>
-                      <span className="wfd-info-value">
-                        {stateMachineDetails.name}
-                      </span>
-                    </div>
-                    <div>
-                      <span className="wfd-info-label">Type</span>
-                      <span className="wfd-info-value">
-                        {stateMachineDetails.type}
-                      </span>
-                    </div>
-                    <div>
-                      <span className="wfd-info-label">Status</span>
-                      <span className="wfd-info-value">
-                        {stateMachineDetails.status}
-                      </span>
-                    </div>
-                    <div style={{ gridColumn: '1 / -1' }}>
-                      <span className="wfd-info-label">Role ARN</span>
-                      <span className="wfd-info-value wfd-info-mono">
-                        {stateMachineDetails.roleArn}
-                      </span>
-                    </div>
-                  </div>
-
                   <div className="wfd-def-block">
                     <div className="wfd-def-block-head">
                       Step Functions definition (JSON)
@@ -873,6 +791,62 @@ const WorkflowDetails: React.FC<WorkflowDetailsProps> = ({
                   </button>
                 </div>
               )}
+            </div>
+          )}
+
+          {/* ---------- Details tab ---------- */}
+          {activeTab === 'details' && (
+            <div className="wfd-pane">
+              <div className="wfd-pane-head">
+                <h3 className="wfd-pane-title">Workflow details</h3>
+              </div>
+              <div className="wfd-summary-grid">
+                <div>
+                  <span className="wfd-info-label">Status</span>
+                  <span className="wfd-info-value">
+                    {stateMachineDetails?.status ||
+                      (workflow.isDeployed ? 'Active' : 'Draft')}
+                  </span>
+                </div>
+                <div>
+                  <span className="wfd-info-label">Type</span>
+                  <span className="wfd-info-value">
+                    {stateMachineDetails?.type || 'Standard'}
+                  </span>
+                </div>
+                <div>
+                  <span className="wfd-info-label">Created</span>
+                  <span className="wfd-info-value">
+                    {stateMachineDetails?.creationDate
+                      ? formatDate(stateMachineDetails.creationDate)
+                      : formatDate(workflow.createdAt)}
+                  </span>
+                </div>
+                <div style={{ gridColumn: '1 / -1' }}>
+                  <span className="wfd-info-label">
+                    State machine ARN
+                  </span>
+                  <span className="wfd-info-value wfd-info-mono">
+                    {workflow.stepFunctionArn || 'Not deployed'}
+                  </span>
+                </div>
+                {stateMachineDetails?.roleArn && (
+                  <div style={{ gridColumn: '1 / -1' }}>
+                    <span className="wfd-info-label">IAM role ARN</span>
+                    <span className="wfd-info-value wfd-info-mono">
+                      {stateMachineDetails.roleArn}
+                    </span>
+                  </div>
+                )}
+                {workflow.description && (
+                  <div style={{ gridColumn: '1 / -1' }}>
+                    <span className="wfd-info-label">Description</span>
+                    <span className="wfd-info-value">
+                      {workflow.description}
+                    </span>
+                  </div>
+                )}
+              </div>
             </div>
           )}
 
@@ -1000,7 +974,13 @@ const WorkflowDetails: React.FC<WorkflowDetailsProps> = ({
           }}
           onComplete={(status) => {
             if (status.status === 'completed') {
-              navigate('/dashboard');
+              // Auto-close + redirect after a brief success-display window;
+              // the user should NOT need to press Close.
+              setTimeout(() => {
+                setShowDeploymentModal(false);
+                setDeploymentId('');
+                navigate('/dashboard');
+              }, 1500);
             }
           }}
         />

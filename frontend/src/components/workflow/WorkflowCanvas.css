@@ -7,8 +7,8 @@
   --wfc-accent-soft: rgba(99, 102, 241, 0.12);
   --wfc-accent-fg: #4338ca;
   --wfc-text: #0f172a;
-  --wfc-text-muted: #64748b;
-  --wfc-text-subtle: #94a3b8;
+  --wfc-text-muted: #475569;
+  --wfc-text-subtle: #64748b;
   --wfc-border: #e2e8f0;
   --wfc-border-strong: #cbd5e1;
   --wfc-surface: #ffffff;
@@ -26,7 +26,7 @@
   --wfc-radius-lg: 16px;
   --wfc-shadow-sm: 0 1px 2px rgba(15, 23, 42, 0.04);
   --wfc-shadow-md: 0 8px 24px rgba(15, 23, 42, 0.08);
-  --wfc-toolbar-height: 60px;
+  --wfc-toolbar-height: 76px;
   --wfc-sidebar-width: 260px;
   --wfc-config-width: 320px;
 
@@ -47,14 +47,14 @@
 
 /* ---------- Toolbar ---------- */
 .wfc-toolbar {
-  height: var(--wfc-toolbar-height);
+  min-height: var(--wfc-toolbar-height);
   flex: none;
   background: var(--wfc-surface);
   border-bottom: 1px solid var(--wfc-border);
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 0 16px;
+  padding: 10px 16px;
   gap: 16px;
   z-index: 10;
 }
@@ -127,6 +127,38 @@
   outline: none;
   background: var(--wfc-surface);
   border-color: var(--wfc-accent);
+  box-shadow: 0 0 0 4px var(--wfc-accent-soft);
+}
+
+.wfc-desc {
+  font-size: 12.5px;
+  font-weight: 400;
+  color: var(--wfc-text-muted);
+  background: transparent;
+  border: 1px solid transparent;
+  padding: 3px 8px;
+  border-radius: 6px;
+  font-family: inherit;
+  width: 100%;
+  max-width: 420px;
+  margin-top: 2px;
+  transition: background-color 0.15s ease, border-color 0.15s ease, color 0.15s ease;
+}
+
+.wfc-desc::placeholder {
+  color: var(--wfc-text-subtle);
+  font-style: italic;
+}
+
+.wfc-desc:hover {
+  background: var(--wfc-surface-hover);
+}
+
+.wfc-desc:focus {
+  outline: none;
+  background: var(--wfc-surface);
+  border-color: var(--wfc-accent);
+  color: var(--wfc-text);
   box-shadow: 0 0 0 4px var(--wfc-accent-soft);
 }
 
@@ -681,9 +713,91 @@
     monospace;
   font-size: 11.5px;
   line-height: 1.55;
-  max-height: 280px;
+  flex: 1 1 auto;
+  min-height: 200px;
   overflow: auto;
   white-space: pre;
+  color: var(--wfc-text);
+}
+
+/* Let the body lay out as a column so the JSON output can stretch into the
+   free whitespace below it. */
+.wfc-config-body {
+  display: flex;
+  flex-direction: column;
+}
+
+.wfc-config-summary {
+  display: flex;
+  flex-direction: column;
+  flex: 1 1 auto;
+  min-height: 0;
+}
+
+/* ---------- Column toggles ---------- */
+.wfc-col-reopen {
+  flex: none;
+  display: inline-flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  width: 28px;
+  padding: 12px 4px;
+  border: 1px solid var(--wfc-border);
+  background: var(--wfc-surface);
+  color: var(--wfc-text-muted);
+  font-size: 11px;
+  font-weight: 600;
+  cursor: pointer;
+  align-self: stretch;
+  transition: background 0.15s ease, color 0.15s ease;
+}
+
+.wfc-col-reopen:hover {
+  background: var(--wfc-surface-hover);
+  color: var(--wfc-text);
+}
+
+.wfc-col-reopen span {
+  writing-mode: vertical-rl;
+  transform: rotate(180deg);
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  font-size: 10.5px;
+}
+
+.wfc-col-reopen--left {
+  border-left: 0;
+  border-radius: 0 6px 6px 0;
+}
+
+.wfc-col-reopen--right {
+  border-right: 0;
+  border-radius: 6px 0 0 6px;
+}
+
+.wfc-config-head-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.wfc-config-hide {
+  background: transparent;
+  border: 0;
+  width: 28px;
+  height: 28px;
+  border-radius: 6px;
+  color: var(--wfc-text-muted);
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.wfc-config-hide:hover {
+  background: var(--wfc-surface-hover);
   color: var(--wfc-text);
 }
 

@@ -17,7 +17,7 @@ import DeploymentStatusModal from './DeploymentStatusModal';
 import ConnectionsRenderer from './ConnectionsRenderer';
 import './WorkflowCanvas.css';
 
-const CONFIGURABLE_TYPES = ['s3', 'database', 'lambda', 'opensearch'];
+const CONFIGURABLE_TYPES = ['s3', 'lambda', 'opensearch'];
 
 const WorkflowCanvasContent: React.FC = () => {
   const { workflowId } = useParams<{ workflowId?: string }>();
@@ -25,6 +25,7 @@ const WorkflowCanvasContent: React.FC = () => {
   const { workflow, loading, error, saveWorkflow } = useWorkflow(workflowId);
 
   const [workflowName, setWorkflowName] = useState('Untitled Workflow');
+  const [workflowDescription, setWorkflowDescription] = useState('');
   const [nodes, setNodes] = useState<WorkflowNode[]>([]);
   const [connections, setConnections] = useState<Connection[]>([]);
   const [selectedNode, setSelectedNode] = useState<string | null>(null);
@@ -45,6 +46,11 @@ const WorkflowCanvasContent: React.FC = () => {
   );
   const [lastDeploymentStatus, setLastDeploymentStatus] =
     useState<DeploymentStatus | null>(null);
+
+  // Hide/show toggles for left (component palette) and right (node details) columns.
+  // Both default to open. The right panel only renders when a node is selected.
+  const [leftPanelOpen, setLeftPanelOpen] = useState(true);
+  const [rightPanelOpen, setRightPanelOpen] = useState(true);
 
   const [opensearchEnabled, setOpensearchEnabled] = useState(false);
   const [opensearchIndexName, setOpensearchIndexName] =
@@ -82,6 +88,7 @@ const WorkflowCanvasContent: React.FC = () => {
     if (!workflow) return;
 
     setWorkflowName(workflow.name);
+    setWorkflowDescription(workflow.description || '');
 
     const fixedNodes = (workflow.nodes || []).map((node) => {
       const wasConfigured = node.isConfigured;
@@ -312,6 +319,11 @@ const WorkflowCanvasContent: React.FC = () => {
     setHasUnsavedChanges(true);
   }, []);
 
+  const handleWorkflowDescriptionChange = useCallback((description: string) => {
+    setWorkflowDescription(description);
+    setHasUnsavedChanges(true);
+  }, []);
+
   /* ---------- Save / Deploy ---------- */
 
   const handleSave = useCallback(async () => {
@@ -326,6 +338,7 @@ const WorkflowCanvasContent: React.FC = () => {
 
       await saveWorkflow({
         name: workflowName,
+        description: workflowDescription,
         nodes: saveNodes,
         connections,
       });
@@ -345,6 +358,7 @@ const WorkflowCanvasContent: React.FC = () => {
     }
   }, [
     workflowName,
+    workflowDescription,
     nodes,
     connections,
     isSaving,
@@ -367,6 +381,7 @@ const WorkflowCanvasContent: React.FC = () => {
         setIsSaving(true);
         await saveWorkflow({
           name: workflowName,
+          description: workflowDescription,
           nodes: deployNodes,
           connections,
         });
@@ -379,6 +394,7 @@ const WorkflowCanvasContent: React.FC = () => {
     const currentWorkflow = {
       ...workflow,
       name: workflowName,
+      description: workflowDescription,
       nodes: deployNodes,
       connections,
     };
@@ -416,6 +432,7 @@ const WorkflowCanvasContent: React.FC = () => {
     }
   }, [
     workflowName,
+    workflowDescription,
     nodes,
     connections,
     isDeploying,
@@ -439,18 +456,25 @@ const WorkflowCanvasContent: React.FC = () => {
     async (status: DeploymentStatus) => {
       setLastDeploymentStatus(status);
       if (status.status === 'completed' && workflow) {
-        await saveWorkflow({
+        // Fire the post-deploy save in parallel — the deployment lambda
+        // also updates DDB server-side, so this is best-effort and we don't
+        // gate navigation on it. The dashboard's loadWorkflows on mount
+        // will pick up the deployed status either way.
+        saveWorkflow({
           isDeployed: true,
           deploymentStatus: 'deployed',
           lastDeploymentId: status.deploymentId,
           stepFunctionArn: status.stepFunctionArn,
-        });
+        }).catch((err) => console.error('Post-deploy save failed:', err));
         setHasUnsavedChanges(false);
+        // Brief success-display window, then auto-close the modal and
+        // redirect to the workflows list. The user does NOT need to press
+        // Close.
         setTimeout(() => {
           setDeploymentModalOpen(false);
           setCurrentDeploymentId(null);
           navigate('/');
-        }, 2000);
+        }, 1500);
       }
     },
     [workflow, saveWorkflow, navigate]
@@ -586,6 +610,16 @@ const WorkflowCanvasContent: React.FC = () => {
               className="wfc-name"
               placeholder="Workflow name"
             />
+            <input
+              type="text"
+              value={workflowDescription}
+              onChange={(e) =>
+                handleWorkflowDescriptionChange(e.target.value)
+              }
+              className="wfc-desc"
+              placeholder="Add a description (optional)"
+              aria-label="Workflow description"
+            />
             <div className="wfc-name-meta">
               {workflowId && (
                 <span className="wfc-id">ID: {workflowId}</span>
@@ -714,7 +748,20 @@ const WorkflowCanvasContent: React.FC = () => {
 
       {/* ---------- Body ---------- */}
       <div className="wfc-body">
-        <NodeSidebar />
+        {leftPanelOpen ? (
+          <NodeSidebar onHide={() => setLeftPanelOpen(false)} />
+        ) : (
+          <button
+            type="button"
+            className="wfc-col-reopen wfc-col-reopen--left"
+            onClick={() => setLeftPanelOpen(true)}
+            aria-label="Show components panel"
+            title="Show components"
+          >
+            <ChevronRightIcon />
+            <span>Components</span>
+          </button>
+        )}
 
         <div
           ref={(node) => {
@@ -777,7 +824,7 @@ const WorkflowCanvasContent: React.FC = () => {
                     <div className="wfc-empty-tip">
                       <span className="wfc-empty-tip-num">2</span>
                       <span>
-                        Add processing nodes — S3, Database, or Lambda.
+                        Add processing nodes — S3 or Lambda.
                       </span>
                     </div>
                     <div className="wfc-empty-tip">
@@ -798,7 +845,7 @@ const WorkflowCanvasContent: React.FC = () => {
         </div>
 
         {/* Right config panel */}
-        {selectedNodeData && (
+        {selectedNodeData && rightPanelOpen && (
           <aside className="wfc-config-panel">
             <div className="wfc-config-head">
               <h3 className="wfc-config-title">
@@ -813,14 +860,25 @@ const WorkflowCanvasContent: React.FC = () => {
                 </span>
                 Node details
               </h3>
-              <button
-                type="button"
-                className="wfc-config-close"
-                onClick={() => setSelectedNode(null)}
-                aria-label="Close"
-              >
-                
-              </button>
+              <div className="wfc-config-head-actions">
+                <button
+                  type="button"
+                  className="wfc-config-hide"
+                  onClick={() => setRightPanelOpen(false)}
+                  aria-label="Hide node details panel"
+                  title="Hide details"
+                >
+                  <ChevronRightIcon />
+                </button>
+                <button
+                  type="button"
+                  className="wfc-config-close"
+                  onClick={() => setSelectedNode(null)}
+                  aria-label="Close"
+                >
+                  
+                </button>
+              </div>
             </div>
 
             <div className="wfc-config-body">
@@ -859,7 +917,7 @@ const WorkflowCanvasContent: React.FC = () => {
                 </div>
               </div>
 
-              {['s3', 'database', 'lambda'].includes(
+              {['s3', 'lambda'].includes(
                 selectedNodeData.type
               ) && (
                 <div className="wfc-config-action">
@@ -890,6 +948,19 @@ const WorkflowCanvasContent: React.FC = () => {
               )}
             </div>
           </aside>
+        )}
+
+        {selectedNodeData && !rightPanelOpen && (
+          <button
+            type="button"
+            className="wfc-col-reopen wfc-col-reopen--right"
+            onClick={() => setRightPanelOpen(true)}
+            aria-label="Show node details panel"
+            title="Show details"
+          >
+            <ChevronLeftIcon />
+            <span>Details</span>
+          </button>
         )}
       </div>
 
@@ -941,8 +1012,6 @@ function getDefaultNodeName(type: WorkflowNode['type']): string {
       return 'End';
     case 's3':
       return 'S3 Operation';
-    case 'database':
-      return 'Database Query';
     case 'lambda':
       return 'Lambda Function';
     default:
@@ -958,8 +1027,6 @@ function getNodeColor(type: WorkflowNode['type']): string {
       return '#ef4444';
     case 's3':
       return '#f59e0b';
-    case 'database':
-      return '#8b5cf6';
     case 'lambda':
       return '#3b82f6';
     case 'opensearch':
@@ -977,8 +1044,6 @@ function getNodeIcon(type: WorkflowNode['type']): React.ReactNode {
       return <StopIcon />;
     case 's3':
       return <BucketIcon />;
-    case 'database':
-      return <DatabaseIcon />;
     case 'lambda':
       return <BoltIcon />;
     case 'opensearch':
@@ -1118,16 +1183,6 @@ function BucketIcon() {
   );
 }
 
-function DatabaseIcon() {
-  return (
-    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-      <ellipse cx="12" cy="5" rx="9" ry="3" />
-      <path d="M3 5v14a9 3 0 0 0 18 0V5" />
-      <path d="M3 12a9 3 0 0 0 18 0" />
-    </svg>
-  );
-}
-
 function BoltIcon() {
   return (
     <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor" stroke="none">
@@ -1140,6 +1195,22 @@ function BoxIcon() {
   return (
     <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
       <rect x="3" y="3" width="18" height="18" rx="3" />
+    </svg>
+  );
+}
+
+function ChevronLeftIcon() {
+  return (
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <polyline points="15 18 9 12 15 6" />
+    </svg>
+  );
+}
+
+function ChevronRightIcon() {
+  return (
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <polyline points="9 18 15 12 9 6" />
     </svg>
   );
 }

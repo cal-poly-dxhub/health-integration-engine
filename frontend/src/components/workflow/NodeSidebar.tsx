@@ -42,7 +42,11 @@ const DraggableNode: React.FC<DraggableNodeProps> = ({
   );
 };
 
-const NodeSidebar: React.FC = () => {
+interface NodeSidebarProps {
+  onHide?: () => void;
+}
+
+const NodeSidebar: React.FC<NodeSidebarProps> = ({ onHide }) => {
   const nodeTypes: Array<{
     type: string;
     label: string;
@@ -65,13 +69,6 @@ const NodeSidebar: React.FC = () => {
       icon: <BucketIcon />,
     },
     {
-      type: 'database',
-      label: 'Database',
-      description: 'Query a database',
-      color: '#8b5cf6',
-      icon: <DatabaseIcon />,
-    },
-    {
       type: 'lambda',
       label: 'Lambda Function',
       description: 'Execute custom code',
@@ -90,7 +87,20 @@ const NodeSidebar: React.FC = () => {
   return (
     <aside className="nsb-root">
       <div className="nsb-head">
-        <h3 className="nsb-title">Components</h3>
+        <div className="nsb-head-row">
+          <h3 className="nsb-title">Components</h3>
+          {onHide && (
+            <button
+              type="button"
+              className="nsb-hide"
+              onClick={onHide}
+              aria-label="Hide components panel"
+              title="Hide components"
+            >
+              <ChevronLeftIcon />
+            </button>
+          )}
+        </div>
         <p className="nsb-sub">Drag onto the canvas to add a node.</p>
       </div>
 
@@ -152,20 +162,18 @@ function BucketIcon() {
   );
 }
 
-function DatabaseIcon() {
-  return (
-    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-      <ellipse cx="12" cy="5" rx="9" ry="3" />
-      <path d="M3 5v14a9 3 0 0 0 18 0V5" />
-      <path d="M3 12a9 3 0 0 0 18 0" />
-    </svg>
-  );
-}
-
 function BoltIcon() {
   return (
     <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor" stroke="none">
       <path d="M13 2 4 14h7l-2 8 9-12h-7Z" />
+    </svg>
+  );
+}
+
+function ChevronLeftIcon() {
+  return (
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <polyline points="15 18 9 12 15 6" />
     </svg>
   );
 }

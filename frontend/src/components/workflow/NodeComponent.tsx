@@ -188,8 +188,6 @@ function getNodeIcon(type: WorkflowNode['type']): React.ReactNode {
       return <StopIcon />;
     case 's3':
       return <BucketIcon />;
-    case 'database':
-      return <DatabaseIcon />;
     case 'lambda':
       return <BoltIcon />;
     case 'opensearch':
@@ -207,8 +205,6 @@ function getNodeColor(type: WorkflowNode['type']): string {
       return '#ef4444';
     case 's3':
       return '#f59e0b';
-    case 'database':
-      return '#8b5cf6';
     case 'lambda':
       return '#3b82f6';
     case 'opensearch':
@@ -239,16 +235,6 @@ function BucketIcon() {
     <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
       <path d="M4 6h16l-1.5 12.6a2 2 0 0 1-2 1.4H7.5a2 2 0 0 1-2-1.4Z" />
       <path d="M4 6V4h16v2" />
-    </svg>
-  );
-}
-
-function DatabaseIcon() {
-  return (
-    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-      <ellipse cx="12" cy="5" rx="9" ry="3" />
-      <path d="M3 5v14a9 3 0 0 0 18 0V5" />
-      <path d="M3 12a9 3 0 0 0 18 0" />
     </svg>
   );
 }

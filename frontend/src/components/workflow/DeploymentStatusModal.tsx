@@ -1,5 +1,4 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
 import {
   DeploymentStatus,
   DeploymentStep,
@@ -22,8 +21,6 @@ interface DeploymentStatusModalProps {
 type Operation = 'deploy' | 'update' | 'delete';
 type StepStatus = 'completed' | 'failed' | 'in_progress' | 'pending';
 
-const REDIRECT_SECONDS = 5;
-
 const DeploymentStatusModal: React.FC<DeploymentStatusModalProps> = ({
   isOpen,
   deploymentId,
@@ -31,22 +28,14 @@ const DeploymentStatusModal: React.FC<DeploymentStatusModalProps> = ({
   onClose,
   onComplete,
 }) => {
-  const navigate = useNavigate();
-
   const [deploymentStatus, setDeploymentStatus] =
     useState<DeploymentStatus | null>(null);
   const [stepHistory, setStepHistory] = useState<DeploymentStep[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [confirmClose, setConfirmClose] = useState(false);
-  const [redirectCountdown, setRedirectCountdown] = useState<number | null>(
-    null
-  );
 
   const isSubscribedRef = useRef<string | null>(null);
-  const redirectIntervalRef = useRef<ReturnType<typeof setInterval> | null>(
-    null
-  );
   const completedFiredRef = useRef(false);
 
   const operation: Operation = (() => {
@@ -96,10 +85,6 @@ const DeploymentStatusModal: React.FC<DeploymentStatusModalProps> = ({
         wsService.unsubscribeFromDeployment(isSubscribedRef.current);
         isSubscribedRef.current = null;
       }
-      if (redirectIntervalRef.current) {
-        clearInterval(redirectIntervalRef.current);
-        redirectIntervalRef.current = null;
-      }
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isOpen, deploymentId]);
@@ -139,7 +124,6 @@ const DeploymentStatusModal: React.FC<DeploymentStatusModalProps> = ({
           if (status.status === 'completed' && !completedFiredRef.current) {
             completedFiredRef.current = true;
             onComplete?.(status);
-            startRedirectCountdown();
           }
         },
         60,
@@ -159,7 +143,9 @@ const DeploymentStatusModal: React.FC<DeploymentStatusModalProps> = ({
 
     const detailedStatus = update.originalStatus || update.status;
 
-    // On completion, try to fetch the full step list from the API
+    // On completion, fire onComplete unconditionally so the parent can drive
+    // close + navigation even if the detailed status fetch fails or returns
+    // no step data.
     if (
       update.status === 'COMPLETED' ||
       update.status.toLowerCase() === 'completed'
@@ -168,21 +154,33 @@ const DeploymentStatusModal: React.FC<DeploymentStatusModalProps> = ({
       if (completedFiredRef.current) return;
       completedFiredRef.current = true;
 
+      let finalStatus: DeploymentStatus = {
+        deploymentId: update.deploymentId,
+        workflowId: '',
+        status: 'completed',
+        createdAt: update.timestamp,
+        updatedAt: update.timestamp,
+        steps: [],
+      } as DeploymentStatus;
+
       try {
         const detailed = await DeploymentService.getDeploymentStatus(
           update.deploymentId
         );
-        if (detailed && detailed.steps && detailed.steps.length > 0) {
+        if (detailed) {
+          finalStatus = detailed;
           setDeploymentStatus(detailed);
-          setStepHistory(detailed.steps);
-          setLoading(false);
-          onComplete?.(detailed);
-          startRedirectCountdown();
-          return;
+          if (detailed.steps && detailed.steps.length > 0) {
+            setStepHistory(detailed.steps);
+          }
         }
       } catch (err) {
         console.error('Failed to fetch detailed deployment status:', err);
       }
+
+      setLoading(false);
+      onComplete?.(finalStatus);
+      return;
     }
 
     const stepMessage = getStepMessage(detailedStatus, update.message, operation);
@@ -307,36 +305,7 @@ const DeploymentStatusModal: React.FC<DeploymentStatusModalProps> = ({
         updatedAt: update.timestamp,
         steps: [],
       } as DeploymentStatus);
-      startRedirectCountdown();
     }
-  };
-
-  /* ---------- Redirect countdown ---------- */
-
-  const startRedirectCountdown = () => {
-    if (redirectIntervalRef.current) return;
-    setRedirectCountdown(REDIRECT_SECONDS);
-    redirectIntervalRef.current = setInterval(() => {
-      setRedirectCountdown((prev) => {
-        if (prev === null || prev <= 1) {
-          if (redirectIntervalRef.current) {
-            clearInterval(redirectIntervalRef.current);
-            redirectIntervalRef.current = null;
-          }
-          navigate('/');
-          return null;
-        }
-        return prev - 1;
-      });
-    }, 1000);
-  };
-
-  const handleReturnNow = () => {
-    if (redirectIntervalRef.current) {
-      clearInterval(redirectIntervalRef.current);
-      redirectIntervalRef.current = null;
-    }
-    navigate('/');
   };
 
   /* ---------- Close handler (block during in-progress) ---------- */
@@ -509,21 +478,6 @@ const DeploymentStatusModal: React.FC<DeploymentStatusModalProps> = ({
                   ? 'Update applied. Your workflow changes are live.'
                   : 'Workflow deployed and ready to use.'}
               </p>
-              {redirectCountdown !== null && (
-                <div className="dsm-success-actions">
-                  <p className="dsm-redirect-text">
-                    Returning to workflows in {redirectCountdown} second
-                    {redirectCountdown === 1 ? '' : 's'}…
-                  </p>
-                  <button
-                    type="button"
-                    className="dsm-btn dsm-btn--primary"
-                    onClick={handleReturnNow}
-                  >
-                    Return now
-                  </button>
-                </div>
-              )}
             </div>
           )}
         </div>

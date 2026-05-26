@@ -125,9 +125,8 @@ export class WorkflowLayoutEngine {
             start: 0,
             s3: 1,
             lambda: 2,
-            database: 3,
-            opensearch: 4,
-            end: 5,
+            opensearch: 3,
+            end: 4,
           };
           return (typePriority[a.type] ?? 6) - (typePriority[b.type] ?? 6);
         });

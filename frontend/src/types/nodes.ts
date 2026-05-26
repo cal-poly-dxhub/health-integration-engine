@@ -22,33 +22,6 @@ export interface S3NodeConfig {
   };
 }
 
-// Database Node Configuration
-export interface DatabaseNodeConfig {
-  type: 'database';
-  engine: 'mysql' | 'postgresql' | 'mongodb' | 'dynamodb' | 'redis';
-  operation: 'select' | 'insert' | 'update' | 'delete' | 'query';
-  connection: {
-    host?: string;
-    port?: number;
-    database?: string;
-    username?: string;
-    password?: string; // Will be encrypted
-    ssl?: boolean;
-    connectionString?: string;
-  };
-  query?: string;
-  parameters?: Record<string, any>;
-  timeout?: number;
-  retryConfig?: {
-    maxRetries: number;
-    backoffMultiplier: number;
-  };
-  iamRole?: {
-    useExisting: boolean;
-    existingRoleArn?: string; // ARN of existing IAM role for database access
-  };
-}
-
 // Lambda Function Configuration
 export interface LambdaNodeConfig {
   type: 'lambda';
@@ -95,7 +68,7 @@ export interface OpenSearchNodeConfig {
 }
 
 // Union type for all node configurations
-export type NodeConfig = S3NodeConfig | DatabaseNodeConfig | LambdaNodeConfig | OpenSearchNodeConfig;
+export type NodeConfig = S3NodeConfig | LambdaNodeConfig | OpenSearchNodeConfig;
 
 // Zod validation schemas
 export const S3NodeConfigSchema = z.object({
@@ -111,28 +84,6 @@ export const S3NodeConfigSchema = z.object({
   }).optional(),
   versioning: z.boolean().optional(),
   metadata: z.record(z.string()).optional(),
-});
-
-export const DatabaseNodeConfigSchema = z.object({
-  type: z.literal('database'),
-  engine: z.enum(['mysql', 'postgresql', 'mongodb', 'dynamodb', 'redis']),
-  operation: z.enum(['select', 'insert', 'update', 'delete', 'query']),
-  connection: z.object({
-    host: z.string().optional(),
-    port: z.number().min(1).max(65535).optional(),
-    database: z.string().optional(),
-    username: z.string().optional(),
-    password: z.string().optional(),
-    ssl: z.boolean().optional(),
-    connectionString: z.string().optional(),
-  }),
-  query: z.string().optional(),
-  parameters: z.record(z.any()).optional(),
-  timeout: z.number().min(1).max(300).optional(),
-  retryConfig: z.object({
-    maxRetries: z.number().min(0).max(10),
-    backoffMultiplier: z.number().min(1).max(10),
-  }).optional(),
 });
 
 export const LambdaNodeConfigSchema = z.object({
@@ -163,17 +114,12 @@ export const LambdaNodeConfigSchema = z.object({
 
 export const NodeConfigSchema = z.discriminatedUnion('type', [
   S3NodeConfigSchema,
-  DatabaseNodeConfigSchema,
   LambdaNodeConfigSchema,
 ]);
 
 // Type guards
 export const isS3NodeConfig = (config: NodeConfig): config is S3NodeConfig => {
   return config.type === 's3';
-};
-
-export const isDatabaseNodeConfig = (config: NodeConfig): config is DatabaseNodeConfig => {
-  return config.type === 'database';
 };
 
 export const isLambdaNodeConfig = (config: NodeConfig): config is LambdaNodeConfig => {
@@ -197,24 +143,6 @@ export const getDefaultNodeConfig = (nodeType: string): NodeConfig | undefined =
           enabled: false,
         },
         versioning: false,
-      };
-    case 'database':
-      return {
-        type: 'database',
-        engine: 'mysql',
-        operation: 'select',
-        connection: {
-          host: '',
-          port: 3306,
-          database: '',
-          username: '',
-          ssl: true,
-        },
-        timeout: 30,
-        retryConfig: {
-          maxRetries: 3,
-          backoffMultiplier: 2,
-        },
       };
     case 'lambda':
       return {

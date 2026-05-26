@@ -7,8 +7,8 @@
   --dsm-accent-soft: rgba(99, 102, 241, 0.12);
   --dsm-accent-fg: #4338ca;
   --dsm-text: #0f172a;
-  --dsm-text-muted: #64748b;
-  --dsm-text-subtle: #94a3b8;
+  --dsm-text-muted: #475569;
+  --dsm-text-subtle: #64748b;
   --dsm-border: #e2e8f0;
   --dsm-border-strong: #cbd5e1;
   --dsm-surface: #ffffff;
@@ -497,20 +497,6 @@
   color: var(--dsm-success-fg);
   margin: 0;
   line-height: 1.5;
-}
-
-.dsm-success-actions {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-  flex-wrap: wrap;
-}
-
-.dsm-redirect-text {
-  font-size: 12px;
-  color: var(--dsm-text-muted);
-  margin: 0;
 }
 
 /* ---------- Footer ---------- */

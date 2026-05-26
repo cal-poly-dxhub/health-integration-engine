@@ -1184,12 +1184,12 @@ const ExecutionDetails: React.FC<ExecutionDetailsProps> = ({
             <ArrowLeftIcon />
             Back
           </button>
-          <span className="exd-crumbs">
-            <span className="exd-crumbs-sep">/</span>
-            <span className="exd-crumbs-current">
+          <div className="exd-nav-title">
+            <h1 className="exd-name">
               {execution?.name || 'Execution'}
-            </span>
-          </span>
+            </h1>
+            <ExecutionStatusBadge status={execution?.status} />
+          </div>
         </div>
 
         <div className="exd-nav-right">
@@ -1242,55 +1242,6 @@ const ExecutionDetails: React.FC<ExecutionDetailsProps> = ({
 
       {/* ---------- Body ---------- */}
       <div className="exd-body">
-        {/* Summary card */}
-        <section className="exd-summary-card">
-          <div className="exd-summary-head">
-            <h1 className="exd-summary-title">
-              {execution?.name || 'Execution details'}
-            </h1>
-            <ExecutionStatusBadge status={execution?.status} />
-          </div>
-          <div className="exd-summary-grid">
-            <div>
-              <span className="exd-info-label">Type</span>
-              <span className="exd-info-value">Standard</span>
-            </div>
-            <div>
-              <span className="exd-info-label">Start time</span>
-              <span className="exd-info-value">
-                {execution?.startDate
-                  ? formatDate(execution.startDate)
-                  : '—'}
-              </span>
-            </div>
-            <div>
-              <span className="exd-info-label">End time</span>
-              <span className="exd-info-value">
-                {execution?.stopDate ? formatDate(execution.stopDate) : '—'}
-              </span>
-            </div>
-            <div>
-              <span className="exd-info-label">Duration</span>
-              <span className="exd-info-value">
-                {execution?.stopDate && execution?.startDate
-                  ? formatDuration(
-                      new Date(execution.stopDate).getTime() -
-                        new Date(execution.startDate).getTime()
-                    )
-                  : '—'}
-              </span>
-            </div>
-            <div>
-              <span className="exd-info-label">Total events</span>
-              <span className="exd-info-value">{history.length}</span>
-            </div>
-            <div>
-              <span className="exd-info-label">Steps</span>
-              <span className="exd-info-value">{uniqueSteps.length}</span>
-            </div>
-          </div>
-        </section>
-
         {/* Top tabs section (resizable height) */}
         <section
           className="exd-top-section"
@@ -1342,6 +1293,41 @@ const ExecutionDetails: React.FC<ExecutionDetailsProps> = ({
                 <div>
                   <span className="exd-info-label">Execution type</span>
                   <span className="exd-info-value">Standard</span>
+                </div>
+                <div>
+                  <span className="exd-info-label">Start time</span>
+                  <span className="exd-info-value">
+                    {execution?.startDate
+                      ? formatDate(execution.startDate)
+                      : '—'}
+                  </span>
+                </div>
+                <div>
+                  <span className="exd-info-label">End time</span>
+                  <span className="exd-info-value">
+                    {execution?.stopDate
+                      ? formatDate(execution.stopDate)
+                      : '—'}
+                  </span>
+                </div>
+                <div>
+                  <span className="exd-info-label">Duration</span>
+                  <span className="exd-info-value">
+                    {execution?.stopDate && execution?.startDate
+                      ? formatDuration(
+                          new Date(execution.stopDate).getTime() -
+                            new Date(execution.startDate).getTime()
+                        )
+                      : '—'}
+                  </span>
+                </div>
+                <div>
+                  <span className="exd-info-label">Total events</span>
+                  <span className="exd-info-value">{history.length}</span>
+                </div>
+                <div>
+                  <span className="exd-info-label">Steps</span>
+                  <span className="exd-info-value">{uniqueSteps.length}</span>
                 </div>
                 <div style={{ gridColumn: '1 / -1' }}>
                   <span className="exd-info-label">

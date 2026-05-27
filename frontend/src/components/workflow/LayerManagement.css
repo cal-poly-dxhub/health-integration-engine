@@ -1,0 +1,503 @@
+/* LayerManagement — embedded panel inside Dashboard chrome */
+/* Class names prefixed with `lyr-` to avoid clashing with the legacy
+   LayerManagement.css. */
+
+.lyr-root {
+  --lyr-accent: #6366f1;
+  --lyr-accent-hover: #4f46e5;
+  --lyr-accent-soft: rgba(99, 102, 241, 0.12);
+  --lyr-accent-fg: #4338ca;
+  --lyr-text: #0f172a;
+  --lyr-text-muted: #475569;
+  --lyr-text-subtle: #64748b;
+  --lyr-border: #e2e8f0;
+  --lyr-border-strong: #cbd5e1;
+  --lyr-surface: #ffffff;
+  --lyr-surface-alt: #f8fafc;
+  --lyr-surface-hover: #f1f5f9;
+  --lyr-error-bg: #fef2f2;
+  --lyr-error-fg: #b91c1c;
+  --lyr-error-border: #fecaca;
+  --lyr-radius-sm: 8px;
+  --lyr-radius-md: 12px;
+  --lyr-radius-lg: 16px;
+  --lyr-shadow-sm: 0 1px 2px rgba(15, 23, 42, 0.04);
+
+  padding: 24px clamp(16px, 3vw, 32px);
+  max-width: 1400px;
+  margin: 0 auto;
+  width: 100%;
+  font-family: Inter, system-ui, -apple-system, "Segoe UI", Roboto,
+    "Helvetica Neue", Arial, sans-serif;
+  color: var(--lyr-text);
+  box-sizing: border-box;
+}
+
+.lyr-root * {
+  box-sizing: border-box;
+}
+
+/* ---------- Page header ---------- */
+.lyr-header {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 20px;
+  flex-wrap: wrap;
+}
+
+.lyr-title {
+  font-size: 22px;
+  font-weight: 600;
+  letter-spacing: -0.015em;
+  margin: 0 0 4px;
+}
+
+.lyr-subtitle {
+  font-size: 13px;
+  color: var(--lyr-text-muted);
+  margin: 0;
+}
+
+/* ---------- Buttons ---------- */
+.lyr-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  height: 36px;
+  padding: 0 14px;
+  font-size: 13px;
+  font-weight: 500;
+  font-family: inherit;
+  border-radius: var(--lyr-radius-sm);
+  border: 1px solid var(--lyr-border);
+  background: var(--lyr-surface);
+  color: var(--lyr-text);
+  cursor: pointer;
+  transition: background-color 0.15s ease, border-color 0.15s ease,
+    color 0.15s ease;
+}
+
+.lyr-btn:hover:not(:disabled) {
+  background: var(--lyr-surface-hover);
+  border-color: var(--lyr-border-strong);
+}
+
+.lyr-btn:focus-visible {
+  outline: none;
+  border-color: var(--lyr-accent);
+  box-shadow: 0 0 0 4px var(--lyr-accent-soft);
+}
+
+.lyr-btn:disabled {
+  cursor: not-allowed;
+  opacity: 0.6;
+}
+
+.lyr-btn--primary {
+  background: var(--lyr-accent);
+  border-color: var(--lyr-accent);
+  color: white;
+  font-weight: 600;
+}
+
+.lyr-btn--primary:hover:not(:disabled) {
+  background: var(--lyr-accent-hover);
+  border-color: var(--lyr-accent-hover);
+}
+
+.lyr-btn--icon {
+  width: 30px;
+  height: 30px;
+  padding: 0;
+  color: var(--lyr-text-muted);
+  border-radius: 6px;
+}
+
+.lyr-btn--icon:hover:not(:disabled) {
+  color: var(--lyr-text);
+}
+
+.lyr-btn--danger.lyr-btn--icon:hover:not(:disabled) {
+  color: var(--lyr-error-fg);
+  background: var(--lyr-error-bg);
+  border-color: var(--lyr-error-border);
+}
+
+/* ---------- Banner ---------- */
+.lyr-error-banner {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  background: var(--lyr-error-bg);
+  border: 1px solid var(--lyr-error-border);
+  color: var(--lyr-error-fg);
+  padding: 10px 12px;
+  border-radius: var(--lyr-radius-sm);
+  margin-bottom: 16px;
+  font-size: 13px;
+  line-height: 1.45;
+}
+
+/* ---------- Create form card ---------- */
+.lyr-form-card {
+  background: var(--lyr-surface);
+  border: 1px solid var(--lyr-border);
+  border-radius: var(--lyr-radius-md);
+  padding: 22px;
+  margin-bottom: 18px;
+  box-shadow: var(--lyr-shadow-sm);
+}
+
+.lyr-form-title {
+  font-size: 15px;
+  font-weight: 600;
+  margin: 0 0 16px;
+  color: var(--lyr-text);
+}
+
+.lyr-form-grid {
+  display: grid;
+  gap: 16px;
+}
+
+.lyr-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 14px;
+}
+
+@media (max-width: 720px) {
+  .lyr-row {
+    grid-template-columns: 1fr;
+  }
+}
+
+.lyr-field {
+  display: grid;
+  gap: 6px;
+}
+
+.lyr-label {
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--lyr-text);
+}
+
+.lyr-input {
+  width: 100%;
+  height: 38px;
+  padding: 0 12px;
+  border: 1px solid var(--lyr-border-strong);
+  border-radius: var(--lyr-radius-sm);
+  font-size: 13px;
+  font-family: inherit;
+  color: var(--lyr-text);
+  background: var(--lyr-surface);
+  transition: border-color 0.15s ease, box-shadow 0.15s ease;
+}
+
+.lyr-input::placeholder {
+  color: var(--lyr-text-subtle);
+}
+
+.lyr-input:focus {
+  outline: none;
+  border-color: var(--lyr-accent);
+  box-shadow: 0 0 0 4px var(--lyr-accent-soft);
+}
+
+.lyr-input:disabled {
+  background: var(--lyr-surface-alt);
+  cursor: not-allowed;
+}
+
+.lyr-checkbox-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
+  gap: 8px;
+  padding: 12px;
+  background: var(--lyr-surface-alt);
+  border: 1px solid var(--lyr-border);
+  border-radius: var(--lyr-radius-sm);
+}
+
+.lyr-checkbox {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 10px;
+  border: 1px solid var(--lyr-border);
+  border-radius: 6px;
+  background: var(--lyr-surface);
+  font-size: 12px;
+  cursor: pointer;
+  user-select: none;
+  transition: border-color 0.15s ease, background-color 0.15s ease;
+}
+
+.lyr-checkbox:hover {
+  border-color: var(--lyr-border-strong);
+}
+
+.lyr-checkbox input {
+  accent-color: var(--lyr-accent);
+  cursor: pointer;
+  margin: 0;
+}
+
+.lyr-checkbox--checked {
+  border-color: var(--lyr-accent);
+  background: var(--lyr-accent-soft);
+  color: var(--lyr-accent-fg);
+}
+
+/* File input */
+.lyr-file-wrap {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.lyr-file-input {
+  display: none;
+}
+
+.lyr-file-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 38px;
+  padding: 0 14px;
+  border: 1px dashed var(--lyr-border-strong);
+  background: var(--lyr-surface-alt);
+  border-radius: var(--lyr-radius-sm);
+  font-size: 13px;
+  color: var(--lyr-text-muted);
+  cursor: pointer;
+  transition: border-color 0.15s ease, color 0.15s ease;
+}
+
+.lyr-file-label:hover {
+  border-color: var(--lyr-accent);
+  color: var(--lyr-accent-fg);
+}
+
+.lyr-file-info {
+  font-size: 12px;
+  color: var(--lyr-text-muted);
+}
+
+.lyr-form-error {
+  background: var(--lyr-error-bg);
+  border: 1px solid var(--lyr-error-border);
+  color: var(--lyr-error-fg);
+  padding: 8px 12px;
+  border-radius: var(--lyr-radius-sm);
+  font-size: 12px;
+}
+
+.lyr-form-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-top: 4px;
+}
+
+.lyr-spinner-sm {
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  border: 2px solid rgba(255, 255, 255, 0.4);
+  border-top-color: white;
+  animation: lyr-spin 0.7s linear infinite;
+}
+
+@keyframes lyr-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+/* ---------- Layer table ---------- */
+.lyr-card {
+  background: var(--lyr-surface);
+  border: 1px solid var(--lyr-border);
+  border-radius: var(--lyr-radius-md);
+  overflow: hidden;
+  box-shadow: var(--lyr-shadow-sm);
+}
+
+.lyr-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+}
+
+.lyr-table thead th {
+  text-align: left;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--lyr-text-muted);
+  padding: 12px 16px;
+  border-bottom: 1px solid var(--lyr-border);
+  background: var(--lyr-surface-alt);
+  white-space: nowrap;
+}
+
+.lyr-table tbody td {
+  padding: 14px 16px;
+  border-bottom: 1px solid var(--lyr-border);
+  vertical-align: middle;
+}
+
+.lyr-table tbody tr:last-child td {
+  border-bottom: 0;
+}
+
+.lyr-table tbody tr:hover {
+  background: var(--lyr-surface-alt);
+}
+
+.lyr-name {
+  font-weight: 600;
+  color: var(--lyr-text);
+}
+
+.lyr-desc {
+  font-size: 12px;
+  color: var(--lyr-text-muted);
+  margin-top: 4px;
+  line-height: 1.4;
+}
+
+.lyr-tags {
+  display: inline-flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+
+.lyr-tag {
+  font-size: 11px;
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: var(--lyr-accent-soft);
+  color: var(--lyr-accent-fg);
+  font-weight: 500;
+  white-space: nowrap;
+}
+
+.lyr-cell-mono {
+  font-family: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas,
+    monospace;
+  color: var(--lyr-text-muted);
+  font-variant-numeric: tabular-nums;
+}
+
+/* ---------- States ---------- */
+.lyr-state {
+  background: var(--lyr-surface);
+  border: 1px dashed var(--lyr-border-strong);
+  border-radius: var(--lyr-radius-md);
+  padding: 56px 32px;
+  text-align: center;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+  color: var(--lyr-text-muted);
+}
+
+.lyr-state-icon {
+  width: 48px;
+  height: 48px;
+  border-radius: 50%;
+  background: var(--lyr-surface-alt);
+  color: var(--lyr-text-muted);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.lyr-state-title {
+  font-size: 16px;
+  font-weight: 600;
+  color: var(--lyr-text);
+  margin: 0;
+}
+
+.lyr-state-sub {
+  font-size: 13px;
+  color: var(--lyr-text-muted);
+  margin: 0;
+  max-width: 420px;
+  line-height: 1.5;
+}
+
+.lyr-state-actions {
+  margin-top: 8px;
+  display: inline-flex;
+  gap: 8px;
+}
+
+.lyr-state-spinner {
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  border: 3px solid var(--lyr-border);
+  border-top-color: var(--lyr-accent);
+  animation: lyr-spin 0.7s linear infinite;
+}
+
+/* ---------- Responsive ---------- */
+@media (max-width: 720px) {
+  .lyr-table thead {
+    display: none;
+  }
+  .lyr-table,
+  .lyr-table tbody,
+  .lyr-table tr,
+  .lyr-table td {
+    display: block;
+    width: 100%;
+  }
+  .lyr-table tr {
+    padding: 14px 16px;
+    border-bottom: 1px solid var(--lyr-border);
+  }
+  .lyr-table tbody tr:hover {
+    background: transparent;
+  }
+  .lyr-table td {
+    padding: 4px 0;
+    border-bottom: 0;
+  }
+}
+
+.lyr-confirm-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0,0,0,0.4);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+}
+.lyr-confirm {
+  background: #fff;
+  border-radius: 8px;
+  padding: 24px;
+  max-width: 420px;
+  width: 90%;
+  box-shadow: 0 8px 32px rgba(0,0,0,0.18);
+}
+.lyr-confirm-title { margin: 0 0 8px; font-size: 15px; font-weight: 600; color: #111; }
+.lyr-confirm-body { margin: 0 0 16px; font-size: 13px; color: #6b7280; line-height: 1.5; }
+.lyr-confirm-actions { display: flex; gap: 8px; justify-content: flex-end; }
+.lyr-btn--danger { background: #dc2626; color: #fff; border-color: #dc2626; }
+.lyr-btn--danger:hover { background: #b91c1c; }

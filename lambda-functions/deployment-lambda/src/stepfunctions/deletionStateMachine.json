@@ -1,0 +1,288 @@
+{
+  "Comment": "Workflow deletion state machine with real-time updates",
+  "StartAt": "PublishDeletionStartedEvent",
+  "States": {
+    "PublishDeletionStartedEvent": {
+      "Type": "Task",
+      "Resource": "arn:aws:states:::events:putEvents",
+      "Parameters": {
+        "Entries": [
+          {
+            "Source": "workflow-builder.deletion",
+            "DetailType": "Workflow Deletion Update",
+            "Detail": {
+              "workflowId.$": "$.workflowId",
+              "userId.$": "$.userId",
+              "status": "deleting",
+              "message": "Starting workflow deletion...",
+              "timestamp": "$$.State.EnteredTime"
+            }
+          }
+        ]
+      },
+      "ResultPath": null,
+      "Next": "NotifyDeletionStarted"
+    },
+    "NotifyDeletionStarted": {
+      "Type": "Task",
+      "Resource": "arn:aws:states:::lambda:invoke",
+      "Parameters": {
+        "FunctionName": "${UpdateWorkflowStatusFunction}",
+        "Payload": {
+          "workflowId.$": "$.workflowId",
+          "userId.$": "$.userId",
+          "status": "deleting",
+          "message": "Starting workflow deletion...",
+          "timestamp": "$$.State.EnteredTime"
+        }
+      },
+      "ResultPath": "$.statusResult",
+      "Next": "CheckIfDeployed",
+      "Catch": [
+        {
+          "ErrorEquals": ["States.ALL"],
+          "Next": "PublishDeletionFailedEvent",
+          "ResultPath": "$.error"
+        }
+      ]
+    },
+    "CheckIfDeployed": {
+      "Type": "Choice",
+      "Choices": [
+        {
+          "Variable": "$.isDeployed",
+          "BooleanEquals": true,
+          "Next": "PublishAWSResourcesCleanupStartEvent"
+        }
+      ],
+      "Default": "PublishDatabaseCleanupStartEvent"
+    },
+
+    "PublishAWSResourcesCleanupStartEvent": {
+      "Type": "Task",
+      "Resource": "arn:aws:states:::events:putEvents",
+      "Parameters": {
+        "Entries": [
+          {
+            "Source": "workflow-builder.deletion",
+            "DetailType": "Workflow Deletion Update",
+            "Detail": {
+              "workflowId.$": "$.workflowId",
+              "userId.$": "$.userId",
+              "status": "deleting_aws_resources",
+              "message": "Deleting AWS resources (CloudFormation stack, Lambda functions, IAM roles)...",
+              "timestamp": "$$.State.EnteredTime"
+            }
+          }
+        ]
+      },
+      "ResultPath": null,
+      "Next": "DeleteCloudFormationStack"
+    },
+
+    "PublishDatabaseCleanupStartEvent": {
+      "Type": "Task",
+      "Resource": "arn:aws:states:::events:putEvents",
+      "Parameters": {
+        "Entries": [
+          {
+            "Source": "workflow-builder.deletion",
+            "DetailType": "Workflow Deletion Update",
+            "Detail": {
+              "workflowId.$": "$.workflowId",
+              "userId.$": "$.userId",
+              "status": "cleaning_database",
+              "message": "Cleaning up database records (workflow not deployed)...",
+              "timestamp": "$$.State.EnteredTime"
+            }
+          }
+        ]
+      },
+      "ResultPath": null,
+      "Next": "DeleteDatabaseRecords"
+    },
+    "DeleteCloudFormationStack": {
+      "Type": "Task",
+      "Resource": "arn:aws:states:::lambda:invoke",
+      "Parameters": {
+        "FunctionName": "${DeleteCloudFormationStackFunction}",
+        "Payload.$": "$"
+      },
+      "ResultPath": "$.cloudFormationResult",
+      "Next": "PublishStackDeletionCompleteEvent",
+      "Catch": [
+        {
+          "ErrorEquals": ["States.ALL"],
+          "Next": "PublishStackDeletionFailedEvent",
+          "ResultPath": "$.error"
+        }
+      ]
+    },
+
+    "PublishStackDeletionCompleteEvent": {
+      "Type": "Task",
+      "Resource": "arn:aws:states:::events:putEvents",
+      "Parameters": {
+        "Entries": [
+          {
+            "Source": "workflow-builder.deletion",
+            "DetailType": "Workflow Deletion Update",
+            "Detail": {
+              "workflowId.$": "$.workflowId",
+              "userId.$": "$.userId",
+              "status": "aws_resources_deleted",
+              "message": "AWS resources successfully deleted. Cleaning up database records...",
+              "timestamp": "$$.State.EnteredTime"
+            }
+          }
+        ]
+      },
+      "ResultPath": null,
+      "Next": "NotifyAWSCleanupComplete"
+    },
+
+    "PublishStackDeletionFailedEvent": {
+      "Type": "Task",
+      "Resource": "arn:aws:states:::events:putEvents",
+      "Parameters": {
+        "Entries": [
+          {
+            "Source": "workflow-builder.deletion",
+            "DetailType": "Workflow Deletion Update",
+            "Detail": {
+              "workflowId.$": "$.workflowId",
+              "userId.$": "$.userId",
+              "status": "aws_cleanup_failed",
+              "message": "AWS resource cleanup failed. Continuing with database cleanup...",
+              "timestamp": "$$.State.EnteredTime"
+            }
+          }
+        ]
+      },
+      "ResultPath": null,
+      "Next": "NotifyAWSCleanupFailed"
+    },
+    "NotifyAWSCleanupComplete": {
+      "Type": "Task",
+      "Resource": "arn:aws:states:::lambda:invoke",
+      "Parameters": {
+        "FunctionName": "${UpdateWorkflowStatusFunction}",
+        "Payload": {
+          "workflowId.$": "$.workflowId",
+          "userId.$": "$.userId",
+          "status": "deleting",
+          "message": "AWS resources cleanup completed",
+          "timestamp": "$$.State.EnteredTime"
+        }
+      },
+      "ResultPath": "$.statusResult",
+      "Next": "DeleteDatabaseRecords"
+    },
+    "NotifyAWSCleanupFailed": {
+      "Type": "Task",
+      "Resource": "arn:aws:states:::lambda:invoke",
+      "Parameters": {
+        "FunctionName": "${UpdateWorkflowStatusFunction}",
+        "Payload": {
+          "workflowId.$": "$.workflowId",
+          "userId.$": "$.userId",
+          "status": "deleting",
+          "message": "AWS resources cleanup failed - continuing with database cleanup",
+          "timestamp": "$$.State.EnteredTime"
+        }
+      },
+      "ResultPath": "$.statusResult",
+      "Next": "DeleteDatabaseRecords"
+    },
+    "DeleteDatabaseRecords": {
+      "Type": "Task",
+      "Resource": "arn:aws:states:::lambda:invoke",
+      "Parameters": {
+        "FunctionName": "${DeleteDatabaseRecordsFunction}",
+        "Payload.$": "$"
+      },
+      "ResultPath": "$.databaseResult",
+      "Next": "PublishDeletionCompleteEvent",
+      "Catch": [
+        {
+          "ErrorEquals": ["States.ALL"],
+          "Next": "PublishDeletionFailedEvent",
+          "ResultPath": "$.error"
+        }
+      ]
+    },
+    "PublishDeletionCompleteEvent": {
+      "Type": "Task",
+      "Resource": "arn:aws:states:::events:putEvents",
+      "Parameters": {
+        "Entries": [
+          {
+            "Source": "workflow-builder.deletion",
+            "DetailType": "Workflow Deletion Update",
+            "Detail": {
+              "workflowId.$": "$.workflowId",
+              "userId.$": "$.userId",
+              "status": "completed",
+              "message": "Workflow deletion completed successfully",
+              "timestamp": "$$.State.EnteredTime"
+            }
+          }
+        ]
+      },
+      "ResultPath": null,
+      "Next": "NotifyDeletionComplete"
+    },
+    "NotifyDeletionComplete": {
+      "Type": "Task",
+      "Resource": "arn:aws:states:::lambda:invoke",
+      "Parameters": {
+        "FunctionName": "${UpdateWorkflowStatusFunction}",
+        "Payload": {
+          "workflowId.$": "$.workflowId",
+          "userId.$": "$.userId",
+          "status": "not_deployed",
+          "message": "Workflow deletion completed successfully",
+          "timestamp": "$$.State.EnteredTime"
+        }
+      },
+      "End": true
+    },
+    "PublishDeletionFailedEvent": {
+      "Type": "Task",
+      "Resource": "arn:aws:states:::events:putEvents",
+      "Parameters": {
+        "Entries": [
+          {
+            "Source": "workflow-builder.deletion",
+            "DetailType": "Workflow Deletion Update",
+            "Detail": {
+              "workflowId.$": "$.workflowId",
+              "userId.$": "$.userId",
+              "status": "failed",
+              "message": "Workflow deletion failed",
+              "timestamp": "$$.State.EnteredTime"
+            }
+          }
+        ]
+      },
+      "ResultPath": null,
+      "Next": "NotifyDeletionFailed"
+    },
+    "NotifyDeletionFailed": {
+      "Type": "Task",
+      "Resource": "arn:aws:states:::lambda:invoke",
+      "Parameters": {
+        "FunctionName": "${UpdateWorkflowStatusFunction}",
+        "Payload": {
+          "workflowId.$": "$.workflowId",
+          "userId.$": "$.userId",
+          "status": "delete_failed",
+          "message": "Workflow deletion failed",
+          "errorMessage.$": "$.error.Cause",
+          "timestamp": "$$.State.EnteredTime"
+        }
+      },
+      "End": true
+    }
+  }
+}

@@ -455,27 +455,31 @@ const WorkflowCanvasContent: React.FC = () => {
   const handleDeploymentComplete = useCallback(
     async (status: DeploymentStatus) => {
       setLastDeploymentStatus(status);
-      if (status.status === 'completed' && workflow) {
-        // Fire the post-deploy save in parallel — the deployment lambda
-        // also updates DDB server-side, so this is best-effort and we don't
-        // gate navigation on it. The dashboard's loadWorkflows on mount
-        // will pick up the deployed status either way.
+      if (status.status !== 'completed') return;
+
+      // Best-effort post-deploy save. Skipped silently if the workflow
+      // hook hasn't (re)hydrated by the time onComplete fires — DDB is
+      // already updated server-side by the deployment lambda regardless.
+      if (workflow) {
         saveWorkflow({
           isDeployed: true,
           deploymentStatus: 'deployed',
           lastDeploymentId: status.deploymentId,
           stepFunctionArn: status.stepFunctionArn,
         }).catch((err) => console.error('Post-deploy save failed:', err));
-        setHasUnsavedChanges(false);
-        // Brief success-display window, then auto-close the modal and
-        // redirect to the workflows list. The user does NOT need to press
-        // Close.
-        setTimeout(() => {
-          setDeploymentModalOpen(false);
-          setCurrentDeploymentId(null);
-          navigate('/');
-        }, 1500);
       }
+      setHasUnsavedChanges(false);
+
+      // Brief success-display window, then auto-close the modal and
+      // redirect to the workflows list. The user does NOT need to press
+      // Close. Runs unconditionally on completed status — the prior `&&
+      // workflow` guard could silently skip auto-close if the closure
+      // captured workflow=null (race during update redeploys).
+      setTimeout(() => {
+        setDeploymentModalOpen(false);
+        setCurrentDeploymentId(null);
+        navigate('/');
+      }, 1500);
     },
     [workflow, saveWorkflow, navigate]
   );

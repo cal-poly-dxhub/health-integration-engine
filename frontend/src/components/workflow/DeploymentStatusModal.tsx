@@ -1,4 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import {
   DeploymentStatus,
   DeploymentStep,
@@ -28,6 +29,8 @@ const DeploymentStatusModal: React.FC<DeploymentStatusModalProps> = ({
   onClose,
   onComplete,
 }) => {
+  const navigate = useNavigate();
+
   const [deploymentStatus, setDeploymentStatus] =
     useState<DeploymentStatus | null>(null);
   const [stepHistory, setStepHistory] = useState<DeploymentStep[]>([]);
@@ -37,6 +40,17 @@ const DeploymentStatusModal: React.FC<DeploymentStatusModalProps> = ({
 
   const isSubscribedRef = useRef<string | null>(null);
   const completedFiredRef = useRef(false);
+  // Cancellation flag for the parallel polling loop. Polling runs alongside
+  // the WebSocket as a defensive backup so a dropped WS message can't strand
+  // the modal forever. Cleared when the modal closes or the deployment ID
+  // changes.
+  const pollingAbortRef = useRef(false);
+  // Timer that drives the auto-redirect to the dashboard once a terminal
+  // success status is observed. We navigate from the modal directly (rather
+  // than relying solely on a parent setTimeout) because the parent's
+  // closure-captured state can race during update redeploys, leaving the
+  // user stranded on a "Deployment complete" screen.
+  const redirectTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const operation: Operation = (() => {
     if (
@@ -75,66 +89,111 @@ const DeploymentStatusModal: React.FC<DeploymentStatusModalProps> = ({
     setLoading(true);
     setError(null);
     completedFiredRef.current = false;
+    pollingAbortRef.current = false;
 
     startWebSocketConnection();
+    // Run polling in parallel as a defensive backup. completedFiredRef
+    // guards against double-firing onComplete if both paths report success.
+    startPolling();
     isSubscribedRef.current = deploymentId;
 
     return () => {
+      pollingAbortRef.current = true;
       const wsService = getWebSocketService();
       if (wsService && isSubscribedRef.current) {
         wsService.unsubscribeFromDeployment(isSubscribedRef.current);
         isSubscribedRef.current = null;
       }
+      if (redirectTimerRef.current) {
+        clearTimeout(redirectTimerRef.current);
+        redirectTimerRef.current = null;
+      }
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isOpen, deploymentId]);
 
+  /* ---------- Auto-redirect on success ---------- */
+
+  // Schedule the modal-driven redirect to the workflows list. Idempotent:
+  // re-calls during the same session are no-ops once the timer is set.
+  // This is the primary auto-close mechanism — it does NOT depend on the
+  // parent's onComplete callback firing successfully.
+  const scheduleRedirect = (delayMs: number = 1500) => {
+    if (redirectTimerRef.current) return;
+    redirectTimerRef.current = setTimeout(() => {
+      redirectTimerRef.current = null;
+      navigate('/');
+    }, delayMs);
+  };
+
   /* ---------- WebSocket / polling ---------- */
 
-  const startWebSocketConnection = async () => {
-    try {
-      setLoading(true);
-      setError(null);
-      const wsService = getWebSocketService();
-      if (wsService) {
-        wsService.subscribeToDeployment(deploymentId, handleDeploymentUpdate);
-      } else {
-        throw new Error('WebSocket service not available');
-      }
-    } catch (err) {
-      console.error('WebSocket connection failed, falling back to polling:', err);
-      startPolling();
+  const startWebSocketConnection = () => {
+    setLoading(true);
+    setError(null);
+    const wsService = getWebSocketService();
+    if (wsService) {
+      wsService.subscribeToDeployment(deploymentId, handleDeploymentUpdate);
+    } else {
+      console.warn(
+        'WebSocket service not available; relying on polling only'
+      );
     }
   };
 
   const startPolling = async () => {
-    try {
-      setLoading(true);
-      setError(null);
+    // Polling runs alongside the WebSocket as a defensive backup. We do NOT
+    // setError on a polling failure here, since the WS may still be
+    // delivering updates. Polling only needs to detect terminal status so
+    // the modal can fire onComplete + auto-close even if a WS message is
+    // dropped in flight.
+    const intervalMs = 5000;
+    const maxAttempts = 120; // ~10 minutes upper bound
+    let attempts = 0;
 
-      await DeploymentService.pollDeploymentStatus(
-        deploymentId,
-        (status) => {
-          setDeploymentStatus(status);
-          if (status.steps && status.steps.length > 0) {
-            setStepHistory(status.steps);
-          }
-          setLoading(false);
+    while (attempts < maxAttempts && !pollingAbortRef.current) {
+      try {
+        const status = await DeploymentService.getDeploymentStatus(
+          deploymentId
+        );
 
-          if (status.status === 'completed' && !completedFiredRef.current) {
-            completedFiredRef.current = true;
-            onComplete?.(status);
-          }
-        },
-        60,
-        5000
-      );
-    } catch (err) {
-      console.error('Deployment polling failed:', err);
-      setError(
-        err instanceof Error ? err.message : 'Failed to get deployment status'
-      );
-      setLoading(false);
+        if (pollingAbortRef.current) return;
+
+        // Only mirror state into the UI if the WS hasn't already populated
+        // a richer view. We always update deploymentStatus so the banner
+        // reflects the true current state.
+        setDeploymentStatus((prev) =>
+          prev && prev.updatedAt && status.updatedAt < prev.updatedAt
+            ? prev
+            : status
+        );
+        if (status.steps && status.steps.length > 0) {
+          setStepHistory((prev) =>
+            prev.length >= status.steps.length ? prev : status.steps
+          );
+        }
+        setLoading(false);
+
+        if (
+          (status.status === 'completed' || status.status === 'failed') &&
+          !completedFiredRef.current
+        ) {
+          completedFiredRef.current = true;
+          onComplete?.(status);
+          if (status.status === 'completed') scheduleRedirect();
+          return;
+        }
+
+        if (status.status === 'completed' || status.status === 'failed') {
+          return;
+        }
+      } catch (err) {
+        // Silently swallow polling errors — the WS path may still be live.
+        console.warn('Polling deployment status failed (will retry):', err);
+      }
+
+      await new Promise((resolve) => setTimeout(resolve, intervalMs));
+      attempts++;
     }
   };
 
@@ -180,6 +239,7 @@ const DeploymentStatusModal: React.FC<DeploymentStatusModalProps> = ({
 
       setLoading(false);
       onComplete?.(finalStatus);
+      scheduleRedirect();
       return;
     }
 
@@ -305,6 +365,7 @@ const DeploymentStatusModal: React.FC<DeploymentStatusModalProps> = ({
         updatedAt: update.timestamp,
         steps: [],
       } as DeploymentStatus);
+      scheduleRedirect();
     }
   };
 

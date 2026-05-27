@@ -1,0 +1,50 @@
+{
+  "name": "aws-stepfunctions-workflow-builder",
+  "version": "1.0.0",
+  "description": "AWS Step Functions Visual Workflow Builder - Full Stack Application",
+  "private": true,
+  "workspaces": [
+    "frontend",
+    "lambda-functions/*"
+  ],
+  "scripts": {
+    "install:all": "npm install && npm run install:frontend && npm run install:lambda",
+    "install:frontend": "cd frontend && npm install",
+    "install:lambda": "cd lambda-functions/deployment-lambda && npm install",
+    "dev": "concurrently \"npm run dev:frontend\" \"npm run dev:lambda\"",
+    "dev:frontend": "cd frontend && npm run dev",
+    "dev:lambda": "cd lambda-functions/deployment-lambda && npm run build:watch",
+    "build": "npm run build:frontend && npm run build:lambda",
+    "build:frontend": "cd frontend && npm run build",
+    "build:lambda": "cd lambda-functions/deployment-lambda && npm run build",
+    "lint": "npm run lint:frontend && npm run lint:lambda",
+    "lint:frontend": "cd frontend && npm run lint",
+    "lint:lambda": "cd lambda-functions/deployment-lambda && npm run lint",
+    "lint:fix": "npm run lint:fix:frontend && npm run lint:fix:lambda",
+    "lint:fix:frontend": "cd frontend && npm run lint:fix",
+    "lint:fix:lambda": "cd lambda-functions/deployment-lambda && npm run lint:fix",
+    "format": "npm run format:frontend && npm run format:lambda",
+    "format:frontend": "cd frontend && npm run format",
+    "format:lambda": "cd lambda-functions/deployment-lambda && npm run format",
+    "test": "npm run test:frontend && npm run test:lambda",
+    "test:frontend": "cd frontend && npm run test",
+    "test:lambda": "cd lambda-functions/deployment-lambda && npm run test",
+    "clean": "npm run clean:frontend && npm run clean:lambda",
+    "clean:frontend": "cd frontend && rm -rf dist node_modules",
+    "clean:lambda": "cd lambda-functions/deployment-lambda && npm run clean && rm -rf node_modules",
+    "package:lambda": "cd lambda-functions/deployment-lambda && npm run package",
+    "deploy:prepare": "npm run build && npm run package:lambda",
+    "deploy:infrastructure": "cd infrastructure && cdk deploy",
+    "deploy": "npm run deploy:prepare && npm run deploy:infrastructure"
+  },
+  "devDependencies": {
+    "concurrently": "^7.6.0"
+  },
+  "engines": {
+    "node": ">=18.0.0",
+    "npm": ">=8.0.0"
+  },
+  "dependencies": {
+    "aws-cdk": "^2.1030.0"
+  }
+}

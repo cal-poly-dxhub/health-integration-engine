@@ -89,9 +89,6 @@ lambda:
   wsDefault: "websocket-default-handler"
   wsEventBridge: "eventbridge-handler"
 
-# Amplify
-amplify:
-  appName: "workflow-builder"
 
 # VPC configuration for deployed workflow Lambdas and OpenSearch
 # This is account-wide — all workflows share the same VPC setting.
@@ -99,6 +96,14 @@ amplify:
 #   none     — No VPC created. Lambdas run without VPC. OpenSearch uses public endpoint.
 #   existing — Provide your VPC. Parent Lambdas, OpenSearch, and all child workflow Lambdas run in it. No new VPC created.
 #   new      — CDK creates exactly one shared VPC. Parent Lambdas, OpenSearch, and all child workflow Lambdas run in it.
+#
+# IMPORTANT: When using mode "existing", your VPC MUST have:
+#   1. A NAT Gateway (in a public subnet) with route table entries from your private subnets
+#      so that Lambda functions can reach AWS APIs (Step Functions, CloudFormation, CloudWatch, etc.)
+#   2. A DynamoDB Gateway Endpoint attached to the private subnet route tables
+#   3. An S3 Gateway Endpoint attached to the private subnet route tables
+#   Without these, Lambda functions in the VPC cannot communicate with AWS services and
+#   API calls (workflow listing, creation, deployment) will time out.
 vpc:
   mode: "none"
   existing:

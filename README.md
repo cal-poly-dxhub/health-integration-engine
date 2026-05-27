@@ -193,6 +193,13 @@ All infrastructure settings are defined in `infrastructure/config.yaml`. The def
 | **VPC** | `vpc.mode` | VPC mode: `none`, `existing`, or `new` | `none` |
 | | `vpc.existing.*` | VPC ID, subnet IDs, and security group IDs (required when mode is `existing`) | — |
 | | `vpc.new.cidrBlock` | CIDR block for CDK-created VPC (used when mode is `new`) | `10.0.0.0/16` |
+
+> **VPC `existing` mode requirements:** When using `vpc.mode: "existing"`, your VPC must have the following networking prerequisites. Without them, Lambda functions cannot reach AWS services and all API calls will time out:
+> 1. **NAT Gateway** — in a public subnet, with a route (`0.0.0.0/0` → NAT) in the private subnet route tables so Lambdas can reach AWS APIs (Step Functions, CloudFormation, CloudWatch, STS, etc.)
+> 2. **DynamoDB Gateway Endpoint** — attached to the private subnet route tables (free; avoids NAT charges for DynamoDB traffic)
+> 3. **S3 Gateway Endpoint** — attached to the private subnet route tables (free; required for Lambda code deployment and S3 operations)
+>
+> The `new` mode creates all of these automatically. If you use `existing` mode, you are responsible for provisioning them in your VPC before deploying the stack.
 | **OpenSearch** | `enableOpenSearch` | Deploy OpenSearch Serverless collection (`true`/`false`) | `true` |
 
 ## Estimated Monthly Cost

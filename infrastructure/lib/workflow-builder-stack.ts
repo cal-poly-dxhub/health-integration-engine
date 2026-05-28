@@ -1469,6 +1469,26 @@ export class WorkflowBuilderStack extends cdk.Stack {
               ],
               resources: ['*'], // EventBridge does not support resource-level permissions for PutEvents
             }),
+            // EventBridge tagging permissions for per-workflow rules.
+            // CloudFormation propagates stack-level tags (WorkflowId,
+            // DeploymentId, DeployedBy, Environment) to taggable resources
+            // in per-workflow stacks. AWS::Events::Rule requires
+            // events:TagResource on the rule ARN; without it, CFN logs
+            // "Unauthorized tagging operation", retries without tags, and
+            // adds avoidable latency to every Create/Update of the rule.
+            // Scoped to the rule name pattern produced by
+            // cloudFormationTemplateGenerator.ts (S3Trigger-${WorkflowId}).
+            new iam.PolicyStatement({
+              effect: iam.Effect.ALLOW,
+              actions: [
+                'events:TagResource',
+                'events:UntagResource',
+                'events:ListTagsForResource',
+              ],
+              resources: [
+                `arn:aws:events:${this.region}:${this.account}:rule/S3Trigger-*`,
+              ],
+            }),
             // CloudWatch Logs permissions
             new iam.PolicyStatement({
               effect: iam.Effect.ALLOW,

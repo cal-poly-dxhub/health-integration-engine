@@ -1469,6 +1469,18 @@ export class WorkflowBuilderStack extends cdk.Stack {
               ],
               resources: ['*'], // EventBridge does not support resource-level permissions for PutEvents
             }),
+            // Lets CloudFormation propagate stack-level tags to per-workflow EventBridge rules.
+            new iam.PolicyStatement({
+              effect: iam.Effect.ALLOW,
+              actions: [
+                'events:TagResource',
+                'events:UntagResource',
+                'events:ListTagsForResource',
+              ],
+              resources: [
+                `arn:aws:events:${this.region}:${this.account}:rule/S3Trigger-*`,
+              ],
+            }),
             // CloudWatch Logs permissions
             new iam.PolicyStatement({
               effect: iam.Effect.ALLOW,

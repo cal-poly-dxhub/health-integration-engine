@@ -67,7 +67,6 @@ This project was built to simplify the orchestration of healthcare data processi
 |:-----|:------------|
 | **Start / End** | Workflow entry and exit points |
 | **Lambda** | AWS Lambda function invocation |
-| **Database** | DynamoDB and RDS Data API operations |
 | **S3** | S3 operations (get, put, list, delete) with event-driven triggers |
 | **OpenSearch** | Index processed data into Amazon OpenSearch Serverless for search and analytics |
 

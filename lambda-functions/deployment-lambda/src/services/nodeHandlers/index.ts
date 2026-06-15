@@ -54,7 +54,6 @@ export class NodeHandlerRegistry {
 export * from './startHandler';
 export * from './endHandler';
 export * from './lambdaHandler';
-export * from './databaseHandler';
 export * from './s3Handler';
 export * from './opensearchHandler';
 
@@ -62,6 +61,5 @@ export * from './opensearchHandler';
 import './startHandler';
 import './endHandler';
 import './lambdaHandler';
-import './databaseHandler';
 import './s3Handler';
 import './opensearchHandler';

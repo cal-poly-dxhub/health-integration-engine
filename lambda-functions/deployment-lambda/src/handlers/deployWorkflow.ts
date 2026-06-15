@@ -3,7 +3,6 @@ import { randomUUID } from 'crypto';
 import { DynamoDBClient } from '@aws-sdk/client-dynamodb';
 import { DynamoDBDocumentClient, GetCommand, PutCommand, UpdateCommand, ScanCommand } from '@aws-sdk/lib-dynamodb';
 import { SFNClient, StartExecutionCommand } from '@aws-sdk/client-sfn';
-import { EventBridgeClient, PutEventsCommand } from '@aws-sdk/client-eventbridge';
 
 import { 
   DeploymentRequest, 
@@ -15,6 +14,7 @@ import { Workflow } from '../types/workflow';
 
 import { DeploymentOrchestrator } from '../services/deploymentOrchestrator';
 import { CloudFormationTemplateGenerator } from '../services/cloudFormationTemplateGenerator';
+import { getDefaultLambdaCode } from '../services/defaultLambda';
 import { createAuthErrorResponse, createSuccessHeaders } from '../utils/auth';
 import { resolveCaller, canWriteTeam, forbidden } from '../utils/authz';
 import { writeWorkflowChangeLog } from '../utils/changeLog';
@@ -22,7 +22,6 @@ import { writeWorkflowChangeLog } from '../utils/changeLog';
 const dynamoClient = new DynamoDBClient({ region: process.env.AWS_REGION });
 const docClient = DynamoDBDocumentClient.from(dynamoClient);
 const sfnClient = new SFNClient({ region: process.env.AWS_REGION });
-const eventBridgeClient = new EventBridgeClient({ region: process.env.AWS_REGION });
 
 const WORKFLOWS_TABLE = process.env.WORKFLOWS_TABLE || 'WorkflowBuilder-Workflows';
 const DEPLOYMENTS_TABLE = process.env.DEPLOYMENTS_TABLE || 'WorkflowBuilder-Deployments';
@@ -457,7 +456,10 @@ async function startDeploymentStepFunction(
   };
 
   console.log('Starting Step Functions execution:', executionName);
-  console.log('Input:', JSON.stringify(input, null, 2));
+  // Input embeds the workflow definition and inline Lambda source; dump it only behind a debug flag.
+  if (process.env.DEBUG_DEPLOY_INPUT === 'true') {
+    console.debug('Step Functions input:', JSON.stringify(input, null, 2));
+  }
 
   const response = await sfnClient.send(new StartExecutionCommand({
     stateMachineArn: DEPLOYMENT_STATE_MACHINE_ARN,
@@ -489,7 +491,7 @@ async function preUploadLambdaCode(workflow: Workflow, deploymentContext: Deploy
   
   for (const lambdaNode of lambdaNodes) {
     try {
-      const code = lambdaNode.config?.code || getDefaultLambdaCodeForNode(lambdaNode);
+      const code = lambdaNode.config?.code || getDefaultLambdaCode(lambdaNode);
       
       if (!code) {
         console.warn(`PRE-UPLOAD: No code found for Lambda node ${lambdaNode.id}`);
@@ -592,39 +594,6 @@ async function uploadToS3(buffer: Buffer, bucketName: string, s3Key: string): Pr
 }
 
 /**
- * Get default Lambda code for a node
- */
-function getDefaultLambdaCodeForNode(lambdaNode: any): string {
-  return `
-import json
-import logging
-
-logger = logging.getLogger()
-logger.setLevel(logging.INFO)
-
-def lambda_handler(event, context):
-    """
-    Default Lambda function for workflow node: ${lambdaNode.name || lambdaNode.id}
-    """
-    logger.info(f"Processing event: {json.dumps(event)}")
-    
-    # TODO: Implement your business logic here
-    result = {
-        'statusCode': 200,
-        'body': {
-            'message': 'Lambda function executed successfully',
-            'nodeId': '${lambdaNode.id}',
-            'nodeName': '${lambdaNode.name || 'Unnamed'}',
-            'input': event
-        }
-    }
-    
-    logger.info(f"Returning result: {json.dumps(result)}")
-    return result
-  `.trim();
-}
-
-/**
  * Handle Step Functions template generation request
  */
 async function handleStepFunctionsTemplateGeneration(event: any): Promise<any> {
@@ -697,36 +666,5 @@ async function handleStepFunctionsTemplateGeneration(event: any): Promise<any> {
         message: `CloudFormation template generation failed: ${error instanceof Error ? error.message : 'Unknown error'}`
       })
     };
-  }
-}
-
-/**
- * Publish deployment status event to EventBridge
- */
-async function publishDeploymentStatusEvent(
-  deploymentId: string,
-  status: string,
-  details?: any
-): Promise<void> {
-  try {
-    await eventBridgeClient.send(new PutEventsCommand({
-      Entries: [
-        {
-          Source: 'workflow-builder.deployment',
-          DetailType: 'Deployment Status Update',
-          Detail: JSON.stringify({
-            deploymentId,
-            status,
-            timestamp: new Date().toISOString(),
-            ...details,
-          }),
-        },
-      ],
-    }));
-    
-    console.log('Published deployment status event:', { deploymentId, status });
-  } catch (error) {
-    console.error('Failed to publish deployment status event:', error);
-    // Don't throw - this is non-critical
   }
 }

@@ -1,7 +1,7 @@
 // Workflow types for deployment lambda
 export interface WorkflowNode {
   id: string;
-  type: 'start' | 'end' | 's3' | 'database' | 'lambda' | 'opensearch';
+  type: 'start' | 'end' | 's3' | 'lambda' | 'opensearch';
   name: string;
   position: { x: number; y: number };
   isConfigured: boolean;

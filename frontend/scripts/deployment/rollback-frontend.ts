@@ -167,22 +167,14 @@ class FrontendRollback {
     version: string;
   }): Promise<void> {
     this.spinner.start('Rolling back AWS deployment...');
-    
-    try {
-      // TODO: Implement actual AWS rollback
-      // This would involve:
-      // 1. Restoring previous S3 bucket contents
-      // 2. Invalidating CloudFront cache
-      // 3. Updating CloudFront distribution if needed
-      
-      await new Promise(resolve => setTimeout(resolve, 2000)); // Simulate rollback
-      
-      this.spinner.succeed('AWS deployment rolled back');
-      
-    } catch (error) {
-      this.spinner.fail('AWS rollback failed');
-      throw error;
-    }
+
+    // Automated AWS rollback is not implemented; fail loudly instead of reporting fake success.
+    this.spinner.fail('Automated AWS rollback is not implemented');
+    throw new Error(
+      'Automated AWS rollback is not implemented. Re-deploy the previous build with ' +
+      'scripts/deploy-full-stack.sh (or re-sync the previous dist/ to the frontend ' +
+      'S3 bucket and invalidate the CloudFront distribution).'
+    );
   }
 }
 

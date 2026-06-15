@@ -94,11 +94,6 @@ export const handler = async (
                      !principals.includes('events.amazonaws.com') &&
                      !principals.includes('lambda.amazonaws.com');
             break;
-          case 'database':
-            matches = (principals.includes('states.amazonaws.com') ||  principals.includes('s3.amazonaws.com'))  && 
-                     !principals.includes('events.amazonaws.com') &&
-                     !principals.includes('lambda.amazonaws.com');
-            break;
           default:
             matches = true;
         }

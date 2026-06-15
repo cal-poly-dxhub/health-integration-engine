@@ -73,25 +73,37 @@ class WorkflowApiService {
   /**
    * Save a workflow (create or update)
    */
-  async saveWorkflow(workflow: Partial<Workflow>): Promise<SaveWorkflowResponse> {
+  async saveWorkflow(
+    workflow: Partial<Workflow>,
+    options?: { autoResolveName?: boolean }
+  ): Promise<SaveWorkflowResponse> {
     try {
       let response: SaveWorkflowResponse;
-      
+
+      const body = options?.autoResolveName
+        ? { ...workflow, autoResolveName: true }
+        : workflow;
+
       if (workflow.id) {
         // Update existing workflow
-        response = await apiService.put<SaveWorkflowResponse>(`/workflows/${workflow.id}`, workflow);
+        response = await apiService.put<SaveWorkflowResponse>(`/workflows/${workflow.id}`, body);
         console.log('Updated workflow:', workflow.id, workflow.name);
       } else {
         // Create new workflow
-        response = await apiService.post<SaveWorkflowResponse>('/workflows', workflow);
+        response = await apiService.post<SaveWorkflowResponse>('/workflows', body);
         console.log('Created workflow:', response.workflow.id, response.workflow.name);
       }
       
       return response;
     } catch (error) {
       console.error('Failed to save workflow:', error);
-      
+
       if ((error as any)?.response?.status === 409) {
+        const data = (error as any)?.response?.data;
+        // A duplicate-name conflict is distinct from an optimistic-lock conflict.
+        if (data?.code === 'NAME_CONFLICT') {
+          throw new Error(data.error || 'A workflow with this name already exists in this team.');
+        }
         throw new Error('Workflow has been modified by another user. Please refresh and try again.');
       }
       

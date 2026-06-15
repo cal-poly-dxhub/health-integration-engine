@@ -196,7 +196,7 @@ export const useWorkflows = (params: ListWorkflowsParams = {}) => {
         nodes: [],
         connections: [],
         ...(teamId ? { teamId } : {}),
-      } as any);
+      } as any, { autoResolveName: true });
       
       // Replace optimistic update with real data
       const realWorkflowMetadata: WorkflowMetadata = {
@@ -415,18 +415,20 @@ export const useWorkflows = (params: ListWorkflowsParams = {}) => {
   }, [state.workflows]);
 
   // Duplicate workflow
-  const duplicateWorkflow = useCallback(async (workflowId: string) => {
+  const duplicateWorkflow = useCallback(async (workflowId: string, teamId?: string) => {
     try {
       // Get the full workflow
       const originalWorkflow = await workflowApiService.getWorkflow(workflowId);
-      
-      // Create a copy
+
+      // Create a copy. teamId determines which team the copy belongs to;
+      // defaults to the source workflow's team when not explicitly chosen.
       const response = await workflowApiService.saveWorkflow({
         name: `${originalWorkflow.name} (Copy)`,
         description: originalWorkflow.description,
+        teamId: teamId || originalWorkflow.teamId,
         nodes: originalWorkflow.nodes,
         connections: originalWorkflow.connections,
-      });
+      }, { autoResolveName: true });
 
       const duplicatedMetadata: WorkflowMetadata = {
         id: response.workflow.id,

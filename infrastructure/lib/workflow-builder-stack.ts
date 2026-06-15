@@ -296,6 +296,7 @@ export class WorkflowBuilderStack extends cdk.Stack {
       tableName: PROJECT.dynamodb.teamsTable,
       partitionKey: { name: 'teamId', type: dynamodb.AttributeType.STRING },
       billingMode: dynamodb.BillingMode.PAY_PER_REQUEST,
+      pointInTimeRecoverySpecification: { pointInTimeRecoveryEnabled: true },
       removalPolicy: this.config.environment === 'production'
         ? cdk.RemovalPolicy.RETAIN
         : cdk.RemovalPolicy.DESTROY,
@@ -306,6 +307,7 @@ export class WorkflowBuilderStack extends cdk.Stack {
       partitionKey: { name: 'teamId', type: dynamodb.AttributeType.STRING },
       sortKey: { name: 'userId', type: dynamodb.AttributeType.STRING },
       billingMode: dynamodb.BillingMode.PAY_PER_REQUEST,
+      pointInTimeRecoverySpecification: { pointInTimeRecoveryEnabled: true },
       removalPolicy: this.config.environment === 'production'
         ? cdk.RemovalPolicy.RETAIN
         : cdk.RemovalPolicy.DESTROY,
@@ -322,6 +324,7 @@ export class WorkflowBuilderStack extends cdk.Stack {
       partitionKey: { name: 'pk', type: dynamodb.AttributeType.STRING }, // 'AUDIT' (single hot partition is fine for our scale)
       sortKey: { name: 'timestamp', type: dynamodb.AttributeType.STRING },
       billingMode: dynamodb.BillingMode.PAY_PER_REQUEST,
+      pointInTimeRecoverySpecification: { pointInTimeRecoveryEnabled: true },
       removalPolicy: this.config.environment === 'production'
         ? cdk.RemovalPolicy.RETAIN
         : cdk.RemovalPolicy.DESTROY,
@@ -340,6 +343,7 @@ export class WorkflowBuilderStack extends cdk.Stack {
       partitionKey: { name: 'workflowId', type: dynamodb.AttributeType.STRING },
       sortKey: { name: 'sk', type: dynamodb.AttributeType.STRING }, // ISO timestamp#uuid
       billingMode: dynamodb.BillingMode.PAY_PER_REQUEST,
+      pointInTimeRecoverySpecification: { pointInTimeRecoveryEnabled: true },
       removalPolicy: this.config.environment === 'production'
         ? cdk.RemovalPolicy.RETAIN
         : cdk.RemovalPolicy.DESTROY,
@@ -671,6 +675,7 @@ export class WorkflowBuilderStack extends cdk.Stack {
       partitionKey: { name: 'PK', type: dynamodb.AttributeType.STRING },
       sortKey: { name: 'SK', type: dynamodb.AttributeType.STRING },
       billingMode: dynamodb.BillingMode.PAY_PER_REQUEST,
+      pointInTimeRecoverySpecification: { pointInTimeRecoveryEnabled: true },
       removalPolicy: this.config.environment === 'production' 
         ? cdk.RemovalPolicy.RETAIN 
         : cdk.RemovalPolicy.DESTROY,
@@ -689,6 +694,7 @@ export class WorkflowBuilderStack extends cdk.Stack {
       partitionKey: { name: 'PK', type: dynamodb.AttributeType.STRING },
       sortKey: { name: 'SK', type: dynamodb.AttributeType.STRING },
       billingMode: dynamodb.BillingMode.PAY_PER_REQUEST,
+      pointInTimeRecoverySpecification: { pointInTimeRecoveryEnabled: true },
       removalPolicy: this.config.environment === 'production'
         ? cdk.RemovalPolicy.RETAIN
         : cdk.RemovalPolicy.DESTROY,
@@ -701,12 +707,30 @@ export class WorkflowBuilderStack extends cdk.Stack {
       sortKey: { name: 'GSI1SK', type: dynamodb.AttributeType.STRING },
     });
 
+    // Access-logs bucket for S3 server access logging (no public access, TLS-only).
+    const accessLogsBucket = new s3.Bucket(this, 'AccessLogsBucket', {
+      encryption: s3.BucketEncryption.S3_MANAGED,
+      blockPublicAccess: s3.BlockPublicAccess.BLOCK_ALL,
+      enforceSSL: true,
+      objectOwnership: s3.ObjectOwnership.BUCKET_OWNER_PREFERRED,
+      removalPolicy: this.config.environment === 'production'
+        ? cdk.RemovalPolicy.RETAIN
+        : cdk.RemovalPolicy.DESTROY,
+      autoDeleteObjects: this.config.environment !== 'production',
+      lifecycleRules: [
+        { id: 'ExpireAccessLogs', enabled: true, expiration: cdk.Duration.days(90) },
+      ],
+    });
+
     // Create S3 bucket for Lambda code storage
     const lambdaCodeBucket = new s3.Bucket(this, 'LambdaCodeBucket', {
       bucketName: `${PROJECT.s3.lambdaCodeBucket}-${this.account}-${this.region}`,
       versioned: true,
       encryption: s3.BucketEncryption.S3_MANAGED,
       blockPublicAccess: s3.BlockPublicAccess.BLOCK_ALL,
+      enforceSSL: true,
+      serverAccessLogsBucket: accessLogsBucket,
+      serverAccessLogsPrefix: 'lambda-code-bucket/',
       removalPolicy: this.config.environment === 'production'
         ? cdk.RemovalPolicy.RETAIN
         : cdk.RemovalPolicy.DESTROY,
@@ -753,6 +777,7 @@ export class WorkflowBuilderStack extends cdk.Stack {
         AWS_ACCOUNT_ID: this.account,
         LAMBDA_CODE_BUCKET: lambdaCodeBucket.bucketName,
         OPENSEARCH_ENDPOINT: opensearchCollection?.attrCollectionEndpoint ?? '',
+        OPENSEARCH_COLLECTION_ARN: opensearchCollection?.attrArn ?? '',
         ...this.vpcConfigEnv,
       }
     );
@@ -2082,6 +2107,7 @@ export class WorkflowBuilderStack extends cdk.Stack {
       tableName: 'WebSocketConnections',
       partitionKey: { name: 'connectionId', type: dynamodb.AttributeType.STRING },
       billingMode: dynamodb.BillingMode.PAY_PER_REQUEST,
+      pointInTimeRecoverySpecification: { pointInTimeRecoveryEnabled: true },
       timeToLiveAttribute: 'ttl',
       removalPolicy: this.config.environment === 'production' 
         ? cdk.RemovalPolicy.RETAIN 

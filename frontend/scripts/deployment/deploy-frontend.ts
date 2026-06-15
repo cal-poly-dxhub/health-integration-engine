@@ -73,19 +73,18 @@ class FrontendDeployer {
       // Step 4: Build frontend
       const buildResult = await this.buildFrontend();
 
-      // Step 5: Deploy to AWS (placeholder for now)
-      await this.deployToAWS(buildResult.buildPath);
+      // Step 5: Deploy to AWS
+      const awsResult = await this.deployToAWS(buildResult.buildPath);
 
       console.log('');
       console.log(chalk.green.bold('Frontend deployment completed successfully!'));
-      
+
       return {
         success: true,
         environment: this.options.environment,
         buildPath: buildResult.buildPath,
-        // TODO: Add actual S3 and CloudFront URLs when AWS deployment is implemented
-        s3BucketName: `workflow-builder-frontend-${this.options.environment}`,
-        cloudFrontUrl: `https://d123456789.cloudfront.net`
+        s3BucketName: awsResult.s3BucketName,
+        cloudFrontUrl: awsResult.cloudFrontUrl
       };
 
     } catch (error) {
@@ -155,7 +154,7 @@ class FrontendDeployer {
     }
   }
 
-  private async deployToAWS(buildPath: string): Promise<void> {
+  private async deployToAWS(buildPath: string): Promise<{ s3BucketName?: string; cloudFrontUrl?: string }> {
     this.spinner.start('Deploying to AWS...');
     
     try {
@@ -279,6 +278,10 @@ class FrontendDeployer {
       }
       
       this.spinner.succeed('Deployed to AWS successfully');
+      return {
+        s3BucketName: result.s3BucketName,
+        cloudFrontUrl: result.cloudFrontUrl
+      };
     } catch (error) {
       this.spinner.fail('AWS deployment failed');
       console.log(chalk.red(`Error details: ${error instanceof Error ? error.message : 'Unknown error'}`));

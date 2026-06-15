@@ -11,7 +11,6 @@ const NODE_TYPE_LABELS: Record<string, string> = {
   start: 'Start',
   end: 'End',
   s3: 'S3',
-  database: 'Database',
   lambda: 'Lambda',
   opensearch: 'OpenSearch',
 };

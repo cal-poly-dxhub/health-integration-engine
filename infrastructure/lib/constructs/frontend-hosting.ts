@@ -15,6 +15,19 @@ export class FrontendHosting extends Construct {
   constructor(scope: Construct, id: string, props: FrontendHostingProps) {
     super(scope, id);
 
+    // Access-logs bucket for the frontend bucket (TLS-only, no public access).
+    const logsBucket = new s3.Bucket(this, 'FrontendLogsBucket', {
+      encryption: s3.BucketEncryption.S3_MANAGED,
+      blockPublicAccess: s3.BlockPublicAccess.BLOCK_ALL,
+      enforceSSL: true,
+      objectOwnership: s3.ObjectOwnership.BUCKET_OWNER_PREFERRED,
+      removalPolicy: cdk.RemovalPolicy.DESTROY,
+      autoDeleteObjects: true,
+      lifecycleRules: [
+        { id: 'ExpireLogs', enabled: true, expiration: cdk.Duration.days(90) },
+      ],
+    });
+
     // S3 Bucket for frontend hosting
     // No explicit bucketName — let CloudFormation generate one to avoid S3 naming
     // conflicts when a same-named bucket is still being deleted by a prior rollback.
@@ -24,22 +37,15 @@ export class FrontendHosting extends Construct {
       autoDeleteObjects: true,
       blockPublicAccess: s3.BlockPublicAccess.BLOCK_ALL,
       encryption: s3.BucketEncryption.S3_MANAGED,
+      enforceSSL: true,
+      serverAccessLogsBucket: logsBucket,
+      serverAccessLogsPrefix: 'frontend-bucket/',
     });
 
-    // CloudFront Origin Access Identity
-    const oai = new cloudfront.OriginAccessIdentity(this, 'OAI', {
-      comment: `OAI for ${props.environment} frontend`,
-    });
-
-    // Grant CloudFront access to S3
-    this.bucket.grantRead(oai);
-
-    // CloudFront Distribution with no caching
+    // CloudFront distribution (no caching), using Origin Access Control (OAC) instead of legacy OAI.
     this.distribution = new cloudfront.Distribution(this, 'Distribution', {
       defaultBehavior: {
-        origin: new origins.S3Origin(this.bucket, {
-          originAccessIdentity: oai,
-        }),
+        origin: origins.S3BucketOrigin.withOriginAccessControl(this.bucket),
         viewerProtocolPolicy: cloudfront.ViewerProtocolPolicy.REDIRECT_TO_HTTPS,
         allowedMethods: cloudfront.AllowedMethods.ALLOW_GET_HEAD_OPTIONS,
         cachedMethods: cloudfront.CachedMethods.CACHE_GET_HEAD_OPTIONS,
@@ -55,6 +61,8 @@ export class FrontendHosting extends Construct {
           cookieBehavior: cloudfront.CacheCookieBehavior.none(),
         }),
       },
+      // Standard access logging (CDK provisions an ACL-enabled log bucket).
+      enableLogging: true,
       defaultRootObject: 'index.html',
       errorResponses: [
         {

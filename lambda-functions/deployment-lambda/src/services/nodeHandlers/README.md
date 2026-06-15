@@ -55,7 +55,7 @@ Add your new node type to the workflow types in `lambda-functions/workflow-lambd
 ```typescript
 export interface WorkflowNode {
   id: string;
-  type: 'start' | 's3' | 'database' | 'lambda' | 'end' | 'myNewNode'; // Add here
+  type: 'start' | 's3' | 'lambda' | 'opensearch' | 'end' | 'myNewNode'; // Add here
   // ... rest of interface
 }
 ```
@@ -72,8 +72,8 @@ Currently supported node types:
 - **start**: Workflow entry point (Pass state)
 - **end**: Workflow exit point (Pass state with End: true)
 - **lambda**: AWS Lambda function invocation
-- **database**: Database operations (DynamoDB, RDS Data API)
 - **s3**: S3 operations (get, put, list, delete)
+- **opensearch**: Index processed data into Amazon OpenSearch Serverless
 
 ## Example Node Types (Ready to Enable)
 

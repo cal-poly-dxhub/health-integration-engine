@@ -32,7 +32,11 @@ export interface Workflow {
   id: string;
   name: string;
   description?: string;
-  userId: string;
+  teamId: string;
+  createdBy?: string;
+  createdByEmail?: string;
+  updatedBy?: string;
+  updatedByEmail?: string;
   nodes: WorkflowNode[];
   connections: Connection[];
   createdAt: string;
@@ -56,8 +60,11 @@ export interface WorkflowMetadata {
   id: string;
   name: string;
   description?: string;
+  teamId?: string;
   createdAt: string;
   updatedAt: string;
+  updatedBy?: string;
+  updatedByEmail?: string;
   isDeployed: boolean;
   deploymentStatus?: 'draft' | 'pending' | 'deploying' | 'deployed' | 'failed' | 'delete_failed' | 'deleting';
   stepFunctionArn?: string;
@@ -104,7 +111,11 @@ export const WorkflowSchema = z.object({
   id: z.string().min(1),
   name: z.string().min(1).max(100),
   description: z.string().max(500).optional(),
-  userId: z.string().min(1),
+  teamId: z.string().min(1),
+  createdBy: z.string().optional(),
+  createdByEmail: z.string().optional(),
+  updatedBy: z.string().optional(),
+  updatedByEmail: z.string().optional(),
   nodes: z.array(WorkflowNodeSchema).min(1),
   connections: z.array(ConnectionSchema),
   createdAt: z.string(),

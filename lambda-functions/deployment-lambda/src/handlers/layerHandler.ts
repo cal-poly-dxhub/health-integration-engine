@@ -1,7 +1,7 @@
 import { APIGatewayProxyEvent, APIGatewayProxyResult } from 'aws-lambda';
 import { createHash } from 'crypto';
 import { DynamoDBClient } from '@aws-sdk/client-dynamodb';
-import { DynamoDBDocumentClient, PutCommand, QueryCommand, DeleteCommand, UpdateCommand } from '@aws-sdk/lib-dynamodb';
+import { DynamoDBDocumentClient, PutCommand, QueryCommand, DeleteCommand, UpdateCommand, ScanCommand } from '@aws-sdk/lib-dynamodb';
 import { S3Client, PutObjectCommand, DeleteObjectCommand, HeadObjectCommand } from '@aws-sdk/client-s3';
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
 import {
@@ -12,7 +12,8 @@ import {
   ListFunctionsCommand,
   ListTagsCommand,
 } from '@aws-sdk/client-lambda';
-import { extractUserIdFromEvent, validateJWTToken, createAuthErrorResponse, createSuccessHeaders } from '../utils/auth';
+import { createAuthErrorResponse, createSuccessHeaders } from '../utils/auth';
+import { resolveCaller, unauthenticated } from '../utils/authz';
 
 const dynamoClient = new DynamoDBClient({ region: process.env.AWS_REGION });
 const docClient = DynamoDBDocumentClient.from(dynamoClient);
@@ -35,15 +36,15 @@ const MANAGED_BY_TAG_VALUE = 'workflow-builder';
 export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayProxyResult> => {
   console.log('Layer handler event:', JSON.stringify({ method: event.httpMethod, path: event.path }, null, 2));
 
-  // Authenticate
-  let userId = extractUserIdFromEvent(event);
-  if (!userId) {
-    const authResult = await validateJWTToken(event);
-    if (!authResult.isValid) {
-      return createAuthErrorResponse(authResult.error || 'Authentication required');
-    }
-    userId = authResult.userId!;
+  // Authenticate. Layers are per-user (each user owns their own layer
+  // namespace), so we don't need a team check here — but pending users
+  // (zero teams + not admin) shouldn't be able to use the system at all.
+  const caller = await resolveCaller(event);
+  if (!caller) return unauthenticated();
+  if (!caller.isAdmin && caller.teams.length === 0) {
+    return createAuthErrorResponse('Your account is pending. An admin must add you to a team before you can use this feature.');
   }
+  const userId = caller.userId;
 
   try {
     const resource = event.resource || event.path || '';
@@ -308,14 +309,15 @@ async function deleteLayer(event: APIGatewayProxyEvent, userId: string): Promise
 
   const layerVersionArn = layer.layerVersionArn;
 
-  // Build the in-use list across the user's saved workflows
-  const workflowsResult = await docClient.send(new QueryCommand({
+  // Workflows now live per-team, not per-user. Scan for any workflow record
+  // (SK = META) that references this layer ARN, then detach. The scan is
+  // bounded by Lambda timeout; at the project's scale this is acceptable.
+  const workflowsScan = await docClient.send(new ScanCommand({
     TableName: WORKFLOWS_TABLE,
-    KeyConditionExpression: 'PK = :pk AND begins_with(SK, :sk)',
-    ExpressionAttributeValues: { ':pk': `USER#${userId}`, ':sk': 'WORKFLOW#' },
+    FilterExpression: 'SK = :sk',
+    ExpressionAttributeValues: { ':sk': 'META' },
   }));
-
-  const referencingWorkflows = (workflowsResult.Items || []).filter(w =>
+  const referencingWorkflows = (workflowsScan.Items || []).filter(w =>
     (w.nodes || []).some((n: any) => n.type === 'lambda' && n.config?.layers?.includes(layerVersionArn))
   );
   const deployedReferences = referencingWorkflows.filter(w => w.isDeployed);

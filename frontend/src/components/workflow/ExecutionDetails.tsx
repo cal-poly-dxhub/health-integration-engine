@@ -11,6 +11,8 @@ import './ExecutionDetails.css';
 interface ExecutionDetailsProps {
   execution?: StepFunctionExecution;
   onClose?: () => void;
+  /** When true, hide Stop / Redrive / New execution buttons. */
+  isReadOnly?: boolean;
 }
 
 type TopTab = 'overview' | 'input-output' | 'definition' | 'events';
@@ -393,6 +395,7 @@ const EventRow: React.FC<EventRowProps> = ({
 const ExecutionDetails: React.FC<ExecutionDetailsProps> = ({
   execution: propExecution,
   onClose,
+  isReadOnly = false,
 }) => {
   const { executionArn } = useParams<{ executionArn: string }>();
   const navigate = useNavigate();
@@ -1193,7 +1196,7 @@ const ExecutionDetails: React.FC<ExecutionDetailsProps> = ({
         </div>
 
         <div className="exd-nav-right">
-          {execution?.status === 'RUNNING' && (
+          {!isReadOnly && execution?.status === 'RUNNING' && (
             <button
               type="button"
               className="exd-btn exd-btn--danger"
@@ -1203,7 +1206,7 @@ const ExecutionDetails: React.FC<ExecutionDetailsProps> = ({
               Stop
             </button>
           )}
-          {canRedrive && (
+          {!isReadOnly && canRedrive && (
             <button
               type="button"
               className="exd-btn exd-btn--warning"
@@ -1214,6 +1217,7 @@ const ExecutionDetails: React.FC<ExecutionDetailsProps> = ({
               {isRedriving ? 'Redriving…' : 'Redrive'}
             </button>
           )}
+          {!isReadOnly && (
           <button
             type="button"
             className="exd-btn exd-btn--primary"
@@ -1237,6 +1241,7 @@ const ExecutionDetails: React.FC<ExecutionDetailsProps> = ({
             <PlayIcon />
             New execution
           </button>
+          )}
         </div>
       </nav>
 

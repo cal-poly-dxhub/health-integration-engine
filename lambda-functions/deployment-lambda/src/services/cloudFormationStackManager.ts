@@ -625,8 +625,8 @@ export class CloudFormationStackManager {
       await this.docClient.send(new UpdateCommand({
         TableName: WORKFLOWS_TABLE,
         Key: {
-          PK: `USER#${userId}`,
-          SK: `WORKFLOW#${workflowId}`,
+          PK: `WORKFLOW#${workflowId}`,
+          SK: 'META',
         },
         UpdateExpression: 'SET isDeployed = :false, deploymentStatus = :status, stepFunctionArn = :arn, cloudFormationStackArn = :stackArn, updatedAt = :updatedAt',
         ExpressionAttributeValues: {

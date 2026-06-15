@@ -5,9 +5,13 @@ import {
   LAMBDA_ARCHITECTURES,
   MAX_LAYER_ZIP_BYTES,
 } from '../../constants/lambdaRuntimes';
+import { useMe } from '../../contexts/MeContext';
 import './LayerManagement.css';
 
 const LayerManagement: React.FC = () => {
+  const { me } = useMe();
+  // Layer creation is a write operation; readers can only view the layer list.
+  const canManageLayers = !me || me.isAdmin || me.teams.some(t => t.role === 'writer');
   const [layers, setLayers] = useState<LayerMetadata[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -215,7 +219,8 @@ const LayerManagement: React.FC = () => {
           type="button"
           className="lyr-btn lyr-btn--primary"
           onClick={() => setShowCreateForm(true)}
-          disabled={showCreateForm}
+          disabled={showCreateForm || !canManageLayers}
+          title={!canManageLayers ? 'You need writer access on at least one team to create layers.' : undefined}
         >
           <PlusIcon />
           Create layer
@@ -229,7 +234,7 @@ const LayerManagement: React.FC = () => {
         </div>
       )}
 
-      {showCreateForm && (
+      {showCreateForm && canManageLayers && (
         <div className="lyr-form-card">
           <h3 className="lyr-form-title">Create new layer</h3>
 
@@ -393,14 +398,16 @@ const LayerManagement: React.FC = () => {
             workflow functions.
           </p>
           <div className="lyr-state-actions">
-            <button
-              type="button"
-              className="lyr-btn lyr-btn--primary"
-              onClick={() => setShowCreateForm(true)}
-            >
-              <PlusIcon />
-              Create layer
-            </button>
+            {canManageLayers && (
+              <button
+                type="button"
+                className="lyr-btn lyr-btn--primary"
+                onClick={() => setShowCreateForm(true)}
+              >
+                <PlusIcon />
+                Create layer
+              </button>
+            )}
           </div>
         </div>
       ) : (
@@ -443,15 +450,17 @@ const LayerManagement: React.FC = () => {
                       {new Date(layer.createdAt).toLocaleDateString()}
                     </td>
                     <td style={{ textAlign: 'right' }}>
-                      <button
-                        type="button"
-                        className="lyr-btn lyr-btn--icon lyr-btn--danger"
-                        onClick={() => handleDelete(layer.id, layer.name)}
-                        title={`Delete ${layer.name}`}
-                        aria-label={`Delete ${layer.name}`}
-                      >
-                        <TrashIcon />
-                      </button>
+                      {canManageLayers && (
+                        <button
+                          type="button"
+                          className="lyr-btn lyr-btn--icon lyr-btn--danger"
+                          onClick={() => handleDelete(layer.id, layer.name)}
+                          title={`Delete ${layer.name}`}
+                          aria-label={`Delete ${layer.name}`}
+                        >
+                          <TrashIcon />
+                        </button>
+                      )}
                     </td>
                   </tr>
                 ))}

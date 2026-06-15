@@ -17,15 +17,14 @@ export const handler = async (event: any) => {
 
   const { workflowId, userId } = event;
 
-  if (!workflowId || !userId) {
-    throw new Error('workflowId and userId are required');
+  if (!workflowId) {
+    throw new Error('workflowId is required');
   }
 
   try {
-    // Delete deployment records and workflow in parallel
     await Promise.all([
       deleteDeploymentRecords(workflowId),
-      deleteWorkflowFromDatabase(workflowId, userId)
+      deleteWorkflowFromDatabase(workflowId)
     ]);
 
     console.log('Database cleanup completed successfully');
@@ -96,19 +95,16 @@ async function deleteDeploymentRecords(workflowId: string): Promise<void> {
   }
 }
 
-/**
- * Delete workflow from database
- */
-async function deleteWorkflowFromDatabase(workflowId: string, userId: string): Promise<void> {
+async function deleteWorkflowFromDatabase(workflowId: string): Promise<void> {
   try {
     await docClient.send(new DeleteCommand({
       TableName: WORKFLOWS_TABLE,
       Key: {
-        PK: `USER#${userId}`,
-        SK: `WORKFLOW#${workflowId}`,
+        PK: `WORKFLOW#${workflowId}`,
+        SK: 'META',
       },
     }));
-    
+
     console.log('Workflow deleted from database');
   } catch (error) {
     console.error('Failed to delete workflow from database:', error);

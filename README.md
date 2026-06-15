@@ -243,6 +243,29 @@ Estimates assume **us-east-1** pricing and 1 million workflow executions per mon
 
 # Usage
 
+## First-time setup: bootstrap the first admin
+
+Self-signup is enabled, but new users land in a **pending** state with no team and no permissions. An admin must add them to a team before they can do anything. To bootstrap the very first admin:
+
+1. Deploy the stack.
+2. Sign up through the app (email + password, then confirm via the verification email).
+3. In the AWS Cognito console: open the user pool, find your user, and add them to the **`admins`** group.
+4. Sign out and back in so the new admin claim is in your JWT.
+5. The "Admin" link appears in the dashboard nav. Use the admin page (`/admin`) to create teams, add users to teams, and (after bootstrap) promote/demote other admins. After this, you never need to touch the Cognito console for admin tasks again.
+
+The admin page enforces a **last-admin guard**: you cannot demote the only remaining admin. Promote a second admin first if you need to demote yourself.
+
+## Roles
+
+- **Admin** — Created via Cognito group membership. Full visibility across all teams; can manage teams/users; can read/write any workflow.
+- **Writer** — Per-team role. Can create, edit, deploy, and delete workflows owned by that team.
+- **Reader** — Per-team role. Read-only access to workflows owned by that team.
+- **Pending** — Authenticated user with no team memberships. Sees a "waiting for admin" screen; cannot use any workflow APIs.
+
+Every workflow shows "Last edited by `<email>` on `<date>`" so changes are attributable. All admin actions (team create/delete, member add/remove, role changes, admin promotion/demotion) are recorded in the **Audit log** tab on the admin page.
+
+## Day-to-day
+
 1. **Create a Workflow**: Click "Create New Workflow" from the dashboard
 2. **Add Nodes**: Drag and drop nodes (Lambda, S3, Database) onto the canvas
 3. **Connect Nodes**: Draw connections between nodes to define the execution flow

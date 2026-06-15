@@ -9,6 +9,7 @@ export interface ListWorkflowsParams {
   deploymentStatus?: 'draft' | 'pending' | 'deploying' | 'deployed' | 'failed';
   sortBy?: 'updatedAt' | 'createdAt' | 'name';
   sortOrder?: 'asc' | 'desc';
+  teamId?: string;
 }
 
 export interface ListWorkflowsResponse {
@@ -38,6 +39,7 @@ class WorkflowApiService {
     if (params.deploymentStatus) queryParams.append('deploymentStatus', params.deploymentStatus);
     if (params.sortBy) queryParams.append('sortBy', params.sortBy);
     if (params.sortOrder) queryParams.append('sortOrder', params.sortOrder);
+    if (params.teamId) queryParams.append('teamId', params.teamId);
 
     const url = `/workflows${queryParams.toString() ? `?${queryParams.toString()}` : ''}`;
     

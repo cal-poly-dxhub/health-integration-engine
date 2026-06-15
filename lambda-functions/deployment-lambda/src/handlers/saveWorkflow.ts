@@ -1,6 +1,6 @@
 import { APIGatewayProxyEvent, APIGatewayProxyResult } from 'aws-lambda';
 import { DynamoDBClient } from '@aws-sdk/client-dynamodb';
-import { DynamoDBDocumentClient, PutCommand, GetCommand } from '@aws-sdk/lib-dynamodb';
+import { DynamoDBDocumentClient, PutCommand, GetCommand, QueryCommand } from '@aws-sdk/lib-dynamodb';
 import { createSuccessHeaders } from '../utils/auth';
 import { resolveCaller, canWriteTeam, unauthenticated, forbidden } from '../utils/authz';
 import { writeWorkflowChangeLog } from '../utils/changeLog';
@@ -92,9 +92,46 @@ export const handler = async (
       };
     }
 
+    // --- Enforce unique workflow name within the team ---
+    // Names are compared trimmed but case-sensitively ("My Flow" and "my flow"
+    // may coexist; "my flow" and "my flow " may not). System-generated names
+    // (new "Untitled Workflow", duplicates) set autoResolveName so they get the
+    // next free name instead of failing; user-typed renames stay strict (409).
+    const requestedName = String(workflowData.name).trim();
+    if (!requestedName) {
+      return {
+        statusCode: 400,
+        headers: createSuccessHeaders(),
+        body: JSON.stringify({ error: 'Workflow name is required' }),
+      };
+    }
+    const autoResolveName = workflowData.autoResolveName === true;
+    const teamWorkflows = await getTeamWorkflows(targetTeamId);
+    const existingNames = new Set(
+      teamWorkflows
+        .filter(w => w.id !== workflowId)
+        .map(w => (w.name || '').trim())
+    );
+
+    let finalName: string;
+    if (autoResolveName) {
+      finalName = resolveUniqueName(requestedName, existingNames);
+    } else if (existingNames.has(requestedName)) {
+      return {
+        statusCode: 409,
+        headers: createSuccessHeaders(),
+        body: JSON.stringify({
+          error: `A workflow named "${requestedName}" already exists in this team. Please choose a different name.`,
+          code: 'NAME_CONFLICT',
+        }),
+      };
+    } else {
+      finalName = requestedName;
+    }
+
     const workflow: Workflow = {
       id: workflowId,
-      name: workflowData.name,
+      name: finalName,
       description: workflowData.description || '',
       teamId: targetTeamId,
       nodes: workflowData.nodes || [],
@@ -197,4 +234,42 @@ async function saveWorkflowToDatabase(workflow: Workflow): Promise<void> {
       ...workflow,
     },
   }));
+}
+
+/**
+ * Fetch all workflows (id + name) for a team via the team GSI. Used to enforce
+ * unique workflow names within a team.
+ */
+async function getTeamWorkflows(teamId: string): Promise<Array<{ id: string; name: string }>> {
+  const items: Array<{ id: string; name: string }> = [];
+  let lastKey: Record<string, unknown> | undefined;
+  do {
+    const response = await docClient.send(new QueryCommand({
+      TableName: WORKFLOWS_TABLE,
+      IndexName: 'GSI1',
+      KeyConditionExpression: 'GSI1PK = :pk AND begins_with(GSI1SK, :sk)',
+      ExpressionAttributeValues: { ':pk': `TEAM#${teamId}`, ':sk': 'WORKFLOW#' },
+      // `name` is a DynamoDB reserved word, so alias it.
+      ProjectionExpression: 'id, #nm',
+      ExpressionAttributeNames: { '#nm': 'name' },
+      ExclusiveStartKey: lastKey,
+    }));
+    for (const item of (response.Items || []) as Array<{ id: string; name: string }>) {
+      items.push({ id: item.id, name: item.name });
+    }
+    lastKey = response.LastEvaluatedKey;
+  } while (lastKey);
+  return items;
+}
+
+/**
+ * Return `requested` if free within the team, otherwise the first available
+ * "<requested> (n)" (n starting at 2). Comparison is trimmed, case-sensitive.
+ */
+export function resolveUniqueName(requested: string, existingNames: Set<string>): string {
+  const trimmed = requested.trim();
+  if (!existingNames.has(trimmed)) return trimmed;
+  let n = 2;
+  while (existingNames.has(`${trimmed} (${n})`)) n++;
+  return `${trimmed} (${n})`;
 }

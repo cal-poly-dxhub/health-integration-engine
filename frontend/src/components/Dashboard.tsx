@@ -26,7 +26,7 @@ export default function Dashboard({
   onViewWorkflow,
 }: DashboardProps) {
   const navigate = useNavigate();
-  const { me, selectedTeamId, selectTeam, teamNamesById, teamNamesReady, teamsById, allTeamsForAdmin } = useMe();
+  const { me, selectedTeamId, selectTeam, teamNamesById, teamNamesReady, teamsById, allTeamsForAdmin, canWriteSelected } = useMe();
   const [user, setUser] = useState<AuthUser | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -133,6 +133,9 @@ export default function Dashboard({
   // When the caller could create in more than one team and hasn't picked
   // one in the switcher, we pop a small modal so they pick before creating.
   const [teamPickerOpen, setTeamPickerOpen] = useState(false);
+  // When duplicating and the target team is ambiguous, hold the source
+  // workflow id while the team picker is open.
+  const [duplicatePickerWorkflowId, setDuplicatePickerWorkflowId] = useState<string | null>(null);
 
   const eligibleCreateTeams = (() => {
     if (!me) return [] as { teamId: string; name: string }[];
@@ -171,6 +174,16 @@ export default function Dashboard({
 
     if (!me.isAdmin && eligibleCreateTeams.length === 0) {
       setOperationError('You need writer access on at least one team to create workflows.');
+      return;
+    }
+
+    // A specific team is selected that the user can only read. Don't silently
+    // create in some other team — tell them to switch to a writable team.
+    if (selectedTeamId && !me.isAdmin && !eligibleCreateTeams.some(t => t.teamId === selectedTeamId)) {
+      const teamName = teamNamesById[selectedTeamId] || selectedTeamId;
+      setOperationError(
+        `You have read-only access to ${teamName}. Switch to a team where you have writer access to create a workflow.`
+      );
       return;
     }
 
@@ -254,14 +267,58 @@ export default function Dashboard({
     }
   };
 
-  const handleDuplicateWorkflow = async (workflowId: string) => {
+  const performDuplicate = async (workflowId: string, teamId: string | undefined) => {
     try {
-      const duplicatedWorkflow = await duplicateWorkflow(workflowId);
+      const duplicatedWorkflow = await duplicateWorkflow(workflowId, teamId);
       handleEditWorkflow(duplicatedWorkflow.id);
     } catch (error) {
       console.error('Failed to duplicate workflow:', error);
-      setOperationError('Failed to duplicate workflow. Please try again.');
+      setOperationError(
+        error instanceof Error ? error.message : 'Failed to duplicate workflow. Please try again.'
+      );
     }
+  };
+
+  const handleDuplicateWorkflow = async (workflowId: string) => {
+    if (!me) return;
+
+    if (!me.isAdmin && eligibleCreateTeams.length === 0) {
+      setOperationError('You need writer access on at least one team to duplicate workflows.');
+      return;
+    }
+
+    // A specific team is selected that the user can only read. Don't silently
+    // duplicate into some other team — tell them to switch to a writable team.
+    if (selectedTeamId && !me.isAdmin && !eligibleCreateTeams.some(t => t.teamId === selectedTeamId)) {
+      const teamName = teamNamesById[selectedTeamId] || selectedTeamId;
+      setOperationError(
+        `You have read-only access to ${teamName}. Switch to a team where you have writer access to duplicate workflows.`
+      );
+      return;
+    }
+
+    // If the team switcher already targets a specific eligible team, use it.
+    if (selectedTeamId && eligibleCreateTeams.some(t => t.teamId === selectedTeamId)) {
+      await performDuplicate(workflowId, selectedTeamId);
+      return;
+    }
+
+    // Otherwise: single eligible team auto-selects; multiple opens the picker.
+    if (eligibleCreateTeams.length === 1) {
+      await performDuplicate(workflowId, eligibleCreateTeams[0].teamId);
+      return;
+    }
+
+    if (eligibleCreateTeams.length === 0) {
+      setOperationError(
+        me.isAdmin
+          ? 'No teams exist yet. Create a team in the admin page first.'
+          : 'You need to be a member of a team to duplicate workflows.'
+      );
+      return;
+    }
+
+    setDuplicatePickerWorkflowId(workflowId);
   };
 
   if (loading) {
@@ -500,6 +557,12 @@ export default function Dashboard({
                 error={workflowsError || undefined}
                 username={user?.email || user?.username || 'User'}
                 teamNamesById={teamNamesById}
+                canCreate={!(selectedTeamId && !canWriteSelected)}
+                createDisabledReason={
+                  selectedTeamId && !canWriteSelected
+                    ? `You have read-only access to ${teamNamesById[selectedTeamId] || selectedTeamId}. Switch to a team where you have writer access to create workflows.`
+                    : undefined
+                }
                 canWriteWorkflow={(w) => {
                   if (!me) return false;
                   if (me.isAdmin) return true;
@@ -540,6 +603,22 @@ export default function Dashboard({
           onConfirm={async (teamId) => {
             setTeamPickerOpen(false);
             await performCreate(teamId);
+          }}
+        />
+      )}
+
+      {duplicatePickerWorkflowId && (
+        <CreateInTeamPicker
+          teams={eligibleCreateTeams}
+          title="Duplicate workflow into which team?"
+          description="Pick the team the copied workflow should belong to."
+          confirmLabel="Duplicate"
+          defaultTeamId={workflows.find(w => w.id === duplicatePickerWorkflowId)?.teamId}
+          onCancel={() => setDuplicatePickerWorkflowId(null)}
+          onConfirm={async (teamId) => {
+            const sourceId = duplicatePickerWorkflowId;
+            setDuplicatePickerWorkflowId(null);
+            if (sourceId) await performDuplicate(sourceId, teamId);
           }}
         />
       )}
@@ -622,10 +701,18 @@ interface CreateInTeamPickerProps {
   teams: { teamId: string; name: string }[];
   onCancel: () => void;
   onConfirm: (teamId: string) => void;
+  title?: string;
+  description?: string;
+  confirmLabel?: string;
+  /** Pre-selected team in the dropdown (falls back to the first team). */
+  defaultTeamId?: string;
 }
 
-function CreateInTeamPicker({ teams, onCancel, onConfirm }: CreateInTeamPickerProps) {
-  const [picked, setPicked] = useState<string>(teams[0]?.teamId || '');
+function CreateInTeamPicker({ teams, onCancel, onConfirm, title, description, confirmLabel, defaultTeamId }: CreateInTeamPickerProps) {
+  const initial = defaultTeamId && teams.some(t => t.teamId === defaultTeamId)
+    ? defaultTeamId
+    : (teams[0]?.teamId || '');
+  const [picked, setPicked] = useState<string>(initial);
   return (
     <div
       role="dialog"
@@ -640,9 +727,9 @@ function CreateInTeamPicker({ teams, onCancel, onConfirm }: CreateInTeamPickerPr
         background: '#fff', borderRadius: 12, padding: 24, width: '100%', maxWidth: 400,
         boxShadow: '0 16px 40px rgba(0, 0, 0, 0.18)',
       }}>
-        <h2 style={{ margin: '0 0 8px', fontSize: 18, fontWeight: 600 }}>Create workflow in which team?</h2>
+        <h2 style={{ margin: '0 0 8px', fontSize: 18, fontWeight: 600 }}>{title || 'Create workflow in which team?'}</h2>
         <p style={{ margin: '0 0 16px', fontSize: 13, color: '#6b7280' }}>
-          You can create workflows in more than one team. Pick the team this workflow should belong to.
+          {description || 'You can create workflows in more than one team. Pick the team this workflow should belong to.'}
         </p>
         <select
           value={picked}
@@ -676,7 +763,7 @@ function CreateInTeamPicker({ teams, onCancel, onConfirm }: CreateInTeamPickerPr
               border: 'none', borderRadius: 6, fontSize: 14, cursor: 'pointer',
             }}
           >
-            Create
+            {confirmLabel || 'Create'}
           </button>
         </div>
       </div>

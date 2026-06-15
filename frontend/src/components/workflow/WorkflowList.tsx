@@ -13,6 +13,10 @@ interface WorkflowListProps {
    *  Rows where this is false hide edit / delete / duplicate actions. */
   canWriteWorkflow?: (workflow: WorkflowMetadata) => boolean;
   onCreateNew: () => void;
+  /** When false, the create button is disabled (e.g. a read-only team is selected). */
+  canCreate?: boolean;
+  /** Tooltip explaining why creation is disabled. */
+  createDisabledReason?: string;
   onEditWorkflow: (workflowId: string) => void;
   onViewWorkflow?: (workflowId: string) => void;
   onDeleteWorkflow: (workflowId: string) => void;
@@ -35,6 +39,8 @@ const WorkflowList: React.FC<WorkflowListProps> = ({
   teamNamesById,
   canWriteWorkflow,
   onCreateNew,
+  canCreate = true,
+  createDisabledReason,
   onEditWorkflow,
   onViewWorkflow,
   onDeleteWorkflow,
@@ -160,27 +166,32 @@ const WorkflowList: React.FC<WorkflowListProps> = ({
               <RefreshIcon />
             </button>
           )}
-          <button
-            type="button"
-            className="wfl-btn wfl-btn--primary"
-            onClick={onCreateNew}
-            disabled={isCreating}
+          <span
+            title={!canCreate ? createDisabledReason : undefined}
+            style={{ display: 'inline-flex' }}
           >
-            {isCreating ? (
-              <>
-                <span
-                  className="wfl-spinner-sm"
-                  aria-hidden="true"
-                />
-                Creating…
-              </>
-            ) : (
-              <>
-                <PlusIcon />
-                Create workflow
-              </>
-            )}
-          </button>
+            <button
+              type="button"
+              className="wfl-btn wfl-btn--primary"
+              onClick={onCreateNew}
+              disabled={isCreating || !canCreate}
+            >
+              {isCreating ? (
+                <>
+                  <span
+                    className="wfl-spinner-sm"
+                    aria-hidden="true"
+                  />
+                  Creating…
+                </>
+              ) : (
+                <>
+                  <PlusIcon />
+                  Create workflow
+                </>
+              )}
+            </button>
+          </span>
         </div>
       </header>
 
@@ -282,15 +293,20 @@ const WorkflowList: React.FC<WorkflowListProps> = ({
               Get started by creating your first AWS Step Functions workflow.
             </p>
             <div className="wfl-state-actions">
-              <button
-                type="button"
-                onClick={onCreateNew}
-                className="wfl-btn wfl-btn--primary"
-                disabled={isCreating}
+              <span
+                title={!canCreate ? createDisabledReason : undefined}
+                style={{ display: 'inline-flex' }}
               >
-                <PlusIcon />
-                Create workflow
-              </button>
+                <button
+                  type="button"
+                  onClick={onCreateNew}
+                  className="wfl-btn wfl-btn--primary"
+                  disabled={isCreating || !canCreate}
+                >
+                  <PlusIcon />
+                  Create workflow
+                </button>
+              </span>
             </div>
           </div>
         ) : (

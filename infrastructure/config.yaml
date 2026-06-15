@@ -33,6 +33,10 @@ apiGateway:
 dynamodb:
   deploymentsTable: "WorkflowBuilder-Deployments"
   workflowsTable: "WorkflowBuilder-Workflows"
+  teamsTable: "WorkflowBuilder-Teams"
+  membershipsTable: "WorkflowBuilder-Memberships"
+  adminAuditLogTable: "WorkflowBuilder-AdminAuditLog"
+  workflowChangeLogsTable: "WorkflowBuilder-WorkflowChangeLogs"
 
 # S3 buckets (account ID and region will be appended)
 s3:
@@ -82,7 +86,14 @@ lambda:
   # Deletion functions
   deleteCloudFormationStack: "workflow-builder-delete-cloudformation-stack"
   deleteDatabaseRecords: "workflow-builder-delete-database-records"
-  
+
+  # Admin / team functions
+  preTokenGeneration: "workflow-builder-pre-token-generation"
+  adminTeams: "workflow-builder-admin-teams"
+  adminUsers: "workflow-builder-admin-users"
+  meTeams: "workflow-builder-me-teams"
+  getWorkflowChangelog: "workflow-builder-get-workflow-changelog"
+
   # WebSocket functions
   wsConnect: "websocket-connect-handler"
   wsDisconnect: "websocket-disconnect-handler"

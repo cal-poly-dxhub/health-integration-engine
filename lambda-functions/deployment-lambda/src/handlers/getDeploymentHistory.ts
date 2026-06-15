@@ -1,12 +1,14 @@
 import { APIGatewayProxyEvent, APIGatewayProxyResult } from 'aws-lambda';
 import { DynamoDBClient } from '@aws-sdk/client-dynamodb';
-import { DynamoDBDocumentClient, QueryCommand } from '@aws-sdk/lib-dynamodb';
-import { extractUserIdFromEvent, createAuthErrorResponse, createSuccessHeaders } from '../utils/auth';
+import { DynamoDBDocumentClient, QueryCommand, GetCommand } from '@aws-sdk/lib-dynamodb';
+import { createSuccessHeaders } from '../utils/auth';
+import { resolveCaller, canReadTeam, unauthenticated } from '../utils/authz';
 
 const dynamoClient = new DynamoDBClient({ region: process.env.AWS_REGION });
 const docClient = DynamoDBDocumentClient.from(dynamoClient);
 
 const DEPLOYMENTS_TABLE = process.env.DEPLOYMENT_TABLE_NAME || 'WorkflowBuilder-Deployments';
+const WORKFLOWS_TABLE = process.env.WORKFLOWS_TABLE || 'WorkflowBuilder-Workflows';
 
 interface DeploymentHistoryResponse {
   deployments: any[];
@@ -14,17 +16,13 @@ interface DeploymentHistoryResponse {
 }
 
 /**
- * Get deployment history for a specific workflow
+ * Get deployment history for a workflow. Caller must be a reader on the
+ * workflow's team (or admin). 404 masks out-of-scope workflows.
  */
 export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayProxyResult> => {
   try {
-    console.log('Get deployment history event:', JSON.stringify({ httpMethod: event.httpMethod, path: event.path, pathParameters: event.pathParameters }, null, 2));
-
-    // Validate authentication
-    const userId = extractUserIdFromEvent(event);
-    if (!userId) {
-      return createAuthErrorResponse('Valid authentication token required');
-    }
+    const caller = await resolveCaller(event);
+    if (!caller) return unauthenticated();
 
     const workflowId = event.pathParameters?.workflowId;
     if (!workflowId) {
@@ -35,32 +33,38 @@ export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayPr
       };
     }
 
-    // Query deployment history for the workflow
-    const queryParams = {
+    const workflow = await getWorkflowMeta(workflowId);
+    if (!workflow) {
+      return {
+        statusCode: 404,
+        headers: createSuccessHeaders(),
+        body: JSON.stringify({ error: 'Workflow not found' }),
+      };
+    }
+    if (!canReadTeam(caller, workflow.teamId)) {
+      return {
+        statusCode: 404,
+        headers: createSuccessHeaders(),
+        body: JSON.stringify({ error: 'Workflow not found' }),
+      };
+    }
+
+    const result = await docClient.send(new QueryCommand({
       TableName: DEPLOYMENTS_TABLE,
-      KeyConditionExpression: 'PK = :pk AND begins_with(SK, :sk)',
+      IndexName: 'GSI1',
+      KeyConditionExpression: 'GSI1PK = :pk AND begins_with(GSI1SK, :sk)',
       ExpressionAttributeValues: {
         ':pk': `WORKFLOW#${workflowId}`,
         ':sk': 'DEPLOYMENT#',
       },
-      ScanIndexForward: false, // Sort by SK in descending order (newest first)
-    };
+      ScanIndexForward: false,
+    }));
 
-    const result = await docClient.send(new QueryCommand(queryParams));
     const deployments = result.Items || [];
-
-    // Filter deployments to only show those belonging to the authenticated user
-    const userDeployments = deployments.filter(deployment => deployment.userId === userId);
-
-    console.log(`Found ${userDeployments.length} deployments for workflow ${workflowId} and user ${userId}`);
-
     return {
       statusCode: 200,
       headers: createSuccessHeaders(),
-      body: JSON.stringify({
-        deployments: userDeployments,
-        count: userDeployments.length,
-      } as DeploymentHistoryResponse),
+      body: JSON.stringify({ deployments, count: deployments.length } as DeploymentHistoryResponse),
     };
   } catch (error) {
     console.error('Error getting deployment history:', error);
@@ -71,3 +75,11 @@ export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayPr
     };
   }
 };
+
+async function getWorkflowMeta(workflowId: string): Promise<any | null> {
+  const response = await docClient.send(new GetCommand({
+    TableName: WORKFLOWS_TABLE,
+    Key: { PK: `WORKFLOW#${workflowId}`, SK: 'META' },
+  }));
+  return response.Item || null;
+}

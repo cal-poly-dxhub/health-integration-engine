@@ -15,7 +15,9 @@ import { Workflow } from '../types/workflow';
 
 import { DeploymentOrchestrator } from '../services/deploymentOrchestrator';
 import { CloudFormationTemplateGenerator } from '../services/cloudFormationTemplateGenerator';
-import { extractUserIdFromEvent, createAuthErrorResponse, createSuccessHeaders } from '../utils/auth';
+import { createAuthErrorResponse, createSuccessHeaders } from '../utils/auth';
+import { resolveCaller, canWriteTeam, forbidden } from '../utils/authz';
+import { writeWorkflowChangeLog } from '../utils/changeLog';
 
 const dynamoClient = new DynamoDBClient({ region: process.env.AWS_REGION });
 const docClient = DynamoDBDocumentClient.from(dynamoClient);
@@ -86,33 +88,33 @@ export const handler = async (
 
     const deploymentRequest: DeploymentRequest = requestBody;
 
-    const userId = extractUserIdFromEvent(apiEvent);
-    
-    if (!userId) {
+    const caller = await resolveCaller(apiEvent);
+    if (!caller) {
       return createAuthErrorResponse('Valid authentication token required');
     }
+    const userId = caller.userId;
 
-    // Get workflow data from request or database
-    let workflow: Workflow;
-    
-    if (deploymentRequest.workflowData) {
-      // Workflow data provided in request (from localStorage)
-      workflow = deploymentRequest.workflowData;
-    } else {
-      // Try to fetch from database (future implementation)
-      const dbWorkflow = await getWorkflow(deploymentRequest.workflowId, userId);
-      if (!dbWorkflow) {
-        return {
-          statusCode: 400,
-          headers: createSuccessHeaders(),
-          body: JSON.stringify({
-            error: 'Workflow data must be provided in request or stored in database',
-            hint: 'Include workflowData in the deployment request',
-          }),
-        };
-      }
-      workflow = dbWorkflow;
+    // Always reload from DB so we trust the workflow's teamId for the auth
+    // check; client-supplied workflowData can spoof the team otherwise.
+    const dbWorkflow = await getWorkflow(deploymentRequest.workflowId);
+    if (!dbWorkflow) {
+      return {
+        statusCode: 404,
+        headers: createSuccessHeaders(),
+        body: JSON.stringify({ error: 'Workflow not found' }),
+      };
     }
+
+    if (!canWriteTeam(caller, dbWorkflow.teamId)) {
+      return forbidden('You do not have writer access on this team');
+    }
+
+    // Allow the request to ride client-supplied node config if present
+    // (e.g. unsaved Lambda code), but pin the workflow's teamId/id to the
+    // server's canonical version.
+    const workflow: Workflow = deploymentRequest.workflowData
+      ? { ...deploymentRequest.workflowData, teamId: dbWorkflow.teamId, id: dbWorkflow.id }
+      : dbWorkflow;
 
     // Validate workflow is ready for deployment
     const validationResult = validateWorkflowForDeployment(workflow);
@@ -155,7 +157,9 @@ export const handler = async (
     const initialDeploymentStatus: DeploymentStatus = {
       deploymentId,
       workflowId: workflow.id,
-      userId,
+      teamId: dbWorkflow.teamId,
+      createdBy: caller.userId,
+      createdByEmail: caller.email,
       status: 'pending',
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString(),
@@ -219,7 +223,17 @@ export const handler = async (
 
     try {
       const executionArn = await startDeploymentStepFunction(deploymentContext, workflow, lambdaCodeUploads);
-      
+
+      await writeWorkflowChangeLog({
+        workflowId: workflow.id,
+        action: 'deploy_triggered',
+        actorUserId: caller.userId,
+        actorEmail: caller.email,
+        teamId: dbWorkflow.teamId,
+        workflowName: workflow.name,
+        meta: { deploymentId },
+      });
+
       // Return immediate response while deployment continues in background
       return {
         statusCode: 202,
@@ -280,15 +294,15 @@ export const handler = async (
 };
 
 /**
- * Get workflow from database
+ * Get workflow from database. Workflow ID is unique across the table.
  */
-async function getWorkflow(workflowId: string, userId: string): Promise<Workflow | null> {
+async function getWorkflow(workflowId: string): Promise<Workflow | null> {
   try {
     const response = await docClient.send(new GetCommand({
       TableName: WORKFLOWS_TABLE,
       Key: {
-        PK: `USER#${userId}`,
-        SK: `WORKFLOW#${workflowId}`,
+        PK: `WORKFLOW#${workflowId}`,
+        SK: 'META',
       },
     }));
 

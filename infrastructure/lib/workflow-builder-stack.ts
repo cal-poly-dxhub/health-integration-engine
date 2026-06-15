@@ -26,6 +26,11 @@ export class WorkflowBuilderStack extends cdk.Stack {
   private _cognitoAuthorizer?: apigateway.CognitoUserPoolsAuthorizer;
   private readonly config: StackConfig;
   private workflowsTable: dynamodb.Table;
+  private teamsTable!: dynamodb.Table;
+  private membershipsTable!: dynamodb.Table;
+  private adminAuditLogTable!: dynamodb.Table;
+  private workflowChangeLogsTable!: dynamodb.Table;
+  private changelogLambda?: lambda.Function;
   public readonly frontendHosting: FrontendHosting;
   private readonly vpc: ec2.IVpc | undefined;
   private readonly lambdaSecurityGroup: ec2.ISecurityGroup | undefined;
@@ -110,20 +115,42 @@ export class WorkflowBuilderStack extends cdk.Stack {
 
     // Create API Gateway first (needed for Identity Pool permissions)
     this.api = this.createApiGateway();
-    
+
+    // Create Teams / Memberships / AdminAuditLog tables BEFORE the user pool
+    // because the PreTokenGeneration trigger Lambda needs to read Memberships
+    // to inject team/role claims into the JWT.
+    this.createTeamTables();
+
     // Create Cognito User Pool
     this.userPool = this.createUserPool();
-    
+
+    // Add the bootstrap "admins" Cognito group. First admin must be added via
+    // AWS console; subsequent admins are managed via the admin API.
+    new cognito.CfnUserPoolGroup(this, 'AdminsGroup', {
+      userPoolId: this.userPool.userPoolId,
+      groupName: 'admins',
+      description: 'Workflow Builder admins. Members can manage teams and users.',
+    });
+
     // Create Cognito User Pool Client
     this.userPoolClient = this.createUserPoolClient();
-    
+
+    // PreTokenGeneration Lambda is wired AFTER both userPool and userPoolClient
+    // exist, because createLambdaFunction injects USER_POOL_ID/CLIENT_ID env
+    // vars by default. Attaching the trigger via addTrigger() keeps the order
+    // legal at synth time.
+    this.attachPreTokenGenerationTrigger();
+
     // Create Cognito Identity Pool
     this.identityPool = this.createIdentityPool();
-    
+
     // Cognito authorizer will be created lazily when needed
-    
+
     // Create deployment endpoints
     this.createDeploymentEndpoints();
+
+    // Admin + me-teams API endpoints
+    this.createAdminEndpoints();
     
     // Create WebSocket API for real-time deployment updates
     this.createWebSocketApi();
@@ -159,18 +186,10 @@ export class WorkflowBuilderStack extends cdk.Stack {
           mutable: true,
         },
       },
-      customAttributes: {
-        'user_role': new cognito.StringAttribute({ 
-          minLen: 1, 
-          maxLen: 50, 
-          mutable: true 
-        }),
-        'organization': new cognito.StringAttribute({ 
-          minLen: 1, 
-          maxLen: 100, 
-          mutable: true 
-        }),
-      },
+      // user_role / organization attributes are intentionally removed.
+      // Roles are now derived from the Memberships table per team and
+      // injected into the JWT by the PreTokenGeneration trigger.
+      customAttributes: {},
       passwordPolicy: this.config.cognito.passwordPolicy,
       accountRecovery: cognito.AccountRecovery.EMAIL_ONLY,
       // MFA Configuration
@@ -186,8 +205,8 @@ export class WorkflowBuilderStack extends cdk.Stack {
         challengeRequiredOnNewDevice: true,
         deviceOnlyRememberedOnUserPrompt: false,
       },
-      removalPolicy: this.config.environment === 'production' 
-        ? cdk.RemovalPolicy.RETAIN 
+      removalPolicy: this.config.environment === 'production'
+        ? cdk.RemovalPolicy.RETAIN
         : cdk.RemovalPolicy.DESTROY,
     });
 
@@ -199,6 +218,237 @@ export class WorkflowBuilderStack extends cdk.Stack {
     });
 
     return userPool;
+  }
+
+  private attachPreTokenGenerationTrigger(): void {
+    // Build this Lambda WITHOUT the createLambdaFunction helper. The helper
+    // injects USER_POOL_ID/USER_POOL_CLIENT_ID env vars by default; combined
+    // with userPool.addTrigger() (which makes UserPool → Lambda), those env
+    // vars create a Lambda → UserPool reference and CloudFormation rejects
+    // the resulting circular dependency. The PreTokenGen handler only needs
+    // MEMBERSHIPS_TABLE, so a hand-rolled Lambda definition breaks the cycle.
+    const logGroup = new logs.LogGroup(this, 'PreTokenGenerationLambdaLogGroup', {
+      logGroupName: `/aws/lambda/${PROJECT.lambda.preTokenGeneration}`,
+      retention: logs.RetentionDays.ONE_WEEK,
+      removalPolicy: cdk.RemovalPolicy.DESTROY,
+    });
+
+    const lambdaPath = '../lambda-functions/deployment-lambda';
+    const code = lambda.Code.fromAsset(lambdaPath, {
+      bundling: {
+        image: lambda.Runtime.NODEJS_22_X.bundlingImage,
+        local: {
+          tryBundle(outputDir: string): boolean {
+            const execSync = require('child_process').execSync;
+            const path = require('path');
+            const fsLocal = require('fs');
+            try {
+              execSync('node build.js', { cwd: lambdaPath, stdio: 'inherit' });
+              const distDir = path.join(lambdaPath, 'dist');
+              const copyRecursive = (src: string, dest: string) => {
+                const entries = fsLocal.readdirSync(src, { withFileTypes: true });
+                fsLocal.mkdirSync(dest, { recursive: true });
+                for (const entry of entries) {
+                  const srcPath = path.join(src, entry.name);
+                  const destPath = path.join(dest, entry.name);
+                  if (entry.isDirectory()) copyRecursive(srcPath, destPath);
+                  else fsLocal.copyFileSync(srcPath, destPath);
+                }
+              };
+              copyRecursive(distDir, outputDir);
+              return true;
+            } catch (e) {
+              console.error('PreTokenGen local bundling failed:', e);
+              return false;
+            }
+          },
+        },
+        command: ['bash', '-c', ['npm ci', './build.sh', 'cp -R dist/* /asset-output/'].join(' && ')],
+      },
+    });
+
+    const preTokenLambda = new lambda.Function(this, 'PreTokenGenerationLambda', {
+      functionName: PROJECT.lambda.preTokenGeneration,
+      runtime: lambda.Runtime.NODEJS_22_X,
+      handler: 'index.preTokenGeneration',
+      code,
+      timeout: cdk.Duration.seconds(5),
+      memorySize: 256,
+      ...this.lambdaVpcProps,
+      environment: {
+        NODE_ENV: 'production',
+        MEMBERSHIPS_TABLE: this.membershipsTable.tableName,
+      },
+      logGroup,
+    });
+
+    preTokenLambda.addToRolePolicy(new iam.PolicyStatement({
+      effect: iam.Effect.ALLOW,
+      actions: ['logs:CreateLogGroup', 'logs:CreateLogStream', 'logs:PutLogEvents'],
+      resources: [logGroup.logGroupArn],
+    }));
+    this.membershipsTable.grantReadData(preTokenLambda);
+    this.userPool.addTrigger(cognito.UserPoolOperation.PRE_TOKEN_GENERATION, preTokenLambda);
+  }
+
+  private createTeamTables(): void {
+    this.teamsTable = new dynamodb.Table(this, 'TeamsTable', {
+      tableName: PROJECT.dynamodb.teamsTable,
+      partitionKey: { name: 'teamId', type: dynamodb.AttributeType.STRING },
+      billingMode: dynamodb.BillingMode.PAY_PER_REQUEST,
+      removalPolicy: this.config.environment === 'production'
+        ? cdk.RemovalPolicy.RETAIN
+        : cdk.RemovalPolicy.DESTROY,
+    });
+
+    this.membershipsTable = new dynamodb.Table(this, 'MembershipsTable', {
+      tableName: PROJECT.dynamodb.membershipsTable,
+      partitionKey: { name: 'teamId', type: dynamodb.AttributeType.STRING },
+      sortKey: { name: 'userId', type: dynamodb.AttributeType.STRING },
+      billingMode: dynamodb.BillingMode.PAY_PER_REQUEST,
+      removalPolicy: this.config.environment === 'production'
+        ? cdk.RemovalPolicy.RETAIN
+        : cdk.RemovalPolicy.DESTROY,
+    });
+    // GSI for "list teams for a given user" — used by PreTokenGen trigger.
+    this.membershipsTable.addGlobalSecondaryIndex({
+      indexName: 'UserIdIndex',
+      partitionKey: { name: 'userId', type: dynamodb.AttributeType.STRING },
+      sortKey: { name: 'teamId', type: dynamodb.AttributeType.STRING },
+    });
+
+    this.adminAuditLogTable = new dynamodb.Table(this, 'AdminAuditLogTable', {
+      tableName: PROJECT.dynamodb.adminAuditLogTable,
+      partitionKey: { name: 'pk', type: dynamodb.AttributeType.STRING }, // 'AUDIT' (single hot partition is fine for our scale)
+      sortKey: { name: 'timestamp', type: dynamodb.AttributeType.STRING },
+      billingMode: dynamodb.BillingMode.PAY_PER_REQUEST,
+      removalPolicy: this.config.environment === 'production'
+        ? cdk.RemovalPolicy.RETAIN
+        : cdk.RemovalPolicy.DESTROY,
+    });
+    this.adminAuditLogTable.addGlobalSecondaryIndex({
+      indexName: 'ActorIndex',
+      partitionKey: { name: 'actorUserId', type: dynamodb.AttributeType.STRING },
+      sortKey: { name: 'timestamp', type: dynamodb.AttributeType.STRING },
+    });
+
+    // WorkflowChangeLogs — one row per mutation on any workflow.
+    // PK = workflowId, SK = timestamp#uuid (newest-first queries via ScanIndexForward=false).
+    // GSI on actorUserId so admins can see all changes by a specific user.
+    this.workflowChangeLogsTable = new dynamodb.Table(this, 'WorkflowChangeLogsTable', {
+      tableName: PROJECT.dynamodb.workflowChangeLogsTable,
+      partitionKey: { name: 'workflowId', type: dynamodb.AttributeType.STRING },
+      sortKey: { name: 'sk', type: dynamodb.AttributeType.STRING }, // ISO timestamp#uuid
+      billingMode: dynamodb.BillingMode.PAY_PER_REQUEST,
+      removalPolicy: this.config.environment === 'production'
+        ? cdk.RemovalPolicy.RETAIN
+        : cdk.RemovalPolicy.DESTROY,
+    });
+    this.workflowChangeLogsTable.addGlobalSecondaryIndex({
+      indexName: 'ActorIndex',
+      partitionKey: { name: 'actorUserId', type: dynamodb.AttributeType.STRING },
+      sortKey: { name: 'sk', type: dynamodb.AttributeType.STRING },
+    });
+  }
+
+  private createAdminEndpoints(): void {
+    // Admin API Lambda — handles team and user management. Internally checks
+    // that the caller is in the 'admins' Cognito group; that claim is
+    // available on the API Gateway authorizer.
+    const adminLambda = this.createLambdaFunction(
+      'AdminLambda',
+      PROJECT.lambda.adminTeams,
+      '../lambda-functions/deployment-lambda/dist',
+      'index.adminHandler',
+      {
+        TEAMS_TABLE: this.teamsTable.tableName,
+        MEMBERSHIPS_TABLE: this.membershipsTable.tableName,
+        ADMIN_AUDIT_LOG_TABLE: this.adminAuditLogTable.tableName,
+        WORKFLOWS_TABLE: this.workflowsTable.tableName,
+        USER_POOL_ID: this.userPool.userPoolId,
+      }
+    );
+
+    this.teamsTable.grantReadWriteData(adminLambda);
+    this.membershipsTable.grantReadWriteData(adminLambda);
+    this.adminAuditLogTable.grantReadWriteData(adminLambda);
+    this.workflowsTable.grantReadData(adminLambda);
+
+    // Cognito permissions: list users + manage admins group + view membership
+    adminLambda.addToRolePolicy(
+      new iam.PolicyStatement({
+        effect: iam.Effect.ALLOW,
+        actions: [
+          'cognito-idp:ListUsers',
+          'cognito-idp:ListUsersInGroup',
+          'cognito-idp:AdminGetUser',
+          'cognito-idp:AdminAddUserToGroup',
+          'cognito-idp:AdminRemoveUserFromGroup',
+          'cognito-idp:AdminListGroupsForUser',
+        ],
+        resources: [this.userPool.userPoolArn],
+      })
+    );
+
+    // /admin/teams (list, create), /admin/teams/{teamId}/members (add, list),
+    // /admin/teams/{teamId}/members/{userId} (PATCH role, DELETE),
+    // /admin/users (list), /admin/users/{userId}/admin (POST/DELETE),
+    // /admin/audit-log (list)
+    const adminResource = this.api.root.addResource('admin');
+
+    const adminTeamsResource = adminResource.addResource('teams');
+    this.addLambdaIntegration(adminTeamsResource, 'GET', adminLambda, true);
+    this.addLambdaIntegration(adminTeamsResource, 'POST', adminLambda, true);
+
+    const adminTeamIdResource = adminTeamsResource.addResource('{teamId}');
+    this.addLambdaIntegration(adminTeamIdResource, 'GET', adminLambda, true);
+    this.addLambdaIntegration(adminTeamIdResource, 'DELETE', adminLambda, true);
+
+    const adminTeamMembersResource = adminTeamIdResource.addResource('members');
+    this.addLambdaIntegration(adminTeamMembersResource, 'GET', adminLambda, true);
+    this.addLambdaIntegration(adminTeamMembersResource, 'POST', adminLambda, true);
+
+    const adminTeamMemberUserResource = adminTeamMembersResource.addResource('{userId}');
+    this.addLambdaIntegration(adminTeamMemberUserResource, 'PATCH', adminLambda, true);
+    this.addLambdaIntegration(adminTeamMemberUserResource, 'DELETE', adminLambda, true);
+
+    const adminUsersResource = adminResource.addResource('users');
+    this.addLambdaIntegration(adminUsersResource, 'GET', adminLambda, true);
+
+    const adminUserIdResource = adminUsersResource.addResource('{userId}');
+    const adminUserAdminResource = adminUserIdResource.addResource('admin');
+    this.addLambdaIntegration(adminUserAdminResource, 'POST', adminLambda, true);
+    this.addLambdaIntegration(adminUserAdminResource, 'DELETE', adminLambda, true);
+
+    const adminAuditResource = adminResource.addResource('audit-log');
+    this.addLambdaIntegration(adminAuditResource, 'GET', adminLambda, true);
+
+    // /me/teams — any authenticated caller; returns their teams + roles
+    // (so the frontend can render a team switcher and detect "pending").
+    const meLambda = this.createLambdaFunction(
+      'MeTeamsLambda',
+      PROJECT.lambda.meTeams,
+      '../lambda-functions/deployment-lambda/dist',
+      'index.meTeamsHandler',
+      {
+        TEAMS_TABLE: this.teamsTable.tableName,
+        MEMBERSHIPS_TABLE: this.membershipsTable.tableName,
+      }
+    );
+    this.teamsTable.grantReadData(meLambda);
+    this.membershipsTable.grantReadData(meLambda);
+
+    const meResource = this.api.root.addResource('me');
+    const meTeamsResource = meResource.addResource('teams');
+    this.addLambdaIntegration(meTeamsResource, 'GET', meLambda, true);
+
+    // /admin/workflow-changes — admin view of the full workflow changelog.
+    // changelogLambda is created in createDeploymentEndpoints(); by the time
+    // this method runs it is already defined.
+    if (this.changelogLambda) {
+      const adminWorkflowChangesResource = adminResource.addResource('workflow-changes');
+      this.addLambdaIntegration(adminWorkflowChangesResource, 'GET', this.changelogLambda, true);
+    }
   }
 
   private createUserPoolClient(): cognito.UserPoolClient {
@@ -439,9 +689,16 @@ export class WorkflowBuilderStack extends cdk.Stack {
       partitionKey: { name: 'PK', type: dynamodb.AttributeType.STRING },
       sortKey: { name: 'SK', type: dynamodb.AttributeType.STRING },
       billingMode: dynamodb.BillingMode.PAY_PER_REQUEST,
-      removalPolicy: this.config.environment === 'production' 
-        ? cdk.RemovalPolicy.RETAIN 
+      removalPolicy: this.config.environment === 'production'
+        ? cdk.RemovalPolicy.RETAIN
         : cdk.RemovalPolicy.DESTROY,
+    });
+    // GSI1 — list workflows for a team sorted by updatedAt (handlers query
+    // GSI1PK = TEAM#<teamId>, GSI1SK begins_with 'WORKFLOW#').
+    this.workflowsTable.addGlobalSecondaryIndex({
+      indexName: 'GSI1',
+      partitionKey: { name: 'GSI1PK', type: dynamodb.AttributeType.STRING },
+      sortKey: { name: 'GSI1SK', type: dynamodb.AttributeType.STRING },
     });
 
     // Create S3 bucket for Lambda code storage
@@ -490,6 +747,9 @@ export class WorkflowBuilderStack extends cdk.Stack {
       {
         DEPLOYMENTS_TABLE: deploymentsTable.tableName,
         WORKFLOWS_TABLE: this.workflowsTable.tableName,
+        MEMBERSHIPS_TABLE: this.membershipsTable.tableName,
+        TEAMS_TABLE: this.teamsTable.tableName,
+        WORKFLOW_CHANGE_LOGS_TABLE: this.workflowChangeLogsTable.tableName,
         AWS_ACCOUNT_ID: this.account,
         LAMBDA_CODE_BUCKET: lambdaCodeBucket.bucketName,
         OPENSEARCH_ENDPOINT: opensearchCollection?.attrCollectionEndpoint ?? '',
@@ -505,6 +765,7 @@ export class WorkflowBuilderStack extends cdk.Stack {
       'index.getDeploymentStatus',
       {
         DEPLOYMENTS_TABLE: deploymentsTable.tableName,
+        MEMBERSHIPS_TABLE: this.membershipsTable.tableName,
         AWS_ACCOUNT_ID: this.account,
       }
     );
@@ -538,9 +799,11 @@ export class WorkflowBuilderStack extends cdk.Stack {
     deploymentsTable.grantReadWriteData(deploymentLambda);
     deploymentsTable.grantReadWriteData(deploymentStatusLambda);
     deploymentsTable.grantReadWriteData(deploymentStatusUpdateLambda);
-    this.workflowsTable.grantReadWriteData(deploymentLambda); // Changed from grantReadData to grantReadWriteData for deletion
+    this.workflowsTable.grantReadWriteData(deploymentLambda);
     this.workflowsTable.grantReadWriteData(deploymentStatusUpdateLambda);
     this.workflowsTable.grantReadWriteData(workflowStatusUpdateLambda);
+    this.workflowChangeLogsTable.grantReadWriteData(deploymentLambda);
+    this.workflowChangeLogsTable.grantReadWriteData(deploymentStatusUpdateLambda);
 
     // Grant CloudFormation permissions to status update Lambda
     deploymentStatusUpdateLambda.addToRolePolicy(
@@ -1131,6 +1394,7 @@ export class WorkflowBuilderStack extends cdk.Stack {
       'index.listWorkflows',
       {
         WORKFLOWS_TABLE: this.workflowsTable.tableName,
+        MEMBERSHIPS_TABLE: this.membershipsTable.tableName,
         AWS_ACCOUNT_ID: this.account,
         USER_POOL_ID: this.userPool.userPoolId,
         USER_POOL_CLIENT_ID: this.userPoolClient.userPoolClientId,
@@ -1145,6 +1409,8 @@ export class WorkflowBuilderStack extends cdk.Stack {
       'index.saveWorkflow',
       {
         WORKFLOWS_TABLE: this.workflowsTable.tableName,
+        MEMBERSHIPS_TABLE: this.membershipsTable.tableName,
+        WORKFLOW_CHANGE_LOGS_TABLE: this.workflowChangeLogsTable.tableName,
         AWS_ACCOUNT_ID: this.account,
         USER_POOL_ID: this.userPool.userPoolId,
         USER_POOL_CLIENT_ID: this.userPoolClient.userPoolClientId,
@@ -1153,7 +1419,7 @@ export class WorkflowBuilderStack extends cdk.Stack {
 
     // GET /workflows/{workflowId} - Get workflow details
     const workflowIdResource = workflowsResource.addResource('{workflowId}');
-    
+
     // Create workflow Lambda function
     const workflowLambda = this.createLambdaFunction(
       'WorkflowLambda',
@@ -1162,6 +1428,7 @@ export class WorkflowBuilderStack extends cdk.Stack {
       'index.getWorkflow',
       {
         WORKFLOWS_TABLE: this.workflowsTable.tableName,
+        MEMBERSHIPS_TABLE: this.membershipsTable.tableName,
         AWS_ACCOUNT_ID: this.account,
         USER_POOL_ID: this.userPool.userPoolId,
         USER_POOL_CLIENT_ID: this.userPoolClient.userPoolClientId,
@@ -1172,6 +1439,11 @@ export class WorkflowBuilderStack extends cdk.Stack {
     this.workflowsTable.grantReadData(listWorkflowsLambda);
     this.workflowsTable.grantReadWriteData(saveWorkflowLambda);
     this.workflowsTable.grantReadData(workflowLambda);
+    this.membershipsTable.grantReadData(listWorkflowsLambda);
+    this.membershipsTable.grantReadData(saveWorkflowLambda);
+    this.membershipsTable.grantReadData(workflowLambda);
+    this.workflowChangeLogsTable.grantReadWriteData(saveWorkflowLambda);
+    this.workflowChangeLogsTable.grantReadData(workflowLambda);
 
 
 
@@ -1184,6 +1456,8 @@ export class WorkflowBuilderStack extends cdk.Stack {
       {
         WORKFLOWS_TABLE: this.workflowsTable.tableName,
         DEPLOYMENTS_TABLE: deploymentsTable.tableName,
+        MEMBERSHIPS_TABLE: this.membershipsTable.tableName,
+        WORKFLOW_CHANGE_LOGS_TABLE: this.workflowChangeLogsTable.tableName,
         AWS_ACCOUNT_ID: this.account,
         USER_POOL_ID: this.userPool.userPoolId,
         USER_POOL_CLIENT_ID: this.userPoolClient.userPoolClientId,
@@ -1194,6 +1468,8 @@ export class WorkflowBuilderStack extends cdk.Stack {
     // Grant permissions to delete workflow Lambda
     this.workflowsTable.grantReadWriteData(deleteWorkflowLambda);
     deploymentsTable.grantReadWriteData(deleteWorkflowLambda);
+    this.membershipsTable.grantReadData(deleteWorkflowLambda);
+    this.workflowChangeLogsTable.grantReadWriteData(deleteWorkflowLambda);
 
     // Grant permissions to delete AWS resources
     deleteWorkflowLambda.addToRolePolicy(
@@ -1284,6 +1560,8 @@ export class WorkflowBuilderStack extends cdk.Stack {
       'getDeploymentHistory.handler',
       {
         DEPLOYMENT_TABLE_NAME: deploymentsTable.tableName,
+        WORKFLOWS_TABLE: this.workflowsTable.tableName,
+        MEMBERSHIPS_TABLE: this.membershipsTable.tableName,
         AWS_ACCOUNT_ID: this.account,
         USER_POOL_ID: this.userPool.userPoolId,
         USER_POOL_CLIENT_ID: this.userPoolClient.userPoolClientId,
@@ -1292,6 +1570,8 @@ export class WorkflowBuilderStack extends cdk.Stack {
 
     // Grant permissions to deployment history Lambda
     deploymentsTable.grantReadData(deploymentHistoryLambda);
+    this.workflowsTable.grantReadData(deploymentHistoryLambda);
+    this.membershipsTable.grantReadData(deploymentHistoryLambda);
 
 
     // Add API endpoints
@@ -1304,6 +1584,26 @@ export class WorkflowBuilderStack extends cdk.Stack {
     // Add deployment history endpoint: GET /workflows/{workflowId}/deployments
     const workflowDeploymentsResource = workflowIdResource.addResource('deployments');
     this.addLambdaIntegration(workflowDeploymentsResource, 'GET', deploymentHistoryLambda, true);
+
+    // GET /workflows/{workflowId}/changelog
+    // Store as a class field so createAdminEndpoints() can attach the
+    // /admin/workflow-changes route after the /admin resource is created.
+    this.changelogLambda = this.createLambdaFunction(
+      'GetWorkflowChangelogLambda',
+      PROJECT.lambda.getWorkflowChangelog,
+      '../lambda-functions/deployment-lambda/dist',
+      'index.getWorkflowChangelog',
+      {
+        WORKFLOWS_TABLE: this.workflowsTable.tableName,
+        MEMBERSHIPS_TABLE: this.membershipsTable.tableName,
+        WORKFLOW_CHANGE_LOGS_TABLE: this.workflowChangeLogsTable.tableName,
+      }
+    );
+    this.workflowsTable.grantReadData(this.changelogLambda);
+    this.membershipsTable.grantReadData(this.changelogLambda);
+    this.workflowChangeLogsTable.grantReadData(this.changelogLambda);
+    const changelogResource = workflowIdResource.addResource('changelog');
+    this.addLambdaIntegration(changelogResource, 'GET', this.changelogLambda, true);
   }
 
   public get cognitoAuthorizer(): apigateway.CognitoUserPoolsAuthorizer {

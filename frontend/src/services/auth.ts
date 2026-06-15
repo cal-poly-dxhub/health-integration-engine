@@ -19,10 +19,8 @@ export interface AuthUser {
   username: string;
   email: string;
   emailVerified: boolean;
-  userRole?: string;
-  organization?: string;
-  registrationDate?: string;
-  accountStatus?: string;
+  givenName?: string;
+  familyName?: string;
 }
 
 export interface AuthTokens {
@@ -36,8 +34,6 @@ export interface SignUpData {
   password: string;
   givenName?: string;
   familyName?: string;
-  userRole?: string;
-  organization?: string;
 }
 
 export interface SignInData {
@@ -49,8 +45,6 @@ export interface UserProfile {
   email: string;
   givenName?: string;
   familyName?: string;
-  userRole?: string;
-  organization?: string;
 }
 
 class AuthService {
@@ -105,8 +99,6 @@ class AuthService {
         { Name: 'email', Value: userData.email },
         ...(userData.givenName ? [{ Name: 'given_name', Value: userData.givenName }] : []),
         ...(userData.familyName ? [{ Name: 'family_name', Value: userData.familyName }] : []),
-        ...(userData.userRole ? [{ Name: 'custom:user_role', Value: userData.userRole }] : []),
-        ...(userData.organization ? [{ Name: 'custom:organization', Value: userData.organization }] : []),
       ];
 
       const command = new SignUpCommand({
@@ -260,14 +252,12 @@ class AuthService {
       });
 
       return {
-        userId: result.Username || '',
+        userId: attributes.sub || result.Username || '',
         username: result.Username || '',
         email: attributes.email || '',
         emailVerified: attributes.email_verified === 'true',
-        userRole: attributes['custom:user_role'],
-        organization: attributes['custom:organization'],
-        registrationDate: attributes['custom:registration_date'],
-        accountStatus: attributes['custom:account_status'],
+        givenName: attributes.given_name,
+        familyName: attributes.family_name,
       };
     } catch (error) {
       console.error('Get current user error:', error);
@@ -379,12 +369,10 @@ class AuthService {
 
     try {
       const userAttributes = [];
-      
+
       if (profile.email) userAttributes.push({ Name: 'email', Value: profile.email });
       if (profile.givenName) userAttributes.push({ Name: 'given_name', Value: profile.givenName });
       if (profile.familyName) userAttributes.push({ Name: 'family_name', Value: profile.familyName });
-      if (profile.userRole) userAttributes.push({ Name: 'custom:user_role', Value: profile.userRole });
-      if (profile.organization) userAttributes.push({ Name: 'custom:organization', Value: profile.organization });
 
       const command = new UpdateUserAttributesCommand({
         AccessToken: this.currentTokens.accessToken,

@@ -898,13 +898,12 @@ export class CloudFormationDeployer {
       await this.docClient.send(new UpdateCommand({
         TableName: WORKFLOWS_TABLE,
         Key: {
-          PK: `USER#${deploymentContext.userId}`,
-          SK: `WORKFLOW#${deploymentContext.workflowId}`,
+          PK: `WORKFLOW#${deploymentContext.workflowId}`,
+          SK: 'META',
         },
         UpdateExpression: `SET ${updateExpression.join(', ')}`,
         ExpressionAttributeNames: expressionAttributeNames,
         ExpressionAttributeValues: expressionAttributeValues,
-        // Add condition to prevent overwriting if workflow was deleted
         ConditionExpression: 'attribute_exists(PK)',
       }));
 
@@ -927,13 +926,13 @@ export class CloudFormationDeployer {
    */
   private async getCurrentWorkflow(userId: string, workflowId: string): Promise<any | null> {
     const WORKFLOWS_TABLE = process.env.WORKFLOWS_TABLE || 'WorkflowBuilder-Workflows';
-    
+
     try {
       const response = await this.docClient.send(new GetCommand({
         TableName: WORKFLOWS_TABLE,
         Key: {
-          PK: `USER#${userId}`,
-          SK: `WORKFLOW#${workflowId}`,
+          PK: `WORKFLOW#${workflowId}`,
+          SK: 'META',
         },
       }));
 

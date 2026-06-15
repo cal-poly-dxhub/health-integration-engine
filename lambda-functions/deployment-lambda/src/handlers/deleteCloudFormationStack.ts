@@ -10,8 +10,8 @@ export const handler = async (event: any) => {
 
   const { workflowId, userId } = event;
 
-  if (!workflowId || !userId) {
-    throw new Error('workflowId and userId are required');
+  if (!workflowId) {
+    throw new Error('workflowId is required');
   }
 
   try {

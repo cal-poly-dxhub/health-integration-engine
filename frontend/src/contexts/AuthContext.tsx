@@ -12,8 +12,6 @@ interface AuthContextType {
     password: string;
     givenName?: string;
     familyName?: string;
-    userRole?: string;
-    organization?: string;
   }) => Promise<{ userId: string; nextStep: any }>;
   signOut: () => Promise<void>;
   confirmSignUp: (username: string, code: string) => Promise<void>;
@@ -25,8 +23,6 @@ interface AuthContextType {
     email?: string;
     givenName?: string;
     familyName?: string;
-    userRole?: string;
-    organization?: string;
   }) => Promise<void>;
   refreshUser: () => Promise<void>;
 }
@@ -116,8 +112,6 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children, config }) 
     password: string;
     givenName?: string;
     familyName?: string;
-    userRole?: string;
-    organization?: string;
   }) => {
     try {
       setIsLoading(true);
@@ -178,8 +172,6 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children, config }) 
     email?: string;
     givenName?: string;
     familyName?: string;
-    userRole?: string;
-    organization?: string;
   }) => {
     try {
       setIsLoading(true);

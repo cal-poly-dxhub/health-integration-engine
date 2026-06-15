@@ -14,8 +14,6 @@ interface FormState {
   confirmPassword: string;
   givenName: string;
   familyName: string;
-  userRole: string;
-  organization: string;
 }
 
 const INITIAL_FORM: FormState = {
@@ -24,8 +22,6 @@ const INITIAL_FORM: FormState = {
   confirmPassword: '',
   givenName: '',
   familyName: '',
-  userRole: '',
-  organization: '',
 };
 
 function evaluatePasswordStrength(password: string): {
@@ -89,8 +85,6 @@ export default function SignUp({
         password: formData.password,
         givenName: formData.givenName || undefined,
         familyName: formData.familyName || undefined,
-        userRole: formData.userRole || undefined,
-        organization: formData.organization || undefined,
       });
       onSignUpSuccess(formData.email, formData.password);
     } catch (err) {
@@ -332,54 +326,9 @@ export default function SignUp({
               </div>
             </div>
 
-            <div className="signup-row">
-              <div className="signup-field">
-                <div className="signup-label-row">
-                  <label
-                    htmlFor="signup-userRole"
-                    className="signup-label"
-                  >
-                    Role
-                  </label>
-                  <span className="signup-optional">Optional</span>
-                </div>
-                <select
-                  id="signup-userRole"
-                  name="userRole"
-                  value={formData.userRole}
-                  onChange={handleChange}
-                  disabled={loading}
-                  className="signup-select"
-                >
-                  <option value="">Select a role</option>
-                  <option value="admin">Admin</option>
-                  <option value="user">User</option>
-                  <option value="manager">Manager</option>
-                </select>
-              </div>
-
-              <div className="signup-field">
-                <div className="signup-label-row">
-                  <label
-                    htmlFor="signup-organization"
-                    className="signup-label"
-                  >
-                    Team
-                  </label>
-                  <span className="signup-optional">Optional</span>
-                </div>
-                <input
-                  id="signup-organization"
-                  type="text"
-                  name="organization"
-                  autoComplete="organization"
-                  value={formData.organization}
-                  onChange={handleChange}
-                  disabled={loading}
-                  placeholder="Acme Health Team"
-                  className="signup-input"
-                />
-              </div>
+            <div className="signup-help">
+              After signing up, an administrator will assign you to a team
+              before you can access workflows.
             </div>
 
             {error && (

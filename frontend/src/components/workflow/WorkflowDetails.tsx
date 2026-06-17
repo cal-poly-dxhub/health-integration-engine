@@ -921,30 +921,47 @@ const WorkflowDetails: React.FC<WorkflowDetailsProps> = ({
 
           {activeTab === 'changelog' && (
             <div className="wfd-pane">
-              <div className="wfd-pane-header">
-                <h3 className="wfd-pane-title">Workflow changelog</h3>
-                <button
-                  type="button"
-                  className="wfd-btn"
-                  disabled={changelogLoading}
-                  onClick={() => {
-                    if (!workflowId) return;
-                    setChangelogLoading(true);
-                    teamApiService
-                      .getWorkflowChangelog(workflowId)
-                      .then(setChangelogEntries)
-                      .catch(console.error)
-                      .finally(() => setChangelogLoading(false));
-                  }}
-                >
-                  Refresh
-                </button>
+              <div className="wfd-pane-head">
+                <h3 className="wfd-pane-title">
+                  Changelog{' '}
+                  <span className="wfd-pane-title-count">
+                    ({changelogEntries.length})
+                  </span>
+                </h3>
+                <div className="wfd-pane-actions">
+                  <button
+                    type="button"
+                    className="wfd-btn"
+                    disabled={changelogLoading}
+                    onClick={() => {
+                      if (!workflowId) return;
+                      setChangelogLoading(true);
+                      teamApiService
+                        .getWorkflowChangelog(workflowId)
+                        .then(setChangelogEntries)
+                        .catch(console.error)
+                        .finally(() => setChangelogLoading(false));
+                    }}
+                  >
+                    <RefreshIcon />
+                    {changelogLoading ? 'Refreshing…' : 'Refresh'}
+                  </button>
+                </div>
               </div>
               {changelogLoading ? (
-                <div style={{ padding: 32, textAlign: 'center', color: '#6b7280' }}>Loading…</div>
+                <div className="wfd-state">
+                  <span className="wfd-state-spinner" aria-hidden="true" />
+                  <p className="wfd-state-sub">Loading changelog…</p>
+                </div>
               ) : changelogEntries.length === 0 ? (
-                <div style={{ padding: 32, textAlign: 'center', color: '#9ca3af', fontStyle: 'italic' }}>
-                  No changes recorded yet.
+                <div className="wfd-state">
+                  <span className="wfd-state-icon" aria-hidden="true">
+                    <ClockIcon />
+                  </span>
+                  <h3 className="wfd-state-title">No changes recorded yet</h3>
+                  <p className="wfd-state-sub">
+                    Edits, deploys, and deletions for this workflow will appear here.
+                  </p>
                 </div>
               ) : (
                 <ChangelogTable entries={changelogEntries} />
@@ -1134,22 +1151,15 @@ function ChangelogTable({ entries }: { entries: WorkflowChangeEntry[] }) {
     });
   };
 
-  const thStyle: React.CSSProperties = {
-    textAlign: 'left', padding: '10px 16px',
-    fontSize: 11, fontWeight: 600, letterSpacing: '0.06em',
-    textTransform: 'uppercase', color: '#64748b',
-    borderBottom: '1px solid #e2e8f0', background: '#f8fafc',
-  };
-
   return (
-    <div style={{ overflowX: 'auto' }}>
-      <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 14 }}>
+    <div className="wfd-table-wrap">
+      <table className="wfd-table">
         <thead>
           <tr>
-            <th style={thStyle}>When</th>
-            <th style={thStyle}>Action</th>
-            <th style={thStyle}>By</th>
-            <th style={thStyle}></th>
+            <th>When</th>
+            <th>Action</th>
+            <th>By</th>
+            <th></th>
           </tr>
         </thead>
         <tbody>
@@ -1158,46 +1168,41 @@ function ChangelogTable({ entries }: { entries: WorkflowChangeEntry[] }) {
             const metaEntries = entry.meta ? Object.entries(entry.meta) : [];
             return (
               <React.Fragment key={entry.sk}>
-                <tr style={{ borderBottom: '1px solid #f1f5f9', background: isOpen ? '#f8fafc' : undefined }}>
-                  <td style={{ padding: '12px 16px', color: '#475569', whiteSpace: 'nowrap' }}>
+                <tr className={isOpen ? 'wfd-row--selected' : undefined}>
+                  <td style={{ whiteSpace: 'nowrap' }}>
                     {new Date(entry.timestamp).toLocaleString()}
                   </td>
-                  <td style={{ padding: '12px 16px' }}>
+                  <td>
                     <ChangeActionBadge action={entry.action} />
                   </td>
-                  <td style={{ padding: '12px 16px', color: '#374151' }}>
-                    {entry.actorEmail || entry.actorUserId}
-                  </td>
-                  <td style={{ padding: '12px 16px', textAlign: 'right' }}>
+                  <td>{entry.actorEmail || entry.actorUserId}</td>
+                  <td style={{ textAlign: 'right' }}>
                     <button
                       type="button"
+                      className="wfd-btn"
                       onClick={() => toggle(entry.sk)}
-                      style={{
-                        background: 'none', border: '1px solid #e2e8f0',
-                        borderRadius: 6, padding: '2px 8px', fontSize: 12,
-                        color: '#475569', cursor: 'pointer',
-                      }}
+                      style={{ padding: '3px 10px', fontSize: 12 }}
                     >
                       {isOpen ? '▲ Less' : '▼ Details'}
                     </button>
                   </td>
                 </tr>
                 {isOpen && (
-                  <tr style={{ background: '#f8fafc', borderBottom: '1px solid #f1f5f9' }}>
-                    <td colSpan={4} style={{ padding: '8px 16px 12px 32px' }}>
+                  <tr className="wfd-row--selected">
+                    <td colSpan={4} style={{ paddingLeft: 28 }}>
                       {entry.changes ? (
                         <ChangeDiffView diff={entry.changes} />
                       ) : metaEntries.length > 0 ? (
                         <dl style={{ margin: 0, display: 'grid', gridTemplateColumns: 'max-content 1fr', gap: '4px 16px', fontSize: 12 }}>
                           {metaEntries.map(([k, v]) => (
                             <React.Fragment key={k}>
-                              <dt style={{ color: '#64748b', fontWeight: 500 }}>{k}</dt>
-                              <dd style={{ margin: 0, color: '#374151', fontFamily: 'monospace', wordBreak: 'break-all' }}>{v}</dd>
+                              <dt style={{ color: 'var(--wfd-text-muted)', fontWeight: 500 }}>{k}</dt>
+                              <dd style={{ margin: 0, color: 'var(--wfd-text)', fontFamily: 'monospace', wordBreak: 'break-all' }}>{v}</dd>
                             </React.Fragment>
                           ))}
                         </dl>
                       ) : (
-                        <span style={{ fontSize: 12, color: '#9ca3af', fontStyle: 'italic' }}>No additional details recorded.</span>
+                        <span style={{ fontSize: 12, color: 'var(--wfd-text-muted)', fontStyle: 'italic' }}>No additional details recorded.</span>
                       )}
                     </td>
                   </tr>
@@ -1281,6 +1286,15 @@ function AlertIcon() {
       <circle cx="12" cy="12" r="10" />
       <path d="M12 8v4" />
       <path d="M12 16h.01" />
+    </svg>
+  );
+}
+
+function ClockIcon() {
+  return (
+    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <circle cx="12" cy="12" r="10" />
+      <polyline points="12 6 12 12 16 14" />
     </svg>
   );
 }

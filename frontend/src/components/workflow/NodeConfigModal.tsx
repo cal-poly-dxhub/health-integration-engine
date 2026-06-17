@@ -16,6 +16,8 @@ interface NodeConfigModalProps {
   isOpen: boolean;
   onClose: () => void;
   onSave: (nodeId: string, config: any) => void;
+  /** Team that owns the workflow — layers are scoped to this team. */
+  teamId?: string;
 }
 
 interface IAMRole {
@@ -29,6 +31,7 @@ const NodeConfigModal: React.FC<NodeConfigModalProps> = ({
   isOpen,
   onClose,
   onSave,
+  teamId,
 }) => {
   const [config, setConfig] = useState<any>({});
   const [errors, setErrors] = useState<Record<string, string>>({});
@@ -46,7 +49,7 @@ const NodeConfigModal: React.FC<NodeConfigModalProps> = ({
       fetchIAMRoles(node.type);
       fetchLayers();
     }
-  }, [isOpen, node.type]);
+  }, [isOpen, node.type, teamId]);
 
   const fetchIAMRoles = async (serviceType: string) => {
     setLoadingRoles(true);
@@ -67,7 +70,7 @@ const NodeConfigModal: React.FC<NodeConfigModalProps> = ({
   const fetchLayers = async () => {
     setLoadingLayers(true);
     try {
-      const layers = await layerApiService.listLayers();
+      const layers = await layerApiService.listLayers(teamId);
       setAvailableLayers(layers);
     } catch (err) {
       console.error('Failed to fetch layers:', err);

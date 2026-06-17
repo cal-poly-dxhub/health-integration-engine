@@ -1,5 +1,13 @@
-import React, { createContext, useContext, useEffect, useState, ReactNode } from 'react';
-import { authService, type AuthUser, type AuthTokens } from '../services/auth';
+import React, { createContext, useContext, useEffect, useRef, useState, ReactNode } from 'react';
+import { authService, decodeJwtExp, type AuthUser, type AuthTokens } from '../services/auth';
+
+// Sign the user out locally after this much inactivity. Cognito has no native
+// idle expiry, so we enforce one client-side to limit the unattended-session
+// risk (and align with healthcare session norms).
+const IDLE_TIMEOUT_MS = 30 * 60 * 1000;
+// Refresh the access token this long before it expires so requests never race
+// expiry. Mirrors the skew used inside authService.getTokens().
+const REFRESH_SKEW_MS = 2 * 60 * 1000;
 
 interface AuthContextType {
   user: AuthUser | null;
@@ -204,24 +212,54 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children, config }) 
     }
   };
 
-  // Set up token refresh interval
+  // Proactive token refresh: schedule a refresh shortly before the current
+  // access token expires (tokens are short-lived — 15 min — so a fixed
+  // interval no longer fits). Reschedules whenever the token changes.
   useEffect(() => {
-    if (isAuthenticated && tokens) {
-      // Refresh tokens every 45 minutes (tokens expire after 1 hour)
-      const refreshInterval = setInterval(async () => {
-        try {
-          const newTokens = await authService.getTokens();
-          setTokens(newTokens);
-        } catch (error) {
-          console.error('Token refresh failed:', error);
-          // If token refresh fails, sign out user
-          await signOut();
-        }
-      }, 45 * 60 * 1000); // 45 minutes
+    if (!isAuthenticated || !tokens) return;
 
-      return () => clearInterval(refreshInterval);
-    }
+    const exp = decodeJwtExp(tokens.accessToken); // seconds since epoch
+    // If we can't read expiry, fall back to refreshing in ~13 min.
+    const msUntilExpiry = exp !== null ? exp * 1000 - Date.now() : 13 * 60 * 1000;
+    const delay = Math.max(0, msUntilExpiry - REFRESH_SKEW_MS);
+
+    const timer = setTimeout(async () => {
+      try {
+        const newTokens = await authService.refreshTokens();
+        setTokens(newTokens);
+      } catch (error) {
+        console.error('Token refresh failed:', error);
+        await signOut();
+      }
+    }, delay);
+
+    return () => clearTimeout(timer);
   }, [isAuthenticated, tokens]);
+
+  // Idle timeout: sign out locally after IDLE_TIMEOUT_MS without user activity.
+  const idleTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  useEffect(() => {
+    if (!isAuthenticated) return;
+
+    const resetIdleTimer = () => {
+      if (idleTimerRef.current) clearTimeout(idleTimerRef.current);
+      idleTimerRef.current = setTimeout(() => {
+        console.warn('Session idle timeout reached; signing out.');
+        signOut();
+      }, IDLE_TIMEOUT_MS);
+    };
+
+    const activityEvents: (keyof WindowEventMap)[] = [
+      'mousedown', 'keydown', 'scroll', 'touchstart', 'focus',
+    ];
+    activityEvents.forEach((evt) => window.addEventListener(evt, resetIdleTimer, { passive: true }));
+    resetIdleTimer();
+
+    return () => {
+      if (idleTimerRef.current) clearTimeout(idleTimerRef.current);
+      activityEvents.forEach((evt) => window.removeEventListener(evt, resetIdleTimer));
+    };
+  }, [isAuthenticated]);
 
   const value: AuthContextType = {
     user,

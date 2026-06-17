@@ -47,6 +47,30 @@ export interface UserProfile {
   familyName?: string;
 }
 
+// Refresh the access/ID tokens this many seconds before they actually expire,
+// so a request never goes out with an about-to-expire token.
+const TOKEN_REFRESH_SKEW_SECONDS = 120;
+
+/**
+ * Decode the `exp` (expiry, seconds since epoch) claim from a JWT without
+ * verifying its signature. Returns null if the token is missing or malformed.
+ * Used only to decide when to proactively refresh — never for trust.
+ */
+export function decodeJwtExp(token: string | undefined | null): number | null {
+  if (!token) return null;
+  const parts = token.split('.');
+  if (parts.length !== 3) return null;
+  try {
+    // base64url -> base64, then decode and parse.
+    const payload = parts[1].replace(/-/g, '+').replace(/_/g, '/');
+    const json = atob(payload);
+    const claims = JSON.parse(json);
+    return typeof claims.exp === 'number' ? claims.exp : null;
+  } catch {
+    return null;
+  }
+}
+
 class AuthService {
   private client: CognitoIdentityProviderClient | null = null;
   private config: {
@@ -58,6 +82,9 @@ class AuthService {
   } | null = null;
   private currentTokens: AuthTokens | null = null;
   private readonly TOKEN_STORAGE_KEY = 'auth_tokens';
+  // Single in-flight refresh shared by all callers, so a burst of parallel
+  // 401s / proactive checks triggers exactly one REFRESH_TOKEN_AUTH call.
+  private refreshPromise: Promise<AuthTokens> | null = null;
 
   /**
    * Configure AWS SDK with Cognito settings
@@ -218,8 +245,9 @@ class AuthService {
     try {
       // Clear stored tokens
       this.currentTokens = null;
+      this.refreshPromise = null;
       this.clearStoredTokens();
-      
+
       // In a full implementation, you might want to call GlobalSignOut
       // but for now, just clearing local tokens is sufficient
       console.log('User signed out successfully');
@@ -238,8 +266,13 @@ class AuthService {
     }
 
     try {
+      // Refresh first if the access token is expiring/expired. On app reload
+      // after the 15-min access-token lifetime, the cached token is stale but
+      // the refresh token may still be valid — refresh rather than fail, so
+      // the session survives until the (24h) refresh token actually expires.
+      const tokens = await this.getTokens();
       const command = new GetUserCommand({
-        AccessToken: this.currentTokens.accessToken,
+        AccessToken: tokens.accessToken,
       });
 
       const result = await this.client.send(command);
@@ -266,14 +299,84 @@ class AuthService {
   }
 
   /**
-   * Get authentication tokens
+   * Get valid authentication tokens, refreshing proactively when the access
+   * token is at/near expiry. Callers (e.g. the API request interceptor) can
+   * rely on the returned tokens being fresh enough to make a request.
    */
   async getTokens(): Promise<AuthTokens> {
     if (!this.currentTokens) {
       throw new Error('No tokens available');
     }
 
+    if (this.isAccessTokenExpiring(this.currentTokens.accessToken)) {
+      return this.refreshTokens();
+    }
+
     return this.currentTokens;
+  }
+
+  /**
+   * Exchange the stored refresh token for fresh access/ID tokens via Cognito's
+   * REFRESH_TOKEN_AUTH flow. Cognito does NOT reissue the refresh token, so we
+   * preserve the existing one. Concurrent callers share a single in-flight
+   * request.
+   */
+  async refreshTokens(): Promise<AuthTokens> {
+    if (this.refreshPromise) {
+      return this.refreshPromise;
+    }
+
+    this.refreshPromise = this.doRefresh().finally(() => {
+      this.refreshPromise = null;
+    });
+    return this.refreshPromise;
+  }
+
+  private async doRefresh(): Promise<AuthTokens> {
+    if (!this.client || !this.config) {
+      throw new Error('Auth service not configured');
+    }
+    const refreshToken = this.currentTokens?.refreshToken;
+    if (!refreshToken) {
+      throw new Error('No refresh token available');
+    }
+
+    const command = new InitiateAuthCommand({
+      ClientId: this.config.userPoolClientId,
+      AuthFlow: AuthFlowType.REFRESH_TOKEN_AUTH,
+      AuthParameters: {
+        REFRESH_TOKEN: refreshToken,
+      },
+    });
+
+    const result = await this.client.send(command);
+    if (!result.AuthenticationResult) {
+      throw new Error('Token refresh failed');
+    }
+
+    // REFRESH_TOKEN_AUTH returns new access/ID tokens but not a new refresh
+    // token — keep the existing one for the remainder of the session window.
+    this.currentTokens = {
+      accessToken: result.AuthenticationResult.AccessToken || '',
+      idToken: result.AuthenticationResult.IdToken || '',
+      refreshToken: result.AuthenticationResult.RefreshToken || refreshToken,
+    };
+    this.storeTokens(this.currentTokens);
+
+    return this.currentTokens;
+  }
+
+  /**
+   * True when the access token is missing, unparseable, or within the refresh
+   * skew window of its expiry. Decodes the JWT `exp` claim (seconds since
+   * epoch) without verifying the signature — that's the server's job; here we
+   * only need the expiry to decide when to refresh.
+   */
+  private isAccessTokenExpiring(accessToken: string): boolean {
+    const exp = decodeJwtExp(accessToken);
+    if (exp === null) return true;
+    const nowSeconds = Date.now() / 1000;
+    return exp - nowSeconds <= TOKEN_REFRESH_SKEW_SECONDS;
   }
 
   /**

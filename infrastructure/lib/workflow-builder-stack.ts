@@ -43,6 +43,14 @@ export class WorkflowBuilderStack extends cdk.Stack {
   // narrow read-only access in the AOSS data access policy. Consumed when
   // the search Lambda function is constructed alongside the API Gateway.
   private opensearchSearchLambdaRole?: iam.Role;
+  // Name of the OpenSearch Serverless collection (set when the collection is
+  // created). Passed to the deployment Lambda so it can build data access
+  // policy rules that reference the collection by name.
+  private opensearchCollectionName?: string;
+  // Name of the AOSS data access policy that the deployment Lambda maintains
+  // to grant per-workflow indexer roles write access. Kept separate from the
+  // static search-only policy created in createOpenSearchServerlessCollection.
+  private opensearchIndexerAccessPolicyName?: string;
 
   constructor(scope: Construct, id: string, props?: cdk.StackProps) {
     super(scope, id, props);
@@ -778,6 +786,10 @@ export class WorkflowBuilderStack extends cdk.Stack {
         LAMBDA_CODE_BUCKET: lambdaCodeBucket.bucketName,
         OPENSEARCH_ENDPOINT: opensearchCollection?.attrCollectionEndpoint ?? '',
         OPENSEARCH_COLLECTION_ARN: opensearchCollection?.attrArn ?? '',
+        // Used by openSearchAccessManager.ts to grant/revoke per-workflow
+        // indexer roles on the AOSS data access policy at deploy/delete time.
+        OPENSEARCH_COLLECTION_NAME: this.opensearchCollectionName ?? '',
+        OPENSEARCH_INDEXER_ACCESS_POLICY_NAME: this.opensearchIndexerAccessPolicyName ?? '',
         ...this.vpcConfigEnv,
       }
     );
@@ -1002,6 +1014,28 @@ export class WorkflowBuilderStack extends cdk.Stack {
         resources: ['*'], // EventBridge doesn't support resource-level permissions
       })
     );
+
+    // Grant the deployment Lambda permission to manage the AOSS data access
+    // policy that authorises per-workflow indexer roles. The Lambda
+    // adds/removes exact role ARNs as workflows are deployed/deleted (see
+    // openSearchAccessManager.ts). AOSS control-plane actions do not support
+    // resource-level permissions, so the resource is '*'; this is only added
+    // when OpenSearch is enabled.
+    if (enableOpenSearch) {
+      deploymentLambda.addToRolePolicy(
+        new iam.PolicyStatement({
+          effect: iam.Effect.ALLOW,
+          actions: [
+            'aoss:GetAccessPolicy',
+            'aoss:CreateAccessPolicy',
+            'aoss:UpdateAccessPolicy',
+            'aoss:DeleteAccessPolicy',
+            'aoss:ListAccessPolicies',
+          ],
+          resources: ['*'],
+        })
+      );
+    }
 
     // Grant Step Functions permissions to deployment Lambda (broad permissions for direct deployment)
     deploymentLambda.addToRolePolicy(
@@ -2514,6 +2548,11 @@ export class WorkflowBuilderStack extends cdk.Stack {
    */
   private createOpenSearchServerlessCollection(): cdk.aws_opensearchserverless.CfnCollection {
     const collectionName = `health-msgs-${this.account.slice(-6)}`;
+    // Expose the collection name and the indexer data access policy name so
+    // the deployment Lambda (which dynamically grants per-workflow indexer
+    // roles) can target the same collection and policy.
+    this.opensearchCollectionName = collectionName;
+    this.opensearchIndexerAccessPolicyName = `health-msgs-idx-${this.account.slice(-6)}`;
 
     // Encryption policy (required before collection)
     const encryptionPolicy = new cdk.aws_opensearchserverless.CfnSecurityPolicy(this, 'OpenSearchEncryptionPolicy', {
@@ -2578,19 +2617,24 @@ export class WorkflowBuilderStack extends cdk.Stack {
 
     // Data access policy - scoped to specific Lambda principals with
     // narrowly-defined permissions instead of `aoss:*` to the account root.
-    //   - Search Lambda: read-only on the collection (exact role ARN; CDK
-    //     resolves the token to the concrete ARN at deploy time).
-    //   - Per-workflow OpenSearch indexer Lambdas: read+write+create-index.
-    //     CFN templates create their roles with name pattern
-    //     OpenSearch-Lambda-Role-${WorkflowId} (see
-    //     cloudFormationTemplateGenerator.ts), but AOSS data access
-    //     policies do NOT support wildcards in IAM role ARN principals,
-    //     and the per-workflow role names are not known at CDK synth
-    //     time. As a pragmatic compromise we keep the principal at
-    //     account root for this rule but tighten the permissions from
-    //     `aoss:*` to the specific data-plane actions the indexer needs.
-    //     A future change can move to dynamic UpdateAccessPolicy calls
-    //     from the deployment Lambda to enumerate exact role ARNs.
+    // Data access policy (static): grants ONLY the OpenSearch search Lambda
+    // read-only access by its exact role ARN. CDK resolves the role token to
+    // the concrete ARN at deploy time.
+    //
+    // Per-workflow indexer Lambdas are intentionally NOT granted here. AOSS
+    // data access policies do not support wildcard principals, and each
+    // workflow's indexer role (OpenSearch-Lambda-Role-<WorkflowId>, created by
+    // the per-workflow CloudFormation stack — see
+    // cloudFormationTemplateGenerator.ts) is unknown at synth time. Granting
+    // the account root (the previous behaviour) would let any principal in the
+    // account that also holds `aoss:APIAccessAll` write to the collection.
+    // Instead, the deployment Lambda maintains a SEPARATE data access policy
+    // (`health-msgs-idx-<suffix>`, see deployment-lambda
+    // services/openSearchAccessManager.ts) that lists the exact indexer role
+    // ARN for each deployed workflow and removes it on deletion. AOSS unions
+    // all data access policies that match a collection, so the two compose.
+    // The indexer policy name is passed to the deployment Lambda via
+    // OPENSEARCH_INDEXER_ACCESS_POLICY_NAME.
     const dataAccessPolicy = new cdk.aws_opensearchserverless.CfnAccessPolicy(this, 'OpenSearchDataAccessPolicy', {
       name: `health-msgs-access-${this.account.slice(-6)}`,
       type: 'data',
@@ -2610,32 +2654,6 @@ export class WorkflowBuilderStack extends cdk.Stack {
             },
           ],
           Principal: [this.opensearchSearchLambdaRole.roleArn],
-        },
-        {
-          Description: 'Read+write access for per-workflow OpenSearch indexer Lambdas',
-          Rules: [
-            {
-              ResourceType: 'index',
-              Resource: [`index/${collectionName}/*`],
-              Permission: [
-                'aoss:CreateIndex',
-                'aoss:UpdateIndex',
-                'aoss:DescribeIndex',
-                'aoss:ReadDocument',
-                'aoss:WriteDocument',
-              ],
-            },
-            {
-              ResourceType: 'collection',
-              Resource: [`collection/${collectionName}`],
-              Permission: [
-                'aoss:CreateCollectionItems',
-                'aoss:UpdateCollectionItems',
-                'aoss:DescribeCollectionItems',
-              ],
-            },
-          ],
-          Principal: [`arn:aws:iam::${this.account}:root`],
         },
       ]),
     });

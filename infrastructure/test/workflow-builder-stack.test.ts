@@ -1,5 +1,5 @@
 import * as cdk from 'aws-cdk-lib';
-import { Template } from 'aws-cdk-lib/assertions';
+import { Template, Match } from 'aws-cdk-lib/assertions';
 import { WorkflowBuilderStack } from '../lib/workflow-builder-stack';
 
 describe('WorkflowBuilderStack', () => {
@@ -90,13 +90,21 @@ describe('WorkflowBuilderStack', () => {
   });
 
   test('Configures CORS for API Gateway', () => {
+    // The gateway responses must scope Access-Control-Allow-Origin to the
+    // CloudFront distribution origin (a Fn::Join over the distribution domain)
+    // — never the wildcard '*'. This guards against a CORS regression.
     template.hasResourceProperties('AWS::ApiGateway::GatewayResponse', {
       ResponseType: 'DEFAULT_4XX',
-      ResponseParameters: {
-        'gatewayresponse.header.Access-Control-Allow-Origin': "'*'",
-        'gatewayresponse.header.Access-Control-Allow-Headers': "'Content-Type,X-Amz-Date,Authorization,X-Api-Key,X-Amz-Security-Token'",
+      ResponseParameters: Match.objectLike({
+        'gatewayresponse.header.Access-Control-Allow-Origin': Match.objectLike({
+          'Fn::Join': Match.arrayWith([
+            Match.arrayWith([Match.stringLikeRegexp('https://')]),
+          ]),
+        }),
+        'gatewayresponse.header.Access-Control-Allow-Headers':
+          "'Content-Type,X-Amz-Date,Authorization,X-Api-Key,X-Amz-Security-Token'",
         'gatewayresponse.header.Access-Control-Allow-Methods': "'GET,POST,PUT,DELETE,OPTIONS'",
-      },
+      }),
     });
   });
 

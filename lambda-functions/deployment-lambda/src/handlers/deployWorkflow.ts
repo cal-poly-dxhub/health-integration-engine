@@ -15,6 +15,7 @@ import { Workflow } from '../types/workflow';
 import { DeploymentOrchestrator } from '../services/deploymentOrchestrator';
 import { CloudFormationTemplateGenerator } from '../services/cloudFormationTemplateGenerator';
 import { getDefaultLambdaCode } from '../services/defaultLambda';
+import { grantIndexerAccess } from '../services/openSearchAccessManager';
 import { createAuthErrorResponse, createSuccessHeaders } from '../utils/auth';
 import { resolveCaller, canWriteTeam, forbidden } from '../utils/authz';
 import { writeWorkflowChangeLog } from '../utils/changeLog';
@@ -616,6 +617,17 @@ async function handleStepFunctionsTemplateGeneration(event: any): Promise<any> {
     console.log('STEP FUNCTIONS: Template generated successfully');
     console.log('STEP FUNCTIONS: Template size:', template.length, 'characters');
     console.log('STEP FUNCTIONS: Stack name:', stackName);
+
+    // If this workflow indexes into OpenSearch, authorise its indexer role on
+    // the shared AOSS data access policy by exact ARN. Best-effort — never
+    // blocks deployment. The per-workflow indexer role
+    // (OpenSearch-Lambda-Role-<WorkflowId>) is created by the CloudFormation
+    // stack below; AOSS accepts the principal ARN before the role exists.
+    const hasOpenSearchNode = Array.isArray(workflow?.nodes)
+      && workflow.nodes.some((node: any) => node?.type === 'opensearch');
+    if (hasOpenSearchNode) {
+      await grantIndexerAccess(deploymentContext.workflowId);
+    }
 
     return {
       statusCode: 200,

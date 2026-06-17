@@ -81,7 +81,12 @@ export const getConfig = (environment: string = 'development'): StackConfig => {
         burstLimit: 2000,
       },
       cors: {
-        allowOrigins: ['*'],
+        // NOTE: this block is a placeholder and is NOT what the deployed API
+        // uses. The live API Gateway scopes CORS to the CloudFront
+        // distribution origin (plus localhost for dev) — see
+        // `defaultCorsPreflightOptions` in workflow-builder-stack.ts. A
+        // wildcard (`*`) origin must never be used here; keep it scoped.
+        allowOrigins: ['http://localhost:3000'],
         allowMethods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
         allowHeaders: [
           'Content-Type',

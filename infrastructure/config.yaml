@@ -35,6 +35,7 @@ dynamodb:
   workflowsTable: "WorkflowBuilder-Workflows"
   teamsTable: "WorkflowBuilder-Teams"
   membershipsTable: "WorkflowBuilder-Memberships"
+  adminsTable: "WorkflowBuilder-Admins"
   adminAuditLogTable: "WorkflowBuilder-AdminAuditLog"
   workflowChangeLogsTable: "WorkflowBuilder-WorkflowChangeLogs"
 
@@ -88,7 +89,6 @@ lambda:
   deleteDatabaseRecords: "workflow-builder-delete-database-records"
 
   # Admin / team functions
-  preTokenGeneration: "workflow-builder-pre-token-generation"
   adminTeams: "workflow-builder-admin-teams"
   adminUsers: "workflow-builder-admin-users"
   meTeams: "workflow-builder-me-teams"

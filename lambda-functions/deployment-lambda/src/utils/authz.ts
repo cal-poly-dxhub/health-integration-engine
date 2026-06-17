@@ -1,6 +1,6 @@
 import { APIGatewayProxyEvent, APIGatewayProxyResult } from 'aws-lambda';
 import { DynamoDBClient } from '@aws-sdk/client-dynamodb';
-import { DynamoDBDocumentClient, QueryCommand } from '@aws-sdk/lib-dynamodb';
+import { DynamoDBDocumentClient, QueryCommand, GetCommand, ScanCommand } from '@aws-sdk/lib-dynamodb';
 import { extractUserIdFromEvent, createSuccessHeaders } from './auth';
 
 export type TeamRole = 'reader' | 'writer';
@@ -15,19 +15,41 @@ export interface CallerIdentity {
   email: string;
   isAdmin: boolean;
   teams: TeamMembership[];
+  /**
+   * True when admin status was granted ONLY by the Cognito-group bootstrap
+   * fallback (no durable Admins-table row exists yet). adminHandler uses this
+   * to self-heal the row on the first privileged action, making the bootstrap
+   * admin durable so a later promote (which seeds another row and flips
+   * "zero admins" to false) can't strip their own admin. See resolveCaller.
+   */
+  adminViaFallback: boolean;
 }
 
 const dynamoClient = new DynamoDBClient({ region: process.env.AWS_REGION });
 const docClient = DynamoDBDocumentClient.from(dynamoClient);
 const MEMBERSHIPS_TABLE = process.env.MEMBERSHIPS_TABLE || 'WorkflowBuilder-Memberships';
+const ADMINS_TABLE = process.env.ADMINS_TABLE || 'WorkflowBuilder-Admins';
 
 /**
  * Resolve the calling user's identity, admin status, and team memberships.
  *
- * Reads team membership claims that the PreTokenGeneration trigger injects
- * into the JWT (`teams` and `team_roles`). If those claims are missing — for
- * example on a stale token before the next sign-in — falls back to a live
- * lookup against the Memberships table.
+ * Authorization is LIVE: team roles and admin status are read from DynamoDB on
+ * every request, never from JWT claims. The JWT is proof of identity only.
+ * This means membership/role/admin changes take effect on the caller's very
+ * next request rather than waiting up to the token lifetime for a re-mint —
+ * the API Gateway Cognito authorizer validates tokens offline and never
+ * re-consults Cognito, so a stale token would otherwise keep its old access.
+ *
+ * Admin status:
+ *   isAdmin = hasDdbAdminRecord OR (inCognitoAdminsGroup AND zeroDdbAdmins)
+ * The Cognito-group clause is a one-shot bootstrap: it only grants admin while
+ * NO admin rows exist in DynamoDB. Once any row exists, a lingering group
+ * membership can never re-grant admin, so it can't undo a demotion. The
+ * "zero admins" COUNT runs only on the rare bootstrap path (group member with
+ * no row), keeping it off the hot path for normal admins.
+ *
+ * Authorization fails CLOSED: if the live DynamoDB read throws, the caller is
+ * treated as having no teams / not admin rather than trusting any stale claim.
  */
 export async function resolveCaller(event: APIGatewayProxyEvent): Promise<CallerIdentity | null> {
   const userId = extractUserIdFromEvent(event);
@@ -36,33 +58,32 @@ export async function resolveCaller(event: APIGatewayProxyEvent): Promise<Caller
   const claims = event.requestContext.authorizer?.claims || {};
   const email = (claims.email as string) || '';
 
-  // Cognito groups arrive as a stringified array, e.g. "[admins,team-abc]"
+  // Cognito groups arrive as a stringified array, e.g. "[admins,team-abc]".
+  // Used ONLY for the zero-admins bootstrap fallback, never as the primary
+  // admin source.
   const groupsRaw = (claims['cognito:groups'] as string) || '';
-  const groups = parseCognitoGroups(groupsRaw);
-  const isAdmin = groups.includes('admins');
+  const inCognitoAdminsGroup = parseCognitoGroups(groupsRaw).includes('admins');
 
-  // PreTokenGen trigger injects "team_roles" as a JSON string of {teamId: role} pairs.
-  let teams: TeamMembership[] = [];
-  const teamRolesClaim = claims['team_roles'];
-  if (typeof teamRolesClaim === 'string' && teamRolesClaim.length > 0) {
-    try {
-      const parsed = JSON.parse(teamRolesClaim) as Record<string, TeamRole>;
-      teams = Object.entries(parsed).map(([teamId, role]) => ({ teamId, role }));
-    } catch {
-      // fall through to live lookup
-    }
+  // Live reads, in parallel: team memberships + this user's admin record.
+  const [teams, hasAdminRecord] = await Promise.all([
+    loadMembershipsForUser(userId),
+    hasAdminRecordForUser(userId),
+  ]);
+
+  let isAdmin = hasAdminRecord;
+  let adminViaFallback = false;
+  if (!isAdmin && inCognitoAdminsGroup && (await zeroAdminsExist())) {
+    isAdmin = true;
+    adminViaFallback = true;
   }
 
-  if (teams.length === 0) {
-    teams = await loadMembershipsForUser(userId);
-  }
-
-  return { userId, email, isAdmin, teams };
+  return { userId, email, isAdmin, teams, adminViaFallback };
 }
 
 /**
- * Live lookup against the Memberships table by userId GSI.
- * Used as fallback when the JWT lacks the team_roles claim.
+ * Live lookup against the Memberships table by userId GSI. Returns the empty
+ * list (fail-closed) on error so a transient DynamoDB issue denies access
+ * rather than granting stale permissions.
  */
 export async function loadMembershipsForUser(userId: string): Promise<TeamMembership[]> {
   try {
@@ -79,6 +100,41 @@ export async function loadMembershipsForUser(userId: string): Promise<TeamMember
   } catch (error) {
     console.error('Failed to load memberships for user', userId, error);
     return [];
+  }
+}
+
+/**
+ * True if a durable admin record exists for this user. Fail-closed on error.
+ */
+export async function hasAdminRecordForUser(userId: string): Promise<boolean> {
+  try {
+    const response = await docClient.send(new GetCommand({
+      TableName: ADMINS_TABLE,
+      Key: { userId },
+    }));
+    return !!response.Item;
+  } catch (error) {
+    console.error('Failed to load admin record for user', userId, error);
+    return false;
+  }
+}
+
+/**
+ * True if there are NO admin rows in the Admins table. Only consulted on the
+ * bootstrap fallback path (a Cognito admins-group member with no row yet).
+ * Fail-closed on error: returns false so the fallback does NOT grant admin.
+ */
+export async function zeroAdminsExist(): Promise<boolean> {
+  try {
+    const response = await docClient.send(new ScanCommand({
+      TableName: ADMINS_TABLE,
+      Select: 'COUNT',
+      Limit: 1,
+    }));
+    return (response.Count || 0) === 0;
+  } catch (error) {
+    console.error('Failed to count admins', error);
+    return false;
   }
 }
 

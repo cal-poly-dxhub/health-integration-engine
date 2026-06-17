@@ -28,6 +28,7 @@ export class WorkflowBuilderStack extends cdk.Stack {
   private workflowsTable: dynamodb.Table;
   private teamsTable!: dynamodb.Table;
   private membershipsTable!: dynamodb.Table;
+  private adminsTable!: dynamodb.Table;
   private adminAuditLogTable!: dynamodb.Table;
   private workflowChangeLogsTable!: dynamodb.Table;
   private changelogLambda?: lambda.Function;
@@ -124,9 +125,9 @@ export class WorkflowBuilderStack extends cdk.Stack {
     // Create API Gateway first (needed for Identity Pool permissions)
     this.api = this.createApiGateway();
 
-    // Create Teams / Memberships / AdminAuditLog tables BEFORE the user pool
-    // because the PreTokenGeneration trigger Lambda needs to read Memberships
-    // to inject team/role claims into the JWT.
+    // Create Teams / Memberships / Admins / AdminAuditLog tables. resolveCaller
+    // reads Memberships + Admins live on every request to resolve team roles
+    // and admin status (the JWT carries identity only).
     this.createTeamTables();
 
     // Create Cognito User Pool
@@ -142,12 +143,6 @@ export class WorkflowBuilderStack extends cdk.Stack {
 
     // Create Cognito User Pool Client
     this.userPoolClient = this.createUserPoolClient();
-
-    // PreTokenGeneration Lambda is wired AFTER both userPool and userPoolClient
-    // exist, because createLambdaFunction injects USER_POOL_ID/CLIENT_ID env
-    // vars by default. Attaching the trigger via addTrigger() keeps the order
-    // legal at synth time.
-    this.attachPreTokenGenerationTrigger();
 
     // Create Cognito Identity Pool
     this.identityPool = this.createIdentityPool();
@@ -195,8 +190,8 @@ export class WorkflowBuilderStack extends cdk.Stack {
         },
       },
       // user_role / organization attributes are intentionally removed.
-      // Roles are now derived from the Memberships table per team and
-      // injected into the JWT by the PreTokenGeneration trigger.
+      // Roles are derived live from the Memberships table per team by
+      // resolveCaller on every request — not stored on the user or in the JWT.
       customAttributes: {},
       passwordPolicy: this.config.cognito.passwordPolicy,
       accountRecovery: cognito.AccountRecovery.EMAIL_ONLY,
@@ -228,77 +223,6 @@ export class WorkflowBuilderStack extends cdk.Stack {
     return userPool;
   }
 
-  private attachPreTokenGenerationTrigger(): void {
-    // Build this Lambda WITHOUT the createLambdaFunction helper. The helper
-    // injects USER_POOL_ID/USER_POOL_CLIENT_ID env vars by default; combined
-    // with userPool.addTrigger() (which makes UserPool → Lambda), those env
-    // vars create a Lambda → UserPool reference and CloudFormation rejects
-    // the resulting circular dependency. The PreTokenGen handler only needs
-    // MEMBERSHIPS_TABLE, so a hand-rolled Lambda definition breaks the cycle.
-    const logGroup = new logs.LogGroup(this, 'PreTokenGenerationLambdaLogGroup', {
-      logGroupName: `/aws/lambda/${PROJECT.lambda.preTokenGeneration}`,
-      retention: logs.RetentionDays.ONE_WEEK,
-      removalPolicy: cdk.RemovalPolicy.DESTROY,
-    });
-
-    const lambdaPath = '../lambda-functions/deployment-lambda';
-    const code = lambda.Code.fromAsset(lambdaPath, {
-      bundling: {
-        image: lambda.Runtime.NODEJS_22_X.bundlingImage,
-        local: {
-          tryBundle(outputDir: string): boolean {
-            const execSync = require('child_process').execSync;
-            const path = require('path');
-            const fsLocal = require('fs');
-            try {
-              execSync('node build.js', { cwd: lambdaPath, stdio: 'inherit' });
-              const distDir = path.join(lambdaPath, 'dist');
-              const copyRecursive = (src: string, dest: string) => {
-                const entries = fsLocal.readdirSync(src, { withFileTypes: true });
-                fsLocal.mkdirSync(dest, { recursive: true });
-                for (const entry of entries) {
-                  const srcPath = path.join(src, entry.name);
-                  const destPath = path.join(dest, entry.name);
-                  if (entry.isDirectory()) copyRecursive(srcPath, destPath);
-                  else fsLocal.copyFileSync(srcPath, destPath);
-                }
-              };
-              copyRecursive(distDir, outputDir);
-              return true;
-            } catch (e) {
-              console.error('PreTokenGen local bundling failed:', e);
-              return false;
-            }
-          },
-        },
-        command: ['bash', '-c', ['npm ci', './build.sh', 'cp -R dist/* /asset-output/'].join(' && ')],
-      },
-    });
-
-    const preTokenLambda = new lambda.Function(this, 'PreTokenGenerationLambda', {
-      functionName: PROJECT.lambda.preTokenGeneration,
-      runtime: lambda.Runtime.NODEJS_22_X,
-      handler: 'index.preTokenGeneration',
-      code,
-      timeout: cdk.Duration.seconds(5),
-      memorySize: 256,
-      ...this.lambdaVpcProps,
-      environment: {
-        NODE_ENV: 'production',
-        MEMBERSHIPS_TABLE: this.membershipsTable.tableName,
-      },
-      logGroup,
-    });
-
-    preTokenLambda.addToRolePolicy(new iam.PolicyStatement({
-      effect: iam.Effect.ALLOW,
-      actions: ['logs:CreateLogGroup', 'logs:CreateLogStream', 'logs:PutLogEvents'],
-      resources: [logGroup.logGroupArn],
-    }));
-    this.membershipsTable.grantReadData(preTokenLambda);
-    this.userPool.addTrigger(cognito.UserPoolOperation.PRE_TOKEN_GENERATION, preTokenLambda);
-  }
-
   private createTeamTables(): void {
     this.teamsTable = new dynamodb.Table(this, 'TeamsTable', {
       tableName: PROJECT.dynamodb.teamsTable,
@@ -325,6 +249,21 @@ export class WorkflowBuilderStack extends cdk.Stack {
       indexName: 'UserIdIndex',
       partitionKey: { name: 'userId', type: dynamodb.AttributeType.STRING },
       sortKey: { name: 'teamId', type: dynamodb.AttributeType.STRING },
+    });
+
+    // Admins table — authoritative source of admin status, keyed by Cognito
+    // sub. resolveCaller reads this on every request so promote/demote takes
+    // effect on the next request (the JWT is identity-only). The Cognito
+    // 'admins' group is used solely as a one-shot bootstrap when this table is
+    // empty (see resolveCaller / adminHandler).
+    this.adminsTable = new dynamodb.Table(this, 'AdminsTable', {
+      tableName: PROJECT.dynamodb.adminsTable,
+      partitionKey: { name: 'userId', type: dynamodb.AttributeType.STRING },
+      billingMode: dynamodb.BillingMode.PAY_PER_REQUEST,
+      pointInTimeRecoverySpecification: { pointInTimeRecoveryEnabled: true },
+      removalPolicy: this.config.environment === 'production'
+        ? cdk.RemovalPolicy.RETAIN
+        : cdk.RemovalPolicy.DESTROY,
     });
 
     this.adminAuditLogTable = new dynamodb.Table(this, 'AdminAuditLogTable', {
@@ -375,6 +314,7 @@ export class WorkflowBuilderStack extends cdk.Stack {
       {
         TEAMS_TABLE: this.teamsTable.tableName,
         MEMBERSHIPS_TABLE: this.membershipsTable.tableName,
+        ADMINS_TABLE: this.adminsTable.tableName,
         ADMIN_AUDIT_LOG_TABLE: this.adminAuditLogTable.tableName,
         WORKFLOWS_TABLE: this.workflowsTable.tableName,
         USER_POOL_ID: this.userPool.userPoolId,
@@ -383,20 +323,21 @@ export class WorkflowBuilderStack extends cdk.Stack {
 
     this.teamsTable.grantReadWriteData(adminLambda);
     this.membershipsTable.grantReadWriteData(adminLambda);
+    this.adminsTable.grantReadWriteData(adminLambda);
     this.adminAuditLogTable.grantReadWriteData(adminLambda);
     this.workflowsTable.grantReadData(adminLambda);
 
-    // Cognito permissions: list users + manage admins group + view membership
+    // Cognito permissions: list users for the admin UI and globally sign out
+    // users on demotion / critical removal (defense-in-depth). Admin status is
+    // now stored in the Admins table, so the AdminAddUserToGroup /
+    // AdminRemoveUserFromGroup / ListUsersInGroup / AdminListGroupsForUser
+    // permissions are no longer needed.
     adminLambda.addToRolePolicy(
       new iam.PolicyStatement({
         effect: iam.Effect.ALLOW,
         actions: [
           'cognito-idp:ListUsers',
-          'cognito-idp:ListUsersInGroup',
-          'cognito-idp:AdminGetUser',
-          'cognito-idp:AdminAddUserToGroup',
-          'cognito-idp:AdminRemoveUserFromGroup',
-          'cognito-idp:AdminListGroupsForUser',
+          'cognito-idp:AdminUserGlobalSignOut',
         ],
         resources: [this.userPool.userPoolArn],
       })
@@ -445,10 +386,12 @@ export class WorkflowBuilderStack extends cdk.Stack {
       {
         TEAMS_TABLE: this.teamsTable.tableName,
         MEMBERSHIPS_TABLE: this.membershipsTable.tableName,
+        ADMINS_TABLE: this.adminsTable.tableName,
       }
     );
     this.teamsTable.grantReadData(meLambda);
     this.membershipsTable.grantReadData(meLambda);
+    this.adminsTable.grantReadData(meLambda);
 
     const meResource = this.api.root.addResource('me');
     const meTeamsResource = meResource.addResource('teams');
@@ -487,9 +430,17 @@ export class WorkflowBuilderStack extends cdk.Stack {
         logoutUrls: this.config.cognito.logoutUrls,
       },
       preventUserExistenceErrors: true,
-      refreshTokenValidity: cdk.Duration.days(30),
-      accessTokenValidity: cdk.Duration.hours(1),
-      idTokenValidity: cdk.Duration.hours(1),
+      // Short-lived access/ID tokens shrink the window in which a token's
+      // identity claims can be stale. Authorization itself is already live
+      // (resolveCaller reads DynamoDB every request), so this is defense in
+      // depth, not the revocation mechanism.
+      // The refresh token validity is an ABSOLUTE session cap in Cognito —
+      // REFRESH_TOKEN_AUTH does not reissue the refresh token — so 24h means a
+      // user re-authenticates at most once per day even while actively working.
+      // Do not lower it without accepting mid-task logouts.
+      refreshTokenValidity: cdk.Duration.hours(24),
+      accessTokenValidity: cdk.Duration.minutes(15),
+      idTokenValidity: cdk.Duration.minutes(15),
       // Enable token revocation
       enableTokenRevocation: true,
       // Supported identity providers
@@ -836,6 +787,16 @@ export class WorkflowBuilderStack extends cdk.Stack {
     deploymentsTable.grantReadWriteData(deploymentLambda);
     deploymentsTable.grantReadWriteData(deploymentStatusLambda);
     deploymentsTable.grantReadWriteData(deploymentStatusUpdateLambda);
+    // deployWorkflow and getDeploymentStatus both call resolveCaller, which now
+    // ALWAYS reads the Memberships + Admins tables (previously it could rely on
+    // JWT claims and skip DynamoDB). They had the MEMBERSHIPS_TABLE env var but
+    // were missing the read grant; without these grants resolveCaller would
+    // fail-closed and deny every request. Add memberships + admins read access.
+    for (const fn of [deploymentLambda, deploymentStatusLambda]) {
+      this.membershipsTable.grantReadData(fn);
+      fn.addEnvironment('ADMINS_TABLE', this.adminsTable.tableName);
+      this.adminsTable.grantReadData(fn);
+    }
     this.workflowsTable.grantReadWriteData(deploymentLambda);
     this.workflowsTable.grantReadWriteData(deploymentStatusUpdateLambda);
     this.workflowsTable.grantReadWriteData(workflowStatusUpdateLambda);
@@ -1387,6 +1348,8 @@ export class WorkflowBuilderStack extends cdk.Stack {
 
     this.workflowsTable.grantReadWriteData(layerLambda);
     this.membershipsTable.grantReadData(layerLambda);
+    layerLambda.addEnvironment('ADMINS_TABLE', this.adminsTable.tableName);
+    this.adminsTable.grantReadData(layerLambda);
     lambdaCodeBucket.grantReadWrite(layerLambda);
 
     layerLambda.addToRolePolicy(
@@ -1503,6 +1466,11 @@ export class WorkflowBuilderStack extends cdk.Stack {
     this.membershipsTable.grantReadData(listWorkflowsLambda);
     this.membershipsTable.grantReadData(saveWorkflowLambda);
     this.membershipsTable.grantReadData(workflowLambda);
+    // Admin status is now read live from the Admins table by resolveCaller.
+    for (const fn of [listWorkflowsLambda, saveWorkflowLambda, workflowLambda]) {
+      fn.addEnvironment('ADMINS_TABLE', this.adminsTable.tableName);
+      this.adminsTable.grantReadData(fn);
+    }
     this.workflowChangeLogsTable.grantReadWriteData(saveWorkflowLambda);
     this.workflowChangeLogsTable.grantReadData(workflowLambda);
 
@@ -1530,6 +1498,8 @@ export class WorkflowBuilderStack extends cdk.Stack {
     this.workflowsTable.grantReadWriteData(deleteWorkflowLambda);
     deploymentsTable.grantReadWriteData(deleteWorkflowLambda);
     this.membershipsTable.grantReadData(deleteWorkflowLambda);
+    deleteWorkflowLambda.addEnvironment('ADMINS_TABLE', this.adminsTable.tableName);
+    this.adminsTable.grantReadData(deleteWorkflowLambda);
     this.workflowChangeLogsTable.grantReadWriteData(deleteWorkflowLambda);
 
     // Grant permissions to delete AWS resources
@@ -1633,6 +1603,8 @@ export class WorkflowBuilderStack extends cdk.Stack {
     deploymentsTable.grantReadData(deploymentHistoryLambda);
     this.workflowsTable.grantReadData(deploymentHistoryLambda);
     this.membershipsTable.grantReadData(deploymentHistoryLambda);
+    deploymentHistoryLambda.addEnvironment('ADMINS_TABLE', this.adminsTable.tableName);
+    this.adminsTable.grantReadData(deploymentHistoryLambda);
 
 
     // Add API endpoints
@@ -1662,6 +1634,8 @@ export class WorkflowBuilderStack extends cdk.Stack {
     );
     this.workflowsTable.grantReadData(this.changelogLambda);
     this.membershipsTable.grantReadData(this.changelogLambda);
+    this.changelogLambda.addEnvironment('ADMINS_TABLE', this.adminsTable.tableName);
+    this.adminsTable.grantReadData(this.changelogLambda);
     this.workflowChangeLogsTable.grantReadData(this.changelogLambda);
     const changelogResource = workflowIdResource.addResource('changelog');
     this.addLambdaIntegration(changelogResource, 'GET', this.changelogLambda, true);

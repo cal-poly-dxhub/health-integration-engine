@@ -13,14 +13,10 @@ import {
 import {
   CognitoIdentityProviderClient,
   ListUsersCommand,
-  ListUsersInGroupCommand,
-  AdminGetUserCommand,
-  AdminAddUserToGroupCommand,
-  AdminRemoveUserFromGroupCommand,
-  AdminListGroupsForUserCommand,
+  AdminUserGlobalSignOutCommand,
 } from '@aws-sdk/client-cognito-identity-provider';
 import { createSuccessHeaders } from '../utils/auth';
-import { resolveCaller, unauthenticated, forbidden, TeamRole } from '../utils/authz';
+import { resolveCaller, unauthenticated, forbidden, TeamRole, CallerIdentity } from '../utils/authz';
 
 const dynamoClient = new DynamoDBClient({ region: process.env.AWS_REGION });
 const docClient = DynamoDBDocumentClient.from(dynamoClient);
@@ -28,9 +24,9 @@ const cognitoClient = new CognitoIdentityProviderClient({ region: process.env.AW
 
 const TEAMS_TABLE = process.env.TEAMS_TABLE || 'WorkflowBuilder-Teams';
 const MEMBERSHIPS_TABLE = process.env.MEMBERSHIPS_TABLE || 'WorkflowBuilder-Memberships';
+const ADMINS_TABLE = process.env.ADMINS_TABLE || 'WorkflowBuilder-Admins';
 const ADMIN_AUDIT_LOG_TABLE = process.env.ADMIN_AUDIT_LOG_TABLE || 'WorkflowBuilder-AdminAuditLog';
 const USER_POOL_ID = process.env.USER_POOL_ID || '';
-const ADMINS_GROUP = 'admins';
 
 const json = (statusCode: number, body: any): APIGatewayProxyResult => ({
   statusCode,
@@ -51,6 +47,16 @@ export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayPr
     const caller = await resolveCaller(event);
     if (!caller) return unauthenticated();
     if (!caller.isAdmin) return forbidden('Admin access required');
+
+    // Bootstrap self-heal: if this caller is admin only via the Cognito-group
+    // fallback (no durable Admins row yet), persist their row now. This makes
+    // the single console-bootstrapped admin durable BEFORE they can promote
+    // anyone else — a promote seeds another admin row and flips "zero admins"
+    // to false, which would otherwise revoke a fallback-only admin's own
+    // access on their next request. Writing here closes that gap.
+    if (caller.adminViaFallback) {
+      await ensureAdminRecord(caller, caller, 'admin.bootstrap_self_heal');
+    }
 
     const method = event.httpMethod;
     const resource = event.resource || '';
@@ -194,13 +200,8 @@ async function addMember(event: APIGatewayProxyEvent, caller: any): Promise<APIG
   // Admins implicitly have writer-level access to every team. Adding one as
   // a per-team reader/writer would be confusing (their effective role doesn't
   // change) and creates a stale Memberships row if they're later demoted.
-  // Reject the attempt outright.
-  const groupsResp = await cognitoClient.send(new AdminListGroupsForUserCommand({
-    UserPoolId: USER_POOL_ID,
-    Username: cognitoUser.username,
-  }));
-  const isAdminUser = (groupsResp.Groups || []).some(g => g.GroupName === ADMINS_GROUP);
-  if (isAdminUser) {
+  // Reject the attempt outright. Admin status now lives in the Admins table.
+  if (await isAdminUserId(userId)) {
     return json(409, {
       error: 'This user is an admin and already has access to every team. Demote them from admin first if you want to scope their access to specific teams.',
     });
@@ -265,6 +266,12 @@ async function removeMember(event: APIGatewayProxyEvent, caller: any): Promise<A
   await docClient.send(new DeleteCommand({ TableName: MEMBERSHIPS_TABLE, Key: { teamId, userId } }));
   await writeAudit(caller, 'member.remove', { teamId, targetUserId: userId, before: before.Item });
 
+  // Defense-in-depth: globally sign the removed member out. Their team access
+  // is already revoked on their next request by the live read in
+  // resolveCaller; this additionally invalidates their refresh token so they
+  // can't continue an existing session indefinitely. Best-effort.
+  await globalSignOut(userId);
+
   return json(200, { message: 'Member removed' });
 }
 
@@ -295,70 +302,82 @@ async function listUsers(): Promise<APIGatewayProxyResult> {
     token = resp.PaginationToken;
   } while (token);
 
-  // Mark admins so the UI can highlight them.
-  const adminsResp = await cognitoClient.send(new ListUsersInGroupCommand({
-    UserPoolId: USER_POOL_ID,
-    GroupName: ADMINS_GROUP,
-    Limit: 60,
-  }));
-  const adminUsernames = new Set((adminsResp.Users || []).map(u => u.Username));
+  // Mark admins so the UI can highlight them. Admin status is authoritative in
+  // the Admins table (keyed by Cognito sub), so badges stay correct after a
+  // promote/demote rather than lagging behind a Cognito group membership.
+  const adminIds = await loadAllAdminIds();
   for (const u of users) {
-    u.isAdmin = adminUsernames.has(u.username);
+    u.isAdmin = adminIds.has(u.userId);
   }
 
   return json(200, { users });
 }
 
-async function promoteAdmin(event: APIGatewayProxyEvent, caller: any): Promise<APIGatewayProxyResult> {
+async function promoteAdmin(event: APIGatewayProxyEvent, caller: CallerIdentity): Promise<APIGatewayProxyResult> {
   const userId = event.pathParameters?.userId;
   if (!userId) return json(400, { error: 'userId required' });
 
-  // userId here is the Cognito sub; AdminAddUserToGroup wants the username
-  // (which is also the sub for our pool config).
+  // userId is the Cognito sub. Resolve the user so we can store their email
+  // on the admin record for display/audit.
   const cognitoUser = await fetchCognitoUser(userId);
   if (!cognitoUser) return json(404, { error: 'User not found' });
 
-  await cognitoClient.send(new AdminAddUserToGroupCommand({
-    UserPoolId: USER_POOL_ID,
-    Username: cognitoUser.username,
-    GroupName: ADMINS_GROUP,
+  if (await isAdminUserId(userId)) {
+    return json(409, { error: 'User is already an admin' });
+  }
+
+  await docClient.send(new PutCommand({
+    TableName: ADMINS_TABLE,
+    Item: {
+      userId,
+      email: cognitoUser.email,
+      addedAt: new Date().toISOString(),
+      addedBy: caller.userId,
+      addedByEmail: caller.email,
+    },
   }));
   await writeAudit(caller, 'admin.promote', { targetUserId: userId, targetEmail: cognitoUser.email });
 
   return json(200, { message: 'User promoted to admin' });
 }
 
-async function demoteAdmin(event: APIGatewayProxyEvent, caller: any): Promise<APIGatewayProxyResult> {
+async function demoteAdmin(event: APIGatewayProxyEvent, caller: CallerIdentity): Promise<APIGatewayProxyResult> {
   const userId = event.pathParameters?.userId;
   if (!userId) return json(400, { error: 'userId required' });
 
-  // Last-admin guard: refuse the demotion if it would empty the admins group.
-  const adminsResp = await cognitoClient.send(new ListUsersInGroupCommand({
-    UserPoolId: USER_POOL_ID,
-    GroupName: ADMINS_GROUP,
-    Limit: 60,
-  }));
-  const admins = adminsResp.Users || [];
-  if (admins.length <= 1) {
+  if (!(await isAdminUserId(userId))) {
+    return json(404, { error: 'User is not an admin' });
+  }
+
+  // Last-admin guard: refuse the demotion if it would leave zero admins.
+  const adminCount = await countAdmins();
+  if (adminCount <= 1) {
     return json(409, { error: 'Cannot remove the last admin. Promote another user to admin first.' });
   }
 
   const cognitoUser = await fetchCognitoUser(userId);
-  if (!cognitoUser) return json(404, { error: 'User not found' });
 
-  // If this is the only admin (per Cognito sub match), refuse even if the
-  // count check passed — defensive belt-and-suspenders against odd states.
-  const isOnlyAdmin = admins.length === 1 && admins[0].Username === cognitoUser.username;
-  if (isOnlyAdmin) {
-    return json(409, { error: 'Cannot remove the last admin. Promote another user to admin first.' });
-  }
-
-  await cognitoClient.send(new AdminRemoveUserFromGroupCommand({
-    UserPoolId: USER_POOL_ID,
-    Username: cognitoUser.username,
-    GroupName: ADMINS_GROUP,
+  await docClient.send(new DeleteCommand({
+    TableName: ADMINS_TABLE,
+    Key: { userId },
   }));
-  await writeAudit(caller, 'admin.demote', { targetUserId: userId, targetEmail: cognitoUser.email });
+  await writeAudit(caller, 'admin.demote', { targetUserId: userId, targetEmail: cognitoUser?.email });
+
+  // Defense-in-depth: globally sign the user out so they can't mint fresh
+  // tokens via their refresh token. Note this does NOT instantly invalidate
+  // their current access token at the offline API Gateway authorizer — the
+  // live admin read in resolveCaller is what revokes their admin powers on
+  // their next request. Best-effort; never fail the demotion on sign-out error.
+  if (cognitoUser) {
+    try {
+      await cognitoClient.send(new AdminUserGlobalSignOutCommand({
+        UserPoolId: USER_POOL_ID,
+        Username: cognitoUser.username,
+      }));
+    } catch (error) {
+      console.warn('Global sign-out after demotion failed (non-fatal):', error);
+    }
+  }
 
   return json(200, { message: 'Admin demoted' });
 }
@@ -396,6 +415,93 @@ async function listAuditLog(event: APIGatewayProxyEvent): Promise<APIGatewayProx
 
 function isValidRole(role: any): role is TeamRole {
   return role === 'reader' || role === 'writer';
+}
+
+/** True if a durable admin row exists for this Cognito sub. */
+async function isAdminUserId(userId: string): Promise<boolean> {
+  const resp = await docClient.send(new GetCommand({ TableName: ADMINS_TABLE, Key: { userId } }));
+  return !!resp.Item;
+}
+
+/** Count of admin rows. Used by the last-admin guard. */
+async function countAdmins(): Promise<number> {
+  let count = 0;
+  let lastKey: Record<string, any> | undefined;
+  do {
+    const resp = await docClient.send(new ScanCommand({
+      TableName: ADMINS_TABLE,
+      Select: 'COUNT',
+      ExclusiveStartKey: lastKey,
+    }));
+    count += resp.Count || 0;
+    lastKey = resp.LastEvaluatedKey;
+  } while (lastKey);
+  return count;
+}
+
+/** All admin Cognito subs, for marking the user list. */
+async function loadAllAdminIds(): Promise<Set<string>> {
+  const ids = new Set<string>();
+  let lastKey: Record<string, any> | undefined;
+  do {
+    const resp = await docClient.send(new ScanCommand({
+      TableName: ADMINS_TABLE,
+      ProjectionExpression: 'userId',
+      ExclusiveStartKey: lastKey,
+    }));
+    for (const item of resp.Items || []) {
+      if (item.userId) ids.add(item.userId as string);
+    }
+    lastKey = resp.LastEvaluatedKey;
+  } while (lastKey);
+  return ids;
+}
+
+/**
+ * Idempotently write the admin row for a user if it doesn't already exist.
+ * Used by the bootstrap self-heal path. Best-effort: a failure here must not
+ * break the privileged action the caller actually requested.
+ */
+async function ensureAdminRecord(
+  target: CallerIdentity,
+  actor: CallerIdentity,
+  auditAction: string
+): Promise<void> {
+  try {
+    await docClient.send(new PutCommand({
+      TableName: ADMINS_TABLE,
+      Item: {
+        userId: target.userId,
+        email: target.email,
+        addedAt: new Date().toISOString(),
+        addedBy: actor.userId,
+        addedByEmail: actor.email,
+        bootstrap: true,
+      },
+      ConditionExpression: 'attribute_not_exists(userId)',
+    }));
+    await writeAudit(actor, auditAction, { targetUserId: target.userId, targetEmail: target.email });
+  } catch (error: any) {
+    // ConditionalCheckFailed => row already exists (another request healed it
+    // first). Anything else is logged but swallowed so the request proceeds.
+    if (error?.name !== 'ConditionalCheckFailedException') {
+      console.warn('Admin self-heal write failed (non-fatal):', error);
+    }
+  }
+}
+
+/** Best-effort global sign-out by Cognito sub. Never throws. */
+async function globalSignOut(userId: string): Promise<void> {
+  try {
+    const user = await fetchCognitoUser(userId);
+    if (!user) return;
+    await cognitoClient.send(new AdminUserGlobalSignOutCommand({
+      UserPoolId: USER_POOL_ID,
+      Username: user.username,
+    }));
+  } catch (error) {
+    console.warn('Global sign-out failed (non-fatal):', error);
+  }
 }
 
 async function fetchCognitoUser(userId: string): Promise<{ username: string; email: string } | null> {

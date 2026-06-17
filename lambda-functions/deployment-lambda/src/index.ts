@@ -28,7 +28,6 @@ export { handler as layerHandler } from './handlers/layerHandler';
 export { eventBridgeHandler } from './handlers/eventbridge';
 
 // Cognito + admin handlers
-export { handler as preTokenGeneration } from './handlers/preTokenGeneration';
 export { handler as adminHandler } from './handlers/adminHandler';
 export { handler as meTeamsHandler } from './handlers/meTeams';
 export { handler as getWorkflowChangelog } from './handlers/getWorkflowChangelog';

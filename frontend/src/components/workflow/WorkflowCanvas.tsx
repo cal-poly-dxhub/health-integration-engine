@@ -1105,6 +1105,7 @@ const WorkflowCanvasContent: React.FC = () => {
           isOpen={configModalOpen}
           onClose={() => setConfigModalOpen(false)}
           onSave={handleConfigSave}
+          teamId={workflow?.teamId}
         />
       )}
 

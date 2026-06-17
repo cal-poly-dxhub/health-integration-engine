@@ -1343,6 +1343,7 @@ export class WorkflowBuilderStack extends cdk.Stack {
       'index.layerHandler',
       {
         WORKFLOWS_TABLE: this.workflowsTable.tableName,
+        MEMBERSHIPS_TABLE: this.membershipsTable.tableName,
         LAMBDA_CODE_BUCKET: lambdaCodeBucket.bucketName,
         AWS_ACCOUNT_ID: this.account,
         USER_POOL_ID: this.userPool.userPoolId,
@@ -1351,6 +1352,7 @@ export class WorkflowBuilderStack extends cdk.Stack {
     );
 
     this.workflowsTable.grantReadWriteData(layerLambda);
+    this.membershipsTable.grantReadData(layerLambda);
     lambdaCodeBucket.grantReadWrite(layerLambda);
 
     layerLambda.addToRolePolicy(

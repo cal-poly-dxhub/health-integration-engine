@@ -1,7 +1,7 @@
 import { APIGatewayProxyEvent, APIGatewayProxyResult } from 'aws-lambda';
 import { createHash } from 'crypto';
 import { DynamoDBClient } from '@aws-sdk/client-dynamodb';
-import { DynamoDBDocumentClient, PutCommand, QueryCommand, DeleteCommand, UpdateCommand, ScanCommand } from '@aws-sdk/lib-dynamodb';
+import { DynamoDBDocumentClient, PutCommand, GetCommand, QueryCommand, DeleteCommand, UpdateCommand, ScanCommand } from '@aws-sdk/lib-dynamodb';
 import { S3Client, PutObjectCommand, DeleteObjectCommand, HeadObjectCommand } from '@aws-sdk/client-s3';
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
 import {
@@ -13,7 +13,7 @@ import {
   ListTagsCommand,
 } from '@aws-sdk/client-lambda';
 import { createAuthErrorResponse, createSuccessHeaders } from '../utils/auth';
-import { resolveCaller, unauthenticated } from '../utils/authz';
+import { resolveCaller, canReadTeam, canWriteTeam, readableTeamIds, forbidden, unauthenticated, CallerIdentity } from '../utils/authz';
 
 const dynamoClient = new DynamoDBClient({ region: process.env.AWS_REGION });
 const docClient = DynamoDBDocumentClient.from(dynamoClient);
@@ -36,29 +36,28 @@ const MANAGED_BY_TAG_VALUE = 'workflow-builder';
 export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayProxyResult> => {
   console.log('Layer handler event:', JSON.stringify({ method: event.httpMethod, path: event.path }, null, 2));
 
-  // Authenticate. Layers are per-user (each user owns their own layer
-  // namespace), so we don't need a team check here — but pending users
-  // (zero teams + not admin) shouldn't be able to use the system at all.
+  // Authenticate. Layers are scoped per team (mirroring workflows); each
+  // operation does its own canRead/canWrite check. Pending users (zero teams,
+  // not admin) can't use the system at all.
   const caller = await resolveCaller(event);
   if (!caller) return unauthenticated();
   if (!caller.isAdmin && caller.teams.length === 0) {
     return createAuthErrorResponse('Your account is pending. An admin must add you to a team before you can use this feature.');
   }
-  const userId = caller.userId;
 
   try {
     const resource = event.resource || event.path || '';
     if (event.httpMethod === 'POST' && resource.endsWith('/layers/upload-url')) {
-      return await getUploadUrl(event, userId);
+      return await getUploadUrl(event, caller);
     }
 
     switch (event.httpMethod) {
       case 'POST':
-        return await createLayer(event, userId);
+        return await createLayer(event, caller);
       case 'GET':
-        return await listLayers(userId);
+        return await listLayers(event, caller);
       case 'DELETE':
-        return await deleteLayer(event, userId);
+        return await deleteLayer(event, caller);
       default:
         return { statusCode: 405, headers: createSuccessHeaders(), body: JSON.stringify({ error: 'Method not allowed' }) };
     }
@@ -77,24 +76,24 @@ function generateLayerId(): string {
 }
 
 /**
- * Per-user namespace for the AWS layer name. Layer names are account-global,
- * so we prefix with a short hash of the userId to prevent cross-tenant collisions.
+ * Per-team namespace for the AWS layer name. Layer names are account-global,
+ * so we prefix with a short hash of the teamId to prevent cross-team collisions.
  */
-function userNamespace(userId: string): string {
-  return createHash('sha256').update(userId).digest('hex').slice(0, 12);
+function teamNamespace(teamId: string): string {
+  return createHash('sha256').update(teamId).digest('hex').slice(0, 12);
 }
 
-function buildLayerName(userId: string, name: string): string {
+function buildLayerName(teamId: string, name: string): string {
   const safe = name.replace(/[^a-zA-Z0-9-_]/g, '-');
-  return `wb-${userNamespace(userId)}-${safe}`;
+  return `wb-${teamNamespace(teamId)}-${safe}`;
 }
 
 /**
- * S3 key only depends on userId + layerId, not the user-supplied name —
- * this avoids ambiguity when two layers share a sanitized name.
+ * S3 key depends on teamId + layerId, not the user-supplied name — this avoids
+ * ambiguity when two layers share a sanitized name.
  */
-function buildS3Key(userId: string, layerId: string): string {
-  return `layers/${userId}/${layerId}/layer.zip`;
+function buildS3Key(teamId: string, layerId: string): string {
+  return `layers/${teamId}/${layerId}/layer.zip`;
 }
 
 /**
@@ -104,20 +103,26 @@ function buildS3Key(userId: string, layerId: string): string {
  * The ContentType is pinned at signing time — the client MUST send the same
  * Content-Type header on the PUT or S3 will reject the upload.
  */
-async function getUploadUrl(event: APIGatewayProxyEvent, userId: string): Promise<APIGatewayProxyResult> {
+async function getUploadUrl(event: APIGatewayProxyEvent, caller: CallerIdentity): Promise<APIGatewayProxyResult> {
   if (!event.body) {
     return { statusCode: 400, headers: createSuccessHeaders(), body: JSON.stringify({ error: 'Request body is required' }) };
   }
 
   const body = JSON.parse(event.body);
-  const { name } = body as { name?: string };
+  const { name, teamId } = body as { name?: string; teamId?: string };
 
   if (!name) {
     return { statusCode: 400, headers: createSuccessHeaders(), body: JSON.stringify({ error: 'name is required' }) };
   }
+  if (!teamId) {
+    return { statusCode: 400, headers: createSuccessHeaders(), body: JSON.stringify({ error: 'teamId is required' }) };
+  }
+  if (!canWriteTeam(caller, teamId)) {
+    return forbidden('You do not have writer access on this team');
+  }
 
   const layerId = generateLayerId();
-  const s3Key = buildS3Key(userId, layerId);
+  const s3Key = buildS3Key(teamId, layerId);
   const contentType = 'application/zip';
 
   const uploadUrl = await getSignedUrl(
@@ -143,28 +148,50 @@ async function getUploadUrl(event: APIGatewayProxyEvent, userId: string): Promis
  * before publishing the layer version. Rolls back the published layer version
  * if the DynamoDB record write fails.
  */
-async function createLayer(event: APIGatewayProxyEvent, userId: string): Promise<APIGatewayProxyResult> {
+async function createLayer(event: APIGatewayProxyEvent, caller: CallerIdentity): Promise<APIGatewayProxyResult> {
   if (!event.body) {
     return { statusCode: 400, headers: createSuccessHeaders(), body: JSON.stringify({ error: 'Request body is required' }) };
   }
 
   const body = JSON.parse(event.body);
-  const { name, description, compatibleRuntimes, compatibleArchitectures, s3Key, layerId } = body;
+  const { name, description, compatibleRuntimes, compatibleArchitectures, s3Key, layerId, teamId } = body;
 
-  if (!name || !compatibleRuntimes?.length || !s3Key || !layerId) {
+  if (!name || !compatibleRuntimes?.length || !s3Key || !layerId || !teamId) {
     return {
       statusCode: 400,
       headers: createSuccessHeaders(),
-      body: JSON.stringify({ error: 'name, compatibleRuntimes, s3Key, and layerId are required' }),
+      body: JSON.stringify({ error: 'name, compatibleRuntimes, s3Key, layerId, and teamId are required' }),
     };
   }
 
-  const expectedPrefix = `layers/${userId}/${layerId}/`;
+  if (!canWriteTeam(caller, teamId)) {
+    return forbidden('You do not have writer access on this team');
+  }
+
+  const expectedPrefix = `layers/${teamId}/${layerId}/`;
   if (!s3Key.startsWith(expectedPrefix)) {
     return {
       statusCode: 403,
       headers: createSuccessHeaders(),
-      body: JSON.stringify({ error: 's3Key does not belong to the authenticated user' }),
+      body: JSON.stringify({ error: 's3Key does not belong to the target team' }),
+    };
+  }
+
+  // Enforce unique layer name within the team (trimmed, case-sensitive —
+  // same rule as workflow names).
+  const trimmedName = String(name).trim();
+  if (!trimmedName) {
+    return { statusCode: 400, headers: createSuccessHeaders(), body: JSON.stringify({ error: 'name is required' }) };
+  }
+  const existing = await getTeamLayers(teamId);
+  if (existing.some(l => (l.name || '').trim() === trimmedName)) {
+    return {
+      statusCode: 409,
+      headers: createSuccessHeaders(),
+      body: JSON.stringify({
+        error: `A layer named "${trimmedName}" already exists in this team. Please choose a different name.`,
+        code: 'NAME_CONFLICT',
+      }),
     };
   }
 
@@ -197,7 +224,7 @@ async function createLayer(event: APIGatewayProxyEvent, userId: string): Promise
     };
   }
 
-  const layerName = buildLayerName(userId, name);
+  const layerName = buildLayerName(teamId, trimmedName);
   const publishResult = await lambdaClient.send(new PublishLayerVersionCommand({
     LayerName: layerName,
     Description: description || '',
@@ -206,11 +233,14 @@ async function createLayer(event: APIGatewayProxyEvent, userId: string): Promise
     CompatibleArchitectures: compatibleArchitectures || ['x86_64'],
   }));
 
+  const createdAt = new Date().toISOString();
   const layerRecord = {
-    PK: `USER#${userId}`,
-    SK: `LAYER#${layerId}`,
+    PK: `LAYER#${layerId}`,
+    SK: 'META',
+    GSI1PK: `TEAM#${teamId}`,
+    GSI1SK: `LAYER#${createdAt}#${layerId}`,
     id: layerId,
-    name,
+    name: trimmedName,
     description: description || '',
     compatibleRuntimes,
     compatibleArchitectures: compatibleArchitectures || ['x86_64'],
@@ -220,8 +250,10 @@ async function createLayer(event: APIGatewayProxyEvent, userId: string): Promise
     version: publishResult.Version,
     s3Key,
     sizeBytes: contentLength,
-    createdAt: new Date().toISOString(),
-    userId,
+    createdAt,
+    teamId,
+    createdBy: caller.userId,
+    createdByEmail: caller.email,
   };
 
   try {
@@ -251,16 +283,43 @@ async function createLayer(event: APIGatewayProxyEvent, userId: string): Promise
 }
 
 /**
- * List all layers for the authenticated user
+ * List layers visible to the caller. Mirrors listWorkflows:
+ *   - optional ?teamId= filters to one team (must be readable)
+ *   - admins with no filter see all layers (scan)
+ *   - otherwise: union of the caller's readable teams
  */
-async function listLayers(userId: string): Promise<APIGatewayProxyResult> {
-  const result = await docClient.send(new QueryCommand({
-    TableName: WORKFLOWS_TABLE,
-    KeyConditionExpression: 'PK = :pk AND begins_with(SK, :sk)',
-    ExpressionAttributeValues: { ':pk': `USER#${userId}`, ':sk': 'LAYER#' },
-  }));
+async function listLayers(event: APIGatewayProxyEvent, caller: CallerIdentity): Promise<APIGatewayProxyResult> {
+  const teamFilter = event.queryStringParameters?.teamId;
+  const allowed = readableTeamIds(caller); // null = admin / all teams
 
-  const layers = (result.Items || []).map(item => ({
+  let items: any[];
+  if (teamFilter) {
+    if (allowed !== null && !allowed.includes(teamFilter)) {
+      // Caller asked for a team they can't read — return empty rather than 403.
+      return ok([]);
+    }
+    items = await queryLayersByTeam(teamFilter);
+  } else if (allowed === null) {
+    items = await scanAllLayers();
+  } else if (allowed.length === 0) {
+    items = [];
+  } else {
+    const lists = await Promise.all(allowed.map(t => queryLayersByTeam(t)));
+    items = lists.flat();
+  }
+
+  const layers = items.map(toLayerDto);
+  // Newest first.
+  layers.sort((a, b) => (b.createdAt < a.createdAt ? -1 : b.createdAt > a.createdAt ? 1 : 0));
+  return ok(layers);
+}
+
+function ok(layers: any[]): APIGatewayProxyResult {
+  return { statusCode: 200, headers: createSuccessHeaders(), body: JSON.stringify({ layers }) };
+}
+
+function toLayerDto(item: any) {
+  return {
     id: item.id,
     name: item.name,
     description: item.description,
@@ -270,13 +329,50 @@ async function listLayers(userId: string): Promise<APIGatewayProxyResult> {
     version: item.version,
     sizeBytes: item.sizeBytes,
     createdAt: item.createdAt,
-  }));
-
-  return {
-    statusCode: 200,
-    headers: createSuccessHeaders(),
-    body: JSON.stringify({ layers }),
+    teamId: item.teamId,
   };
+}
+
+/** Query all layer records for a team via the shared GSI1 (TEAM# partition). */
+async function queryLayersByTeam(teamId: string): Promise<any[]> {
+  const items: any[] = [];
+  let lastKey: Record<string, unknown> | undefined;
+  do {
+    const resp = await docClient.send(new QueryCommand({
+      TableName: WORKFLOWS_TABLE,
+      IndexName: 'GSI1',
+      KeyConditionExpression: 'GSI1PK = :pk AND begins_with(GSI1SK, :sk)',
+      ExpressionAttributeValues: { ':pk': `TEAM#${teamId}`, ':sk': 'LAYER#' },
+      ExclusiveStartKey: lastKey,
+      ScanIndexForward: false,
+    }));
+    items.push(...(resp.Items || []));
+    lastKey = resp.LastEvaluatedKey;
+  } while (lastKey);
+  return items;
+}
+
+/** Scan all layer records (admin only). Filters to layer META items. */
+async function scanAllLayers(): Promise<any[]> {
+  const items: any[] = [];
+  let lastKey: Record<string, unknown> | undefined;
+  do {
+    const resp = await docClient.send(new ScanCommand({
+      TableName: WORKFLOWS_TABLE,
+      FilterExpression: 'SK = :sk AND begins_with(PK, :pk)',
+      ExpressionAttributeValues: { ':sk': 'META', ':pk': 'LAYER#' },
+      ExclusiveStartKey: lastKey,
+    }));
+    items.push(...(resp.Items || []));
+    lastKey = resp.LastEvaluatedKey;
+  } while (lastKey);
+  return items;
+}
+
+/** Layer id+name pairs for a team — used to enforce unique names. */
+async function getTeamLayers(teamId: string): Promise<Array<{ id: string; name: string }>> {
+  const items = await queryLayersByTeam(teamId);
+  return items.map(i => ({ id: i.id, name: i.name }));
 }
 
 /**
@@ -287,7 +383,7 @@ async function listLayers(userId: string): Promise<APIGatewayProxyResult> {
  * locking, then strips the ARN from any live wb-managed Lambda functions
  * (scoped via tag) so we don't sweep unrelated functions in the account.
  */
-async function deleteLayer(event: APIGatewayProxyEvent, userId: string): Promise<APIGatewayProxyResult> {
+async function deleteLayer(event: APIGatewayProxyEvent, caller: CallerIdentity): Promise<APIGatewayProxyResult> {
   const layerId = event.pathParameters?.layerId;
   if (!layerId) {
     return { statusCode: 400, headers: createSuccessHeaders(), body: JSON.stringify({ error: 'layerId is required' }) };
@@ -295,27 +391,29 @@ async function deleteLayer(event: APIGatewayProxyEvent, userId: string): Promise
 
   const force = event.queryStringParameters?.force === 'true';
 
-  // Fetch layer record
-  const result = await docClient.send(new QueryCommand({
+  // Fetch layer record by id.
+  const result = await docClient.send(new GetCommand({
     TableName: WORKFLOWS_TABLE,
-    KeyConditionExpression: 'PK = :pk AND SK = :sk',
-    ExpressionAttributeValues: { ':pk': `USER#${userId}`, ':sk': `LAYER#${layerId}` },
+    Key: { PK: `LAYER#${layerId}`, SK: 'META' },
   }));
 
-  const layer = result.Items?.[0];
+  const layer = result.Item;
   if (!layer) {
     return { statusCode: 404, headers: createSuccessHeaders(), body: JSON.stringify({ error: 'Layer not found' }) };
   }
 
+  if (!canWriteTeam(caller, layer.teamId)) {
+    return forbidden('You do not have writer access on this team');
+  }
+
   const layerVersionArn = layer.layerVersionArn;
 
-  // Workflows now live per-team, not per-user. Scan for any workflow record
-  // (SK = META) that references this layer ARN, then detach. The scan is
-  // bounded by Lambda timeout; at the project's scale this is acceptable.
+  // Scan for workflow records (WORKFLOW#…/META) that reference this layer ARN,
+  // then detach. Bounded by Lambda timeout; acceptable at this project's scale.
   const workflowsScan = await docClient.send(new ScanCommand({
     TableName: WORKFLOWS_TABLE,
-    FilterExpression: 'SK = :sk',
-    ExpressionAttributeValues: { ':sk': 'META' },
+    FilterExpression: 'SK = :sk AND begins_with(PK, :pk)',
+    ExpressionAttributeValues: { ':sk': 'META', ':pk': 'WORKFLOW#' },
   }));
   const referencingWorkflows = (workflowsScan.Items || []).filter(w =>
     (w.nodes || []).some((n: any) => n.type === 'lambda' && n.config?.layers?.includes(layerVersionArn))
@@ -356,7 +454,7 @@ async function deleteLayer(event: APIGatewayProxyEvent, userId: string): Promise
   // Delete DynamoDB record
   await docClient.send(new DeleteCommand({
     TableName: WORKFLOWS_TABLE,
-    Key: { PK: `USER#${userId}`, SK: `LAYER#${layerId}` },
+    Key: { PK: `LAYER#${layerId}`, SK: 'META' },
   }));
 
   // Detach layer from saved workflows that reference it.

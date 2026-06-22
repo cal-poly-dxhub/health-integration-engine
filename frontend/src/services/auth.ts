@@ -10,6 +10,7 @@ import {
   ChangePasswordCommand,
   UpdateUserAttributesCommand,
   DeleteUserCommand,
+  GlobalSignOutCommand,
   AuthFlowType,
 } from '@aws-sdk/client-cognito-identity-provider';
 
@@ -242,14 +243,25 @@ class AuthService {
    * Sign out user
    */
   async signOut(): Promise<void> {
+    // Best-effort server-side revocation FIRST, while we still hold a valid
+    // access token. GlobalSignOut invalidates the refresh token in Cognito so
+    // it can't be used to mint new tokens after logout (the pool has token
+    // revocation enabled). We never block logout on this — even if it fails
+    // (expired token, network error), we still clear local state below.
+    const accessToken = this.currentTokens?.accessToken;
+    if (this.client && accessToken) {
+      try {
+        await this.client.send(new GlobalSignOutCommand({ AccessToken: accessToken }));
+      } catch (error) {
+        console.warn('GlobalSignOut failed (continuing with local sign-out):', error);
+      }
+    }
+
     try {
       // Clear stored tokens
       this.currentTokens = null;
       this.refreshPromise = null;
       this.clearStoredTokens();
-
-      // In a full implementation, you might want to call GlobalSignOut
-      // but for now, just clearing local tokens is sufficient
       console.log('User signed out successfully');
     } catch (error) {
       console.error('Sign out error:', error);

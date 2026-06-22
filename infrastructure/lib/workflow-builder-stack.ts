@@ -499,25 +499,14 @@ export class WorkflowBuilderStack extends cdk.Stack {
               ],
               resources: ['*'], // Cognito Identity actions do not support resource-level permissions
             }),
-            new iam.PolicyStatement({
-              effect: iam.Effect.ALLOW,
-              actions: [
-                'states:ListStateMachines',
-                'states:DescribeStateMachine',
-                'states:CreateStateMachine',
-                'states:UpdateStateMachine',
-                'states:DeleteStateMachine',
-                'states:StartExecution',
-                'states:StopExecution',
-                'states:DescribeExecution',
-                'states:ListExecutions',
-                'states:GetExecutionHistory',
-              ],
-              resources: [
-                `arn:aws:states:${this.region}:${this.account}:stateMachine:${PROJECT.projectName}-*`,
-                `arn:aws:states:${this.region}:${this.account}:execution:${PROJECT.projectName}-*:*`,
-              ],
-            }),
+            // NOTE: the authenticated role intentionally has NO direct Step
+            // Functions permissions. The browser never calls Step Functions
+            // with these STS credentials — every workflow/execution operation
+            // goes through API Gateway, where the Lambda handlers enforce
+            // per-team authorization (resolveCaller / canReadTeam /
+            // canWriteTeam). Granting states:* here would let any logged-in
+            // user exchange their token for STS creds and call Step Functions
+            // directly, bypassing all of those team checks. Do not re-add it.
           ],
         }),
       },

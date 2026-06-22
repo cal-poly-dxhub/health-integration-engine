@@ -148,10 +148,14 @@ async function scanAllWorkflows(): Promise<Workflow[]> {
   const items: Workflow[] = [];
   let lastKey: any;
   do {
+    // The workflows table is shared with layer records, which also use
+    // SK = 'META'. Constrain to PK = 'WORKFLOW#…' so layers don't leak into
+    // the admin workflow list (team-member queries already scope via
+    // begins_with(GSI1SK, 'WORKFLOW#')).
     const response = await docClient.send(new ScanCommand({
       TableName: WORKFLOWS_TABLE,
-      FilterExpression: 'SK = :sk',
-      ExpressionAttributeValues: { ':sk': 'META' },
+      FilterExpression: 'SK = :sk AND begins_with(PK, :pk)',
+      ExpressionAttributeValues: { ':sk': 'META', ':pk': 'WORKFLOW#' },
       ExclusiveStartKey: lastKey,
     }));
     items.push(...((response.Items || []) as Workflow[]));

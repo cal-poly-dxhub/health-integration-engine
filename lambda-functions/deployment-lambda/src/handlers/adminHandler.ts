@@ -35,6 +35,20 @@ const json = (statusCode: number, body: any): APIGatewayProxyResult => ({
 });
 
 /**
+ * Parse a JSON request body, distinguishing malformed input (-> 400) from a
+ * valid-but-unexpected payload. Returns ok:false so callers can return a 400
+ * rather than letting JSON.parse throw into the top-level 500 handler.
+ */
+function safeParseBody(body: string | null): { ok: true; value: any } | { ok: false } {
+  if (!body) return { ok: true, value: {} };
+  try {
+    return { ok: true, value: JSON.parse(body) };
+  } catch {
+    return { ok: false };
+  }
+}
+
+/**
  * Single Lambda router for all /admin/* endpoints. Every operation:
  *   1. Verifies the caller is in the 'admins' Cognito group.
  *   2. Performs the requested action against DynamoDB / Cognito.
@@ -113,7 +127,9 @@ async function listTeams(): Promise<APIGatewayProxyResult> {
 
 async function createTeam(event: APIGatewayProxyEvent, caller: any): Promise<APIGatewayProxyResult> {
   if (!event.body) return json(400, { error: 'Request body required' });
-  const { name, description } = JSON.parse(event.body);
+  const parsed = safeParseBody(event.body);
+  if (!parsed.ok) return json(400, { error: 'Invalid JSON in request body' });
+  const { name, description } = parsed.value;
   if (!name || typeof name !== 'string' || name.trim().length === 0) {
     return json(400, { error: 'Team name is required' });
   }
@@ -186,7 +202,9 @@ async function addMember(event: APIGatewayProxyEvent, caller: any): Promise<APIG
   if (!teamId) return json(400, { error: 'teamId required' });
   if (!event.body) return json(400, { error: 'Request body required' });
 
-  const { userId, role } = JSON.parse(event.body);
+  const parsed = safeParseBody(event.body);
+  if (!parsed.ok) return json(400, { error: 'Invalid JSON in request body' });
+  const { userId, role } = parsed.value;
   if (!userId || !isValidRole(role)) {
     return json(400, { error: 'userId and role (reader|writer) required' });
   }
@@ -227,7 +245,9 @@ async function updateMember(event: APIGatewayProxyEvent, caller: any): Promise<A
   const userId = event.pathParameters?.userId;
   if (!teamId || !userId) return json(400, { error: 'teamId and userId required' });
   if (!event.body) return json(400, { error: 'Request body required' });
-  const { role } = JSON.parse(event.body);
+  const parsed = safeParseBody(event.body);
+  if (!parsed.ok) return json(400, { error: 'Invalid JSON in request body' });
+  const { role } = parsed.value;
   if (!isValidRole(role)) return json(400, { error: 'role (reader|writer) required' });
 
   const before = await docClient.send(new GetCommand({ TableName: MEMBERSHIPS_TABLE, Key: { teamId, userId } }));

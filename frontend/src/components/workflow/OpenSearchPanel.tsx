@@ -23,12 +23,19 @@ interface OpenSearchPanelProps {
   indexName?: string;
   workflowId?: string;
   allowedWorkflowIds?: string[];
+  /**
+   * Selected team from the dashboard team switcher. Sent to the backend, which
+   * authorizes it server-side and narrows the search scope to that team's
+   * workflows. When omitted, the backend scopes to all of the caller's teams.
+   */
+  teamId?: string;
 }
 
 const OpenSearchPanel: React.FC<OpenSearchPanelProps> = ({
   indexName: defaultIndex = 'health-messages',
   workflowId = '',
   allowedWorkflowIds,
+  teamId,
 }) => {
   const [indexName] = useState(defaultIndex);
   const [searchParams, setSearchParams] = useState({
@@ -68,6 +75,7 @@ const OpenSearchPanel: React.FC<OpenSearchPanelProps> = ({
       }>('/opensearch/search', {
         indexName,
         workflowId,
+        teamId: teamId || undefined,
         allowedWorkflowIds: allowedWorkflowIds ? allowedWorkflowIds : undefined,
         query: {
           searchText: searchParams.searchText || undefined,

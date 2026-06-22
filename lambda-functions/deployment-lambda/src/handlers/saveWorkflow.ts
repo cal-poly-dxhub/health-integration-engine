@@ -37,7 +37,16 @@ export const handler = async (
       };
     }
 
-    const workflowData = JSON.parse(event.body);
+    let workflowData: any;
+    try {
+      workflowData = JSON.parse(event.body);
+    } catch {
+      return {
+        statusCode: 400,
+        headers: createSuccessHeaders(),
+        body: JSON.stringify({ error: 'Invalid JSON in request body' }),
+      };
+    }
     if (!workflowData.name) {
       return {
         statusCode: 400,

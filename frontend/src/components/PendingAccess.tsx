@@ -20,6 +20,11 @@ export default function PendingAccess({ onSignOut }: PendingAccessProps) {
       alignItems: 'center',
       justifyContent: 'center',
       minHeight: '100vh',
+      // Parent `.app` centers its flex children, so fill the width/height here
+      // — otherwise this full-page background shrinks to a narrow mobile strip.
+      width: '100%',
+      alignSelf: 'stretch',
+      flex: 1,
       padding: 24,
       background: '#f5f6f8',
     }}>

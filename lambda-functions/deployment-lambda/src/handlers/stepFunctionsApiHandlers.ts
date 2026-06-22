@@ -10,21 +10,105 @@ import {
   DescribeStateMachineForExecutionCommand,
   RedriveExecutionCommand
 } from '@aws-sdk/client-sfn';
-import { extractUserIdFromEvent, createAuthErrorResponse, createSuccessHeaders } from '../utils/auth';
+import { DynamoDBClient } from '@aws-sdk/client-dynamodb';
+import { DynamoDBDocumentClient, GetCommand } from '@aws-sdk/lib-dynamodb';
+import { createSuccessHeaders } from '../utils/auth';
+import {
+  resolveCaller,
+  canReadTeam,
+  canWriteTeam,
+  forbidden,
+  unauthenticated,
+  parseWorkflowIdFromSfnArn,
+} from '../utils/authz';
 
 const sfnClient = new SFNClient({});
+const dynamoClient = new DynamoDBClient({ region: process.env.AWS_REGION });
+const docClient = DynamoDBDocumentClient.from(dynamoClient);
+
+const WORKFLOWS_TABLE = process.env.WORKFLOWS_TABLE || 'WorkflowBuilder-Workflows';
+
+type SfnAccess = 'read' | 'write';
+
+interface AuthorizeResult {
+  ok: boolean;
+  /** Populated only when `ok` is false — the response to return immediately. */
+  response?: APIGatewayProxyResult;
+}
+
+const notFound = (): APIGatewayProxyResult => ({
+  statusCode: 404,
+  headers: createSuccessHeaders(),
+  body: JSON.stringify({ error: 'Not found' }),
+});
+
+/**
+ * Server-side authorization for every Step Functions API call. The caller may
+ * only act on state machines / executions belonging to a workflow on one of
+ * their teams (admins can act on any). The owning workflow is derived from the
+ * ARN itself (state machines are named `SF-<workflowId>`), never trusted from
+ * the request body, and the workflow's team is read live from DynamoDB.
+ *
+ * Read ops mask denials as 404 (so out-of-scope/unknown ARNs aren't
+ * enumerable); write ops return 403. ARNs that don't map to a workflow
+ * (e.g. the internal deployment/deletion state machines) are denied.
+ */
+async function authorizeSfnArn(
+  event: APIGatewayProxyEvent,
+  arn: string,
+  access: SfnAccess
+): Promise<AuthorizeResult> {
+  const caller = await resolveCaller(event);
+  if (!caller) {
+    return { ok: false, response: unauthenticated('Valid authentication token required') };
+  }
+
+  const workflowId = parseWorkflowIdFromSfnArn(arn);
+  if (!workflowId) {
+    // Not a per-workflow state machine ARN — deny rather than fall open.
+    return { ok: false, response: access === 'read' ? notFound() : forbidden('Not authorized for this resource') };
+  }
+
+  let workflow: { teamId?: string } | null = null;
+  try {
+    const resp = await docClient.send(new GetCommand({
+      TableName: WORKFLOWS_TABLE,
+      Key: { PK: `WORKFLOW#${workflowId}`, SK: 'META' },
+    }));
+    workflow = (resp.Item as { teamId?: string }) || null;
+  } catch (error) {
+    console.error('SFN authz: failed to load workflow', workflowId, error);
+    return {
+      ok: false,
+      response: {
+        statusCode: 500,
+        headers: createSuccessHeaders(),
+        body: JSON.stringify({ error: 'Authorization check failed' }),
+      },
+    };
+  }
+
+  if (!workflow || !workflow.teamId) {
+    return { ok: false, response: notFound() };
+  }
+
+  const permitted = access === 'write'
+    ? canWriteTeam(caller, workflow.teamId)
+    : canReadTeam(caller, workflow.teamId);
+
+  if (!permitted) {
+    // Mask reads as 404; writes as explicit 403.
+    return { ok: false, response: access === 'read' ? notFound() : forbidden('You do not have access to this workflow') };
+  }
+
+  return { ok: true };
+}
 
 /**
  * List executions for a state machine
  */
 export const listExecutions = async (event: APIGatewayProxyEvent): Promise<APIGatewayProxyResult> => {
   try {
-    // Validate authentication
-    const userId = extractUserIdFromEvent(event);
-    if (!userId) {
-      return createAuthErrorResponse('Valid authentication token required');
-    }
-
     const body = JSON.parse(event.body || '{}');
     const { stateMachineArn, maxResults = 100, nextToken } = body;
 
@@ -35,6 +119,9 @@ export const listExecutions = async (event: APIGatewayProxyEvent): Promise<APIGa
         body: JSON.stringify({ error: 'stateMachineArn is required' }),
       };
     }
+
+    const authz = await authorizeSfnArn(event, stateMachineArn, 'read');
+    if (!authz.ok) return authz.response!;
 
     const command = new ListExecutionsCommand({
       stateMachineArn,
@@ -74,12 +161,6 @@ export const listExecutions = async (event: APIGatewayProxyEvent): Promise<APIGa
  */
 export const describeExecution = async (event: APIGatewayProxyEvent): Promise<APIGatewayProxyResult> => {
   try {
-    // Validate authentication
-    const userId = extractUserIdFromEvent(event);
-    if (!userId) {
-      return createAuthErrorResponse('Valid authentication token required');
-    }
-
     const body = JSON.parse(event.body || '{}');
     const { executionArn } = body;
 
@@ -90,6 +171,9 @@ export const describeExecution = async (event: APIGatewayProxyEvent): Promise<AP
         body: JSON.stringify({ error: 'executionArn is required' }),
       };
     }
+
+    const authz = await authorizeSfnArn(event, executionArn, 'read');
+    if (!authz.ok) return authz.response!;
 
     const command = new DescribeExecutionCommand({
       executionArn,
@@ -124,12 +208,6 @@ export const describeExecution = async (event: APIGatewayProxyEvent): Promise<AP
  */
 export const getExecutionHistory = async (event: APIGatewayProxyEvent): Promise<APIGatewayProxyResult> => {
   try {
-    // Validate authentication
-    const userId = extractUserIdFromEvent(event);
-    if (!userId) {
-      return createAuthErrorResponse('Valid authentication token required');
-    }
-
     const body = JSON.parse(event.body || '{}');
     const { executionArn, maxResults = 100, nextToken, reverseOrder = true } = body;
 
@@ -140,6 +218,9 @@ export const getExecutionHistory = async (event: APIGatewayProxyEvent): Promise<
         body: JSON.stringify({ error: 'executionArn is required' }),
       };
     }
+
+    const authz = await authorizeSfnArn(event, executionArn, 'read');
+    if (!authz.ok) return authz.response!;
 
     const command = new GetExecutionHistoryCommand({
       executionArn,
@@ -180,12 +261,6 @@ export const getExecutionHistory = async (event: APIGatewayProxyEvent): Promise<
  */
 export const startExecution = async (event: APIGatewayProxyEvent): Promise<APIGatewayProxyResult> => {
   try {
-    // Validate authentication
-    const userId = extractUserIdFromEvent(event);
-    if (!userId) {
-      return createAuthErrorResponse('Valid authentication token required');
-    }
-
     const body = JSON.parse(event.body || '{}');
     const { stateMachineArn, name, input = '{}' } = body;
 
@@ -196,6 +271,9 @@ export const startExecution = async (event: APIGatewayProxyEvent): Promise<APIGa
         body: JSON.stringify({ error: 'stateMachineArn is required' }),
       };
     }
+
+    const authz = await authorizeSfnArn(event, stateMachineArn, 'write');
+    if (!authz.ok) return authz.response!;
 
     const command = new StartExecutionCommand({
       stateMachineArn,
@@ -228,12 +306,6 @@ export const startExecution = async (event: APIGatewayProxyEvent): Promise<APIGa
  */
 export const stopExecution = async (event: APIGatewayProxyEvent): Promise<APIGatewayProxyResult> => {
   try {
-    // Validate authentication
-    const userId = extractUserIdFromEvent(event);
-    if (!userId) {
-      return createAuthErrorResponse('Valid authentication token required');
-    }
-
     const body = JSON.parse(event.body || '{}');
     const { executionArn, error: errorMessage, cause } = body;
 
@@ -244,6 +316,9 @@ export const stopExecution = async (event: APIGatewayProxyEvent): Promise<APIGat
         body: JSON.stringify({ error: 'executionArn is required' }),
       };
     }
+
+    const authz = await authorizeSfnArn(event, executionArn, 'write');
+    if (!authz.ok) return authz.response!;
 
     const command = new StopExecutionCommand({
       executionArn,
@@ -275,12 +350,6 @@ export const stopExecution = async (event: APIGatewayProxyEvent): Promise<APIGat
  */
 export const describeStateMachine = async (event: APIGatewayProxyEvent): Promise<APIGatewayProxyResult> => {
   try {
-    // Validate authentication
-    const userId = extractUserIdFromEvent(event);
-    if (!userId) {
-      return createAuthErrorResponse('Valid authentication token required');
-    }
-
     const body = JSON.parse(event.body || '{}');
     const { stateMachineArn } = body;
 
@@ -291,6 +360,9 @@ export const describeStateMachine = async (event: APIGatewayProxyEvent): Promise
         body: JSON.stringify({ error: 'stateMachineArn is required' }),
       };
     }
+
+    const authz = await authorizeSfnArn(event, stateMachineArn, 'read');
+    if (!authz.ok) return authz.response!;
 
     const command = new DescribeStateMachineCommand({
       stateMachineArn,
@@ -324,12 +396,6 @@ export const describeStateMachine = async (event: APIGatewayProxyEvent): Promise
  */
 export const describeStateMachineForExecution = async (event: APIGatewayProxyEvent): Promise<APIGatewayProxyResult> => {
   try {
-    // Validate authentication
-    const userId = extractUserIdFromEvent(event);
-    if (!userId) {
-      return createAuthErrorResponse('Valid authentication token required');
-    }
-
     const body = JSON.parse(event.body || '{}');
     const { executionArn } = body;
 
@@ -340,6 +406,9 @@ export const describeStateMachineForExecution = async (event: APIGatewayProxyEve
         body: JSON.stringify({ error: 'executionArn is required' }),
       };
     }
+
+    const authz = await authorizeSfnArn(event, executionArn, 'read');
+    if (!authz.ok) return authz.response!;
 
     const command = new DescribeStateMachineForExecutionCommand({
       executionArn,
@@ -373,11 +442,6 @@ export const describeStateMachineForExecution = async (event: APIGatewayProxyEve
  */
 export const redriveExecution = async (event: APIGatewayProxyEvent): Promise<APIGatewayProxyResult> => {
   try {
-    const userId = extractUserIdFromEvent(event);
-    if (!userId) {
-      return createAuthErrorResponse('Valid authentication token required');
-    }
-
     const body = JSON.parse(event.body || '{}');
     const { executionArn } = body;
 
@@ -388,6 +452,9 @@ export const redriveExecution = async (event: APIGatewayProxyEvent): Promise<API
         body: JSON.stringify({ error: 'executionArn is required' }),
       };
     }
+
+    const authz = await authorizeSfnArn(event, executionArn, 'write');
+    if (!authz.ok) return authz.response!;
 
     const command = new RedriveExecutionCommand({
       executionArn,

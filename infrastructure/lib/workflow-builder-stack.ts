@@ -244,7 +244,8 @@ export class WorkflowBuilderStack extends cdk.Stack {
         ? cdk.RemovalPolicy.RETAIN
         : cdk.RemovalPolicy.DESTROY,
     });
-    // GSI for "list teams for a given user" — used by PreTokenGen trigger.
+    // GSI for "list teams for a given user" — used by resolveCaller's live
+    // membership lookup (loadMembershipsForUser) on every request.
     this.membershipsTable.addGlobalSecondaryIndex({
       indexName: 'UserIdIndex',
       partitionKey: { name: 'userId', type: dynamodb.AttributeType.STRING },
@@ -304,8 +305,9 @@ export class WorkflowBuilderStack extends cdk.Stack {
 
   private createAdminEndpoints(): void {
     // Admin API Lambda — handles team and user management. Internally checks
-    // that the caller is in the 'admins' Cognito group; that claim is
-    // available on the API Gateway authorizer.
+    // that the caller is an admin (authoritative row in the Admins table, read
+    // live via resolveCaller; the Cognito 'admins' group is only a one-shot
+    // bootstrap when the table is empty).
     const adminLambda = this.createLambdaFunction(
       'AdminLambda',
       PROJECT.lambda.adminTeams,
@@ -1222,12 +1224,27 @@ export class WorkflowBuilderStack extends cdk.Stack {
             'states:DescribeStateMachineForExecution',
             'states:RedriveExecution',
           ],
+          // Defense-in-depth: scope to per-workflow state machines only
+          // (named `SF-<workflowId>`). Even if the handler's team-authz check
+          // regressed, the role still couldn't reach the internal
+          // deployment/deletion machines or any unrelated state machine.
           resources: [
-            `arn:aws:states:${this.region}:${this.account}:stateMachine:*`,
-            `arn:aws:states:${this.region}:${this.account}:execution:*:*`,
+            `arn:aws:states:${this.region}:${this.account}:stateMachine:SF-*`,
+            `arn:aws:states:${this.region}:${this.account}:execution:SF-*:*`,
           ],
         })
       );
+
+      // The handlers now enforce team authorization server-side: they resolve
+      // the caller (Memberships + Admins) and the owning workflow's team
+      // (Workflows) live from DynamoDB and reject cross-tenant ARNs. Wire the
+      // table names and grant read-only access for those lookups.
+      lambdaFunction.addEnvironment('WORKFLOWS_TABLE', this.workflowsTable.tableName);
+      lambdaFunction.addEnvironment('MEMBERSHIPS_TABLE', this.membershipsTable.tableName);
+      lambdaFunction.addEnvironment('ADMINS_TABLE', this.adminsTable.tableName);
+      this.workflowsTable.grantReadData(lambdaFunction);
+      this.membershipsTable.grantReadData(lambdaFunction);
+      this.adminsTable.grantReadData(lambdaFunction);
     });
 
     // Create API Gateway resources
@@ -1395,9 +1412,21 @@ export class WorkflowBuilderStack extends cdk.Stack {
       environment: {
         OPENSEARCH_ENDPOINT: opensearchCollection.attrCollectionEndpoint,
         ALLOWED_ORIGIN: `https://${this.frontendHosting.distribution.distributionDomainName}`,
+        // Tables used to derive the caller's accessible workflows server-side
+        // (never trusting allowedWorkflowIds from the request body).
+        WORKFLOWS_TABLE: this.workflowsTable.tableName,
+        MEMBERSHIPS_TABLE: this.membershipsTable.tableName,
+        ADMINS_TABLE: this.adminsTable.tableName,
       },
     });
-    
+
+    // Read access for server-side team-scoping: resolve the caller's teams +
+    // admin status and the workflows they own, to constrain every search to
+    // their own tenants' indexed documents.
+    this.workflowsTable.grantReadData(opensearchSearchLambda);
+    this.membershipsTable.grantReadData(opensearchSearchLambda);
+    this.adminsTable.grantReadData(opensearchSearchLambda);
+
     // Grant OpenSearch Serverless permissions
     opensearchSearchLambda.addToRolePolicy(
       new iam.PolicyStatement({
@@ -2664,6 +2693,7 @@ import hashlib
 from botocore.auth import SigV4Auth
 from botocore.awsrequest import AWSRequest
 from urllib.parse import urlparse
+from boto3.dynamodb.conditions import Key
 
 CORS_HEADERS = {
     'Access-Control-Allow-Origin': os.environ.get('ALLOWED_ORIGIN', 'http://localhost:3000'),
@@ -2672,23 +2702,171 @@ CORS_HEADERS = {
     'Content-Type': 'application/json'
 }
 
+ddb = boto3.resource('dynamodb')
+WORKFLOWS_TABLE = os.environ.get('WORKFLOWS_TABLE', 'WorkflowBuilder-Workflows')
+MEMBERSHIPS_TABLE = os.environ.get('MEMBERSHIPS_TABLE', 'WorkflowBuilder-Memberships')
+ADMINS_TABLE = os.environ.get('ADMINS_TABLE', 'WorkflowBuilder-Admins')
+
+
+def _extract_user_id(event):
+    # API Gateway Cognito authorizer puts the verified identity in claims.
+    # The JWT is proof of identity only; authorization is derived live below.
+    claims = (event.get('requestContext', {}).get('authorizer', {}) or {}).get('claims', {}) or {}
+    return claims.get('sub') or claims.get('cognito:username'), claims
+
+
+def _parse_groups(raw):
+    if not raw:
+        return []
+    if isinstance(raw, list):
+        return [str(g) for g in raw]
+    s = str(raw).strip()
+    if s.startswith('['):
+        inner = s[1:-1] if s.endswith(']') else s[1:]
+        return [g.strip() for g in inner.split(',') if g.strip()]
+    return [g.strip() for g in s.replace(',', ' ').split() if g.strip()]
+
+
+def _zero_admins_exist():
+    try:
+        resp = ddb.Table(ADMINS_TABLE).scan(Select='COUNT', Limit=1)
+        return resp.get('Count', 0) == 0
+    except Exception as e:
+        print('zero-admins check failed (fail-closed to non-bootstrap):', e)
+        return False
+
+
+def _is_admin(user_id, claims):
+    # Authoritative: a durable row in the Admins table. Fail-closed on error.
+    try:
+        resp = ddb.Table(ADMINS_TABLE).get_item(Key={'userId': user_id})
+        if resp.get('Item'):
+            return True
+    except Exception as e:
+        print('admin lookup failed (treating as non-admin):', e)
+        return False
+    # One-shot bootstrap fallback, mirroring resolveCaller: a Cognito
+    # admins-group member counts as admin ONLY while no admin rows exist.
+    if 'admins' in _parse_groups(claims.get('cognito:groups')):
+        return _zero_admins_exist()
+    return False
+
+
+def _team_ids_for_user(user_id):
+    team_ids = []
+    last_key = None
+    table = ddb.Table(MEMBERSHIPS_TABLE)
+    while True:
+        kwargs = {
+            'IndexName': 'UserIdIndex',
+            'KeyConditionExpression': Key('userId').eq(user_id),
+        }
+        if last_key:
+            kwargs['ExclusiveStartKey'] = last_key
+        resp = table.query(**kwargs)
+        for item in resp.get('Items', []):
+            if item.get('teamId'):
+                team_ids.append(item['teamId'])
+        last_key = resp.get('LastEvaluatedKey')
+        if not last_key:
+            break
+    return team_ids
+
+
+def _workflow_ids_for_team(team_id):
+    ids = []
+    last_key = None
+    table = ddb.Table(WORKFLOWS_TABLE)
+    while True:
+        kwargs = {
+            'IndexName': 'GSI1',
+            'KeyConditionExpression': Key('GSI1PK').eq('TEAM#' + team_id) & Key('GSI1SK').begins_with('WORKFLOW#'),
+            'ProjectionExpression': '#wid',
+            'ExpressionAttributeNames': {'#wid': 'id'},
+        }
+        if last_key:
+            kwargs['ExclusiveStartKey'] = last_key
+        resp = table.query(**kwargs)
+        for item in resp.get('Items', []):
+            if item.get('id'):
+                ids.append(item['id'])
+        last_key = resp.get('LastEvaluatedKey')
+        if not last_key:
+            break
+    return ids
+
+
+def _resolve_allowed_workflow_ids(user_id, claims, requested_team_id=None):
+    '''
+    Returns the set of workflowIds the caller may search, computed entirely
+    server-side. Returns None to mean "no restriction" (admin, no team filter).
+    For a non-admin, any failure fails CLOSED (returns [] -> matches nothing)
+    rather than exposing other tenants' data.
+
+    When requested_team_id is provided (the UI's team switcher), the scope is
+    narrowed to that single team — but ONLY after verifying the caller may read
+    it (admin, or a member of that team). The team id is authorized here, never
+    trusted blindly: an unauthorized team yields [] (matches nothing), so this
+    can only ever narrow within what the caller is already allowed to see.
+    '''
+    is_admin = _is_admin(user_id, claims)
+
+    if requested_team_id:
+        # Authorize the requested team server-side before scoping to it.
+        if not is_admin:
+            try:
+                if requested_team_id not in _team_ids_for_user(user_id):
+                    return []
+            except Exception as e:
+                print('failed to verify team membership (fail-closed):', e)
+                return []
+        try:
+            return sorted(set(_workflow_ids_for_team(requested_team_id)))
+        except Exception as e:
+            print('failed to resolve team workflows (fail-closed):', e)
+            return []
+
+    if is_admin:
+        return None
+    try:
+        allowed = []
+        for team_id in _team_ids_for_user(user_id):
+            allowed.extend(_workflow_ids_for_team(team_id))
+        return sorted(set(allowed))
+    except Exception as e:
+        print('failed to resolve allowed workflows (fail-closed):', e)
+        return []
+
+
 def lambda_handler(event, context):
     if event.get('httpMethod') == 'OPTIONS':
         return {'statusCode': 200, 'headers': CORS_HEADERS, 'body': ''}
-    
+
+    # Require an authenticated identity from the Cognito authorizer.
+    user_id, claims = _extract_user_id(event)
+    if not user_id:
+        return {'statusCode': 401, 'headers': CORS_HEADERS, 'body': json.dumps({'error': 'Authentication required'})}
+
     try:
-        body = json.loads(event.get('body', '{}'))
+        body = json.loads(event.get('body', '{}') or '{}')
         endpoint = os.environ.get('OPENSEARCH_ENDPOINT', '').rstrip('/')
         index_name = body.get('indexName', 'health-messages')
         query_params = body.get('query', {})
         config = body.get('searchConfig', {})
         workflow_id = body.get('workflowId', '')
-        allowed_workflow_ids = body.get('allowedWorkflowIds')
+        requested_team_id = body.get('teamId') or None
 
         if not endpoint or not index_name:
             return {'statusCode': 400, 'headers': CORS_HEADERS, 'body': json.dumps({'error': 'indexName required'})}
 
-        # Add workflowId filter if provided
+        # SECURITY: the workflow scope is derived from the caller's identity,
+        # NEVER from the request body. Any client-supplied allowedWorkflowIds
+        # is ignored. An optional teamId (the UI's team switcher) only narrows
+        # the scope and is authorized server-side inside the resolver.
+        allowed_workflow_ids = _resolve_allowed_workflow_ids(user_id, claims, requested_team_id)
+
+        # Add workflowId filter if provided (intersects with allowed set, so a
+        # workflowId the caller can't access yields no results).
         if workflow_id:
             query_params['workflowId'] = workflow_id
 
@@ -2696,20 +2874,20 @@ def lambda_handler(event, context):
         url = f"{endpoint}/{index_name}/_search"
         data = json.dumps(query).encode('utf-8')
         body_hash = hashlib.sha256(data).hexdigest()
-        
+
         parsed = urlparse(url)
         session = boto3.Session()
         creds = session.get_credentials().get_frozen_credentials()
         region = os.environ['AWS_REGION']
-        
+
         headers = {'Content-Type': 'application/json', 'Host': parsed.netloc, 'x-amz-content-sha256': body_hash}
         request = AWSRequest(method='POST', url=url, data=data, headers=headers)
         SigV4Auth(creds, 'aoss', region).add_auth(request)
-        
+
         req = urllib.request.Request(url, data=data, method='POST')
         for k, v in request.headers.items():
             req.add_header(k, v)
-        
+
         with urllib.request.urlopen(req) as resp:
             result = json.loads(resp.read().decode('utf-8'))
             hits = result.get('hits', {})
@@ -2740,6 +2918,8 @@ def build_query(params, config, allowed_workflow_ids=None):
         must.append({'match': {'fillerOrderNumber': {'query': params['fillerOrderNumber'], 'fuzziness': 'AUTO'}}})
     if params.get('workflowId'):
         filters.append({'term': {'workflowId.keyword': params['workflowId']}})
+    # Server-derived tenant scope. None => admin (no restriction). An empty
+    # list => caller owns no workflows, so match nothing (never match all).
     if allowed_workflow_ids is not None:
         if len(allowed_workflow_ids) > 0:
             filters.append({'terms': {'workflowId.keyword': allowed_workflow_ids}})

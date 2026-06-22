@@ -186,6 +186,35 @@ export function forbidden(message: string = 'Forbidden'): APIGatewayProxyResult 
 }
 
 /**
+ * Extract the owning workflowId from a Step Functions state-machine or
+ * execution ARN. Per-workflow state machines are named `SF-<workflowId>`
+ * (see cloudFormationTemplateGenerator: `StateMachineName: SF-${WorkflowId}`),
+ * so the workflowId is recoverable from the ARN without a lookup.
+ *
+ * Handles both ARN shapes (alias suffix tolerated):
+ *   arn:aws:states:<region>:<acct>:stateMachine:SF-<workflowId>[:<alias>]
+ *   arn:aws:states:<region>:<acct>:execution:SF-<workflowId>:<executionName>
+ *
+ * Returns null for anything that is not a workflow state machine — e.g. the
+ * internal deployment/deletion state machines (`workflow-builder-*`) or a
+ * malformed ARN — so callers can deny access to non-workflow resources rather
+ * than fail open.
+ */
+export function parseWorkflowIdFromSfnArn(arn: string | undefined | null): string | null {
+  if (!arn || typeof arn !== 'string') return null;
+  const parts = arn.split(':');
+  // arn:aws:states:<region>:<account>:<resourceType>:<name>[:<extra>]
+  // parts[5] = resourceType, parts[6] = state-machine name (or alias base).
+  if (parts.length < 7) return null;
+  const resourceType = parts[5];
+  if (resourceType !== 'stateMachine' && resourceType !== 'execution') return null;
+  const name = parts[6];
+  if (!name || !name.startsWith('SF-')) return null;
+  const workflowId = name.slice('SF-'.length);
+  return workflowId.length > 0 ? workflowId : null;
+}
+
+/**
  * Cognito serializes the groups claim as e.g. "[admins,team-abc]". Parse it
  * defensively to a plain string array.
  */

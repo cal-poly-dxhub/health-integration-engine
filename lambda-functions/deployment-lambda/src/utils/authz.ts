@@ -16,11 +16,8 @@ export interface CallerIdentity {
   isAdmin: boolean;
   teams: TeamMembership[];
   /**
-   * True when admin status was granted ONLY by the Cognito-group bootstrap
-   * fallback (no durable Admins-table row exists yet). adminHandler uses this
-   * to self-heal the row on the first privileged action, making the bootstrap
-   * admin durable so a later promote (which seeds another row and flips
-   * "zero admins" to false) can't strip their own admin. See resolveCaller.
+   * True when admin came ONLY from the Cognito-group bootstrap (no durable
+   * Admins row yet); adminHandler self-heals a row on first use. See resolveCaller.
    */
   adminViaFallback: boolean;
 }
@@ -31,25 +28,15 @@ const MEMBERSHIPS_TABLE = process.env.MEMBERSHIPS_TABLE || 'WorkflowBuilder-Memb
 const ADMINS_TABLE = process.env.ADMINS_TABLE || 'WorkflowBuilder-Admins';
 
 /**
- * Resolve the calling user's identity, admin status, and team memberships.
+ * Resolve the caller's identity, admin status, and team memberships.
  *
- * Authorization is LIVE: team roles and admin status are read from DynamoDB on
- * every request, never from JWT claims. The JWT is proof of identity only.
- * This means membership/role/admin changes take effect on the caller's very
- * next request rather than waiting up to the token lifetime for a re-mint —
- * the API Gateway Cognito authorizer validates tokens offline and never
- * re-consults Cognito, so a stale token would otherwise keep its old access.
+ * Authorization is LIVE: roles + admin are read from DynamoDB on every request,
+ * never from JWT claims, so membership/role/admin changes take effect on the
+ * caller's next request. Fails CLOSED — a DynamoDB read error yields no teams /
+ * not admin rather than trusting a stale claim.
  *
- * Admin status:
- *   isAdmin = hasDdbAdminRecord OR (inCognitoAdminsGroup AND zeroDdbAdmins)
- * The Cognito-group clause is a one-shot bootstrap: it only grants admin while
- * NO admin rows exist in DynamoDB. Once any row exists, a lingering group
- * membership can never re-grant admin, so it can't undo a demotion. The
- * "zero admins" COUNT runs only on the rare bootstrap path (group member with
- * no row), keeping it off the hot path for normal admins.
- *
- * Authorization fails CLOSED: if the live DynamoDB read throws, the caller is
- * treated as having no teams / not admin rather than trusting any stale claim.
+ * isAdmin = hasDdbAdminRow OR (inCognitoAdminsGroup AND zeroDdbAdmins); the
+ * group clause is a one-shot bootstrap that's dead once any admin row exists.
  */
 export async function resolveCaller(event: APIGatewayProxyEvent): Promise<CallerIdentity | null> {
   const userId = extractUserIdFromEvent(event);

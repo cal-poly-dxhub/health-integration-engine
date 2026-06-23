@@ -53,6 +53,7 @@
             "DetailType": "Deployment Status Update",
             "Detail": {
               "deploymentId.$": "$.deploymentContext.deploymentId",
+              "userId.$": "$.deploymentContext.userId",
               "status": "initializing",
               "message": "Starting workflow deployment process...",
               "timestamp.$": "$$.State.EnteredTime"
@@ -92,6 +93,7 @@
             "DetailType": "Deployment Status Update",
             "Detail": {
               "deploymentId.$": "$.deploymentContext.deploymentId",
+              "userId.$": "$.deploymentContext.userId",
               "status": "template_generated",
               "timestamp.$": "$$.State.EnteredTime"
             }
@@ -124,6 +126,7 @@
             "DetailType": "Deployment Status Update",
             "Detail": {
               "deploymentId.$": "$.deploymentContext.deploymentId",
+              "userId.$": "$.deploymentContext.userId",
               "status": "failed",
               "error": {
                 "message.$": "$.templateResult.Payload.body"
@@ -147,6 +150,7 @@
             "DetailType": "Deployment Status Update",
             "Detail": {
               "deploymentId.$": "$.deploymentContext.deploymentId",
+              "userId.$": "$.deploymentContext.userId",
               "status": "deploying_infrastructure",
               "message": "Creating AWS resources (Lambda functions, IAM roles, Step Functions)...",
               "timestamp.$": "$$.State.EnteredTime"
@@ -194,6 +198,7 @@
             "DetailType": "Deployment Status Update",
             "Detail": {
               "deploymentId.$": "$.deploymentContext.deploymentId",
+              "userId.$": "$.deploymentContext.userId",
               "status": "stack_creating",
               "message": "CloudFormation stack creation initiated. Waiting for resources to be created...",
               "timestamp.$": "$$.State.EnteredTime"
@@ -215,6 +220,7 @@
             "DetailType": "Deployment Status Update",
             "Detail": {
               "deploymentId.$": "$.deploymentContext.deploymentId",
+              "userId.$": "$.deploymentContext.userId",
               "status": "stack_updating",
               "message": "Updating existing CloudFormation stack with new resources...",
               "timestamp.$": "$$.State.EnteredTime"
@@ -273,6 +279,7 @@
             "DetailType": "Deployment Status Update",
             "Detail": {
               "deploymentId.$": "$.deploymentContext.deploymentId",
+              "userId.$": "$.deploymentContext.userId",
               "status": "monitoring_stack",
               "message.$": "States.Format('CloudFormation stack status: {}', $.stackStatus.Stacks[0].StackStatus)",
               "timestamp.$": "$$.State.EnteredTime"
@@ -364,6 +371,7 @@
             "DetailType": "Deployment Status Update",
             "Detail": {
               "deploymentId.$": "$.deploymentContext.deploymentId",
+              "userId.$": "$.deploymentContext.userId",
               "status": "completed",
               "cloudFormationStackArn.$": "$.stackStatus.Stacks[0].StackId",
               "timestamp.$": "$$.State.EnteredTime"
@@ -418,6 +426,7 @@
             "DetailType": "Deployment Status Update",
             "Detail": {
               "deploymentId.$": "$.deploymentContext.deploymentId",
+              "userId.$": "$.deploymentContext.userId",
               "status": "completed",
               "message": "Workflow deployed successfully and is ready to use!",
               "timestamp.$": "$$.State.EnteredTime"
@@ -438,6 +447,7 @@
             "DetailType": "Deployment Status Update",
             "Detail": {
               "deploymentId.$": "$.deploymentContext.deploymentId",
+              "userId.$": "$.deploymentContext.userId",
               "status": "failed",
               "error": {
                 "message": "Deployment failed - check deployment logs for details"

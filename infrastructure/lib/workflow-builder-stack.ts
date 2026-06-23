@@ -203,11 +203,6 @@ export class WorkflowBuilderStack extends cdk.Stack {
       },
       // Advanced security features can be enabled later through the AWS Console
       // Email configuration (using default Cognito email for now)
-      // Device tracking
-      deviceTracking: {
-        challengeRequiredOnNewDevice: true,
-        deviceOnlyRememberedOnUserPrompt: false,
-      },
       removalPolicy: this.config.environment === 'production'
         ? cdk.RemovalPolicy.RETAIN
         : cdk.RemovalPolicy.DESTROY,

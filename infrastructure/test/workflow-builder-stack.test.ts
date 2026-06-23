@@ -50,7 +50,13 @@ describe('WorkflowBuilderStack', () => {
     template.hasResourceProperties('AWS::Cognito::UserPoolClient', {
       ClientName: 'workflow-builder-client',
       GenerateSecret: false,
-      ExplicitAuthFlows: ['ALLOW_USER_SRP_AUTH', 'ALLOW_REFRESH_TOKEN_AUTH'],
+      // USER_PASSWORD_AUTH is required by the frontend's sign-in flow; SRP and
+      // refresh are also enabled.
+      ExplicitAuthFlows: [
+        'ALLOW_USER_PASSWORD_AUTH',
+        'ALLOW_USER_SRP_AUTH',
+        'ALLOW_REFRESH_TOKEN_AUTH',
+      ],
     });
   });
 

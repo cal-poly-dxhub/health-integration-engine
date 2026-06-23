@@ -62,9 +62,10 @@ export function decodeJwtExp(token: string | undefined | null): number | null {
   const parts = token.split('.');
   if (parts.length !== 3) return null;
   try {
-    // base64url -> base64, then decode and parse.
+    // base64url -> base64, pad to a multiple of 4, then decode and parse.
     const payload = parts[1].replace(/-/g, '+').replace(/_/g, '/');
-    const json = atob(payload);
+    const padded = payload + '='.repeat((4 - (payload.length % 4)) % 4);
+    const json = atob(padded);
     const claims = JSON.parse(json);
     return typeof claims.exp === 'number' ? claims.exp : null;
   } catch {

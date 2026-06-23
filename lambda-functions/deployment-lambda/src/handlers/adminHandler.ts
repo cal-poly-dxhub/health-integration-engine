@@ -9,6 +9,7 @@ import {
   ScanCommand,
   DeleteCommand,
   UpdateCommand,
+  TransactWriteCommand,
 } from '@aws-sdk/lib-dynamodb';
 import {
   CognitoIdentityProviderClient,
@@ -93,11 +94,10 @@ export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayPr
 
     return json(404, { error: 'Route not found' });
   } catch (error) {
+    // Log full detail to CloudWatch, but don't leak internal error text to the
+    // client (could expose table names, ARNs, SDK internals, etc.).
     console.error('Admin handler error:', error);
-    return json(500, {
-      error: 'Internal server error',
-      message: error instanceof Error ? error.message : 'Unknown error',
-    });
+    return json(500, { error: 'Internal server error' });
   }
 };
 
@@ -107,19 +107,25 @@ async function listTeams(): Promise<APIGatewayProxyResult> {
   const teamsResp = await docClient.send(new ScanCommand({ TableName: TEAMS_TABLE }));
   const teams = teamsResp.Items || [];
 
-  const counts = await Promise.all(teams.map(async t => {
-    const r = await docClient.send(new QueryCommand({
+  // Tally member counts in a single pass over the memberships table instead of
+  // one COUNT query per team (avoids an N+1 as team count grows).
+  const countByTeam = new Map<string, number>();
+  let lastKey: Record<string, any> | undefined;
+  do {
+    const resp = await docClient.send(new ScanCommand({
       TableName: MEMBERSHIPS_TABLE,
-      KeyConditionExpression: 'teamId = :t',
-      ExpressionAttributeValues: { ':t': t.teamId },
-      Select: 'COUNT',
+      ProjectionExpression: 'teamId',
+      ExclusiveStartKey: lastKey,
     }));
-    return { teamId: t.teamId as string, count: r.Count || 0 };
-  }));
+    for (const m of resp.Items || []) {
+      if (m.teamId) countByTeam.set(m.teamId, (countByTeam.get(m.teamId) || 0) + 1);
+    }
+    lastKey = resp.LastEvaluatedKey;
+  } while (lastKey);
 
   const enriched = teams.map(t => ({
     ...t,
-    memberCount: counts.find(c => c.teamId === t.teamId)?.count || 0,
+    memberCount: countByTeam.get(t.teamId as string) || 0,
   }));
 
   return json(200, { teams: enriched });
@@ -163,8 +169,29 @@ async function deleteTeam(event: APIGatewayProxyEvent, caller: any): Promise<API
   const teamId = event.pathParameters?.teamId;
   if (!teamId) return json(400, { error: 'teamId required' });
 
+  // Close the TOCTOU between the member check and the delete: first atomically
+  // flag the team as 'deleting' (404 if it doesn't exist). addMember runs a
+  // conditional transaction that refuses to add to a team in this state, so
+  // once the flag is set the subsequent member count is stable.
+  let before: Record<string, any> | undefined;
+  try {
+    const marked = await docClient.send(new UpdateCommand({
+      TableName: TEAMS_TABLE,
+      Key: { teamId },
+      UpdateExpression: 'SET #st = :deleting',
+      ConditionExpression: 'attribute_exists(teamId)',
+      ExpressionAttributeNames: { '#st': 'status' },
+      ExpressionAttributeValues: { ':deleting': 'deleting' },
+      ReturnValues: 'ALL_OLD',
+    }));
+    before = marked.Attributes;
+  } catch (err: any) {
+    if (err?.name === 'ConditionalCheckFailedException') return json(404, { error: 'Team not found' });
+    throw err;
+  }
+
   // Refuse if any members remain — caller must remove them first to avoid
-  // accidental mass-revocation.
+  // accidental mass-revocation. Safe now that no new members can be added.
   const members = await docClient.send(new QueryCommand({
     TableName: MEMBERSHIPS_TABLE,
     KeyConditionExpression: 'teamId = :t',
@@ -172,14 +199,18 @@ async function deleteTeam(event: APIGatewayProxyEvent, caller: any): Promise<API
     Select: 'COUNT',
   }));
   if ((members.Count || 0) > 0) {
+    // Roll back the flag so the team stays usable.
+    await docClient.send(new UpdateCommand({
+      TableName: TEAMS_TABLE,
+      Key: { teamId },
+      UpdateExpression: 'REMOVE #st',
+      ExpressionAttributeNames: { '#st': 'status' },
+    }));
     return json(409, { error: 'Team still has members; remove them before deleting the team' });
   }
 
-  const before = await docClient.send(new GetCommand({ TableName: TEAMS_TABLE, Key: { teamId } }));
-  if (!before.Item) return json(404, { error: 'Team not found' });
-
   await docClient.send(new DeleteCommand({ TableName: TEAMS_TABLE, Key: { teamId } }));
-  await writeAudit(caller, 'team.delete', { teamId, before: before.Item });
+  await writeAudit(caller, 'team.delete', { teamId, before });
 
   return json(200, { message: 'Team deleted' });
 }
@@ -234,7 +265,32 @@ async function addMember(event: APIGatewayProxyEvent, caller: any): Promise<APIG
     addedBy: caller.userId,
     addedByEmail: caller.email,
   };
-  await docClient.send(new PutCommand({ TableName: MEMBERSHIPS_TABLE, Item: membership }));
+  // Write the membership only if the team still exists and isn't mid-deletion,
+  // as a single transaction. This closes the race with deleteTeam: once that
+  // flags the team 'deleting', this ConditionCheck fails and no orphaned
+  // membership can be created.
+  try {
+    await docClient.send(new TransactWriteCommand({
+      TransactItems: [
+        {
+          ConditionCheck: {
+            TableName: TEAMS_TABLE,
+            Key: { teamId },
+            ConditionExpression:
+              'attribute_exists(teamId) AND (attribute_not_exists(#st) OR #st <> :deleting)',
+            ExpressionAttributeNames: { '#st': 'status' },
+            ExpressionAttributeValues: { ':deleting': 'deleting' },
+          },
+        },
+        { Put: { TableName: MEMBERSHIPS_TABLE, Item: membership } },
+      ],
+    }));
+  } catch (err: any) {
+    if (err?.name === 'TransactionCanceledException') {
+      return json(409, { error: 'Team is no longer available (it may be being deleted). Refresh and try again.' });
+    }
+    throw err;
+  }
   await writeAudit(caller, 'member.add', { teamId, targetUserId: userId, after: membership });
 
   return json(201, { membership });

@@ -8,6 +8,18 @@ const docClient = DynamoDBDocumentClient.from(dynamoClient);
 
 const CONNECTIONS_TABLE = process.env.CONNECTIONS_TABLE_NAME || 'WebSocketConnections';
 
+/**
+ * True when a GSI query failed because the index doesn't exist. DynamoDB
+ * reports this as ValidationException ("...does not have the specified index")
+ * for a missing index, or ResourceNotFoundException for a missing table — so
+ * we treat both as "index unavailable, fall back to a scan".
+ */
+function isIndexMissingError(err: any): boolean {
+  if (!err) return false;
+  if (err.name === 'ResourceNotFoundException') return true;
+  return err.name === 'ValidationException' && /index/i.test(err.message ?? '');
+}
+
 interface StepFunctionStateChangeEvent {
   executionArn: string;
   stateMachineArn: string;
@@ -491,7 +503,7 @@ async function getUserConnections(userId: string): Promise<string[]> {
       }));
       return response.Items?.map(item => item.connectionId).filter(Boolean) || [];
     } catch (gsiError: any) {
-      if (gsiError.name === 'ResourceNotFoundException') {
+      if (isIndexMissingError(gsiError)) {
         const response = await docClient.send(new ScanCommand({
           TableName: CONNECTIONS_TABLE,
           FilterExpression: 'userId = :userId',
@@ -527,7 +539,7 @@ async function getDeploymentConnections(deploymentId: string): Promise<string[]>
       console.log(`[websocket] DEBUG: Found ${connections.length} connections via DeploymentIdIndex GSI`);
       return connections;
     } catch (gsiError: any) {
-      if (gsiError.name === 'ResourceNotFoundException') {
+      if (isIndexMissingError(gsiError)) {
         console.log(`[websocket] WARN: DeploymentIdIndex GSI not found, falling back to scan`);
 
         // Fallback to scanning all connections and filtering

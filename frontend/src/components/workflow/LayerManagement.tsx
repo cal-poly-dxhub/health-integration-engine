@@ -561,7 +561,8 @@ const LayerManagement: React.FC = () => {
                         </button>
                       )}
                     </td>
-                  </tr>                ))}
+                  </tr>
+                ))}
               </tbody>
             </table>
           </div>

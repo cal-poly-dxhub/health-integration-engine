@@ -1164,6 +1164,18 @@ export class CloudFormationTemplateGenerator {
 
     console.log('CFT GENERATOR: Generating OpenSearch resources for', opensearchNodes.length, 'nodes');
 
+    // A workflow with an OpenSearch node REQUIRES the shared collection ARN
+    // (CDK injects it when OpenSearch is enabled). Fail closed rather than fall
+    // back to Resource: '*', which would grant account-wide AOSS access.
+    const collectionArn = process.env.OPENSEARCH_COLLECTION_ARN;
+    if (!collectionArn) {
+      throw new Error(
+        'Workflow has an OpenSearch node but OPENSEARCH_COLLECTION_ARN is not set — ' +
+        'refusing to generate an account-wide (Resource: "*") AOSS grant. ' +
+        'Ensure OpenSearch is enabled (config: enableOpenSearch) before deploying this workflow.'
+      );
+    }
+
     const resources: any = {};
 
     // Use OpenSearch-specific VPC config (CDK VPC where OpenSearch endpoint lives)
@@ -1194,8 +1206,8 @@ export class CloudFormationTemplateGenerator {
             Statement: [{
               Effect: 'Allow',
               Action: ['aoss:APIAccessAll'],
-              // Scope to the specific collection (CDK injects OPENSEARCH_COLLECTION_ARN) instead of '*'.
-              Resource: process.env.OPENSEARCH_COLLECTION_ARN || '*',
+              // Scoped to the shared collection ARN (validated above; never '*').
+              Resource: collectionArn,
             }],
           },
         }],

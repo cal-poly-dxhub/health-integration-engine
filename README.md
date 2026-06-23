@@ -272,7 +272,7 @@ Every workflow shows "Last edited by `<email>` on `<date>`" so changes are attri
 ## Day-to-day
 
 1. **Create a Workflow**: Click "Create New Workflow" from the dashboard
-2. **Add Nodes**: Drag and drop nodes (Lambda, S3, Database) onto the canvas
+2. **Add Nodes**: Drag and drop nodes (Lambda, S3, OpenSearch) onto the canvas
 3. **Connect Nodes**: Draw connections between nodes to define the execution flow
 4. **Configure Nodes**: Click a node to configure its properties (function ARN, bucket name, etc.)
 5. **Deploy**: Click "Deploy" to generate a CloudFormation template and deploy to AWS — real-time progress is shown in a step-by-step modal

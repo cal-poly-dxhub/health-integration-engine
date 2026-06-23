@@ -34,6 +34,15 @@ import {
 const ACCESS_POLICY_TYPE = 'data';
 const MAX_CONFLICT_RETRIES = 5;
 
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+/** Exponential backoff with jitter (capped at 1s) between conflict retries. */
+function conflictBackoffMs(attempt: number): number {
+  return Math.min(1000, 50 * 2 ** (attempt - 1)) + Math.floor(Math.random() * 50);
+}
+
 let cachedClient: OpenSearchServerlessClient | undefined;
 
 function getClient(): OpenSearchServerlessClient {
@@ -224,6 +233,7 @@ async function updateIndexerPolicy(mutate: (principals: string[]) => string[]): 
         console.warn(
           `openSearchAccessManager: conflict updating indexer access policy (attempt ${attempt}/${MAX_CONFLICT_RETRIES}); retrying.`
         );
+        await sleep(conflictBackoffMs(attempt));
         continue;
       }
       throw error;

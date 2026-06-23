@@ -20,6 +20,7 @@ jest.mock('@aws-sdk/lib-dynamodb', () => {
     ScanCommand: cmd('ScanCommand'),
     DeleteCommand: cmd('DeleteCommand'),
     UpdateCommand: cmd('UpdateCommand'),
+    TransactWriteCommand: cmd('TransactWriteCommand'),
   };
 });
 jest.mock('@aws-sdk/client-dynamodb', () => ({ DynamoDBClient: class {} }));
@@ -43,6 +44,7 @@ import { handler } from '../handlers/adminHandler';
 
 const ADMIN = { userId: 'admin-1', email: 'admin@example.com', isAdmin: true, teams: [], adminViaFallback: false };
 const ADMINS_TABLE = process.env.ADMINS_TABLE || 'WorkflowBuilder-Admins';
+const TEAMS_TABLE = process.env.TEAMS_TABLE || 'WorkflowBuilder-Teams';
 
 function adminEvent(method: string, resource: string, pathParameters: any = {}, body?: any): any {
   return {
@@ -176,5 +178,95 @@ describe('bootstrap self-heal', () => {
       c => c.name === 'PutCommand' && c.input.TableName === ADMINS_TABLE && c.input.Item?.userId === ADMIN.userId
     );
     expect(heal).toBeUndefined();
+  });
+});
+
+
+describe('deleteTeam — TOCTOU guard', () => {
+  it('flags the team "deleting", then deletes when it has no members', async () => {
+    mockDdbSend.mockImplementation((c: any) => {
+      const name = (c.constructor as any).cmdName;
+      if (name === 'UpdateCommand') return Promise.resolve({ Attributes: { teamId: 'team-1', name: 'T' } });
+      if (name === 'QueryCommand') return Promise.resolve({ Count: 0 });
+      return Promise.resolve({});
+    });
+
+    const res = await handler(adminEvent('DELETE', '/admin/teams/{teamId}', { teamId: 'team-1' }));
+    expect(res.statusCode).toBe(200);
+
+    const calls = ddbCalls();
+    const mark = calls.find(c => c.name === 'UpdateCommand' && /SET/.test(c.input.UpdateExpression));
+    expect(mark).toBeDefined();
+    expect(mark!.input.ExpressionAttributeValues[':deleting']).toBe('deleting');
+    expect(mark!.input.ConditionExpression).toContain('attribute_exists');
+    expect(calls.some(c => c.name === 'DeleteCommand' && c.input.TableName === TEAMS_TABLE)).toBe(true);
+  });
+
+  it('reverts the flag and 409s when members remain (no delete)', async () => {
+    mockDdbSend.mockImplementation((c: any) => {
+      const name = (c.constructor as any).cmdName;
+      if (name === 'UpdateCommand') return Promise.resolve({ Attributes: { teamId: 'team-1' } });
+      if (name === 'QueryCommand') return Promise.resolve({ Count: 3 });
+      return Promise.resolve({});
+    });
+
+    const res = await handler(adminEvent('DELETE', '/admin/teams/{teamId}', { teamId: 'team-1' }));
+    expect(res.statusCode).toBe(409);
+
+    const calls = ddbCalls();
+    expect(calls.some(c => c.name === 'UpdateCommand' && /REMOVE/.test(c.input.UpdateExpression))).toBe(true);
+    expect(calls.some(c => c.name === 'DeleteCommand')).toBe(false);
+  });
+
+  it('404s when the team does not exist (mark-deleting condition fails)', async () => {
+    mockDdbSend.mockImplementation((c: any) => {
+      const name = (c.constructor as any).cmdName;
+      if (name === 'UpdateCommand') return Promise.reject({ name: 'ConditionalCheckFailedException' });
+      return Promise.resolve({});
+    });
+
+    const res = await handler(adminEvent('DELETE', '/admin/teams/{teamId}', { teamId: 'missing' }));
+    expect(res.statusCode).toBe(404);
+    expect(ddbCalls().some(c => c.name === 'DeleteCommand')).toBe(false);
+  });
+});
+
+describe('addMember — transactional guard', () => {
+  function memberImpl(extra?: (name: string, input: any) => any) {
+    return (c: any) => {
+      const name = (c.constructor as any).cmdName;
+      const input = c.input;
+      const r = extra?.(name, input);
+      if (r !== undefined) return r;
+      if (name === 'GetCommand' && input.TableName === TEAMS_TABLE) return Promise.resolve({ Item: { teamId: 'team-1' } });
+      if (name === 'GetCommand' && input.TableName === ADMINS_TABLE) return Promise.resolve({ Item: undefined }); // not an admin
+      return Promise.resolve({});
+    };
+  }
+
+  it('writes the membership via a conditional transaction (team exists & not deleting)', async () => {
+    mockDdbSend.mockImplementation(memberImpl());
+
+    const res = await handler(adminEvent('POST', '/admin/teams/{teamId}/members', { teamId: 'team-1' }, { userId: 'target-1', role: 'reader' }));
+    expect(res.statusCode).toBe(201);
+
+    const tx = ddbCalls().find(c => c.name === 'TransactWriteCommand');
+    expect(tx).toBeDefined();
+    const items = tx!.input.TransactItems;
+    const check = items.find((i: any) => i.ConditionCheck)?.ConditionCheck;
+    expect(check.TableName).toBe(TEAMS_TABLE);
+    expect(check.ConditionExpression).toContain('attribute_exists');
+    expect(check.ExpressionAttributeValues[':deleting']).toBe('deleting');
+    expect(items.some((i: any) => i.Put)).toBe(true);
+  });
+
+  it('409s when the transaction is cancelled (team being deleted)', async () => {
+    mockDdbSend.mockImplementation(memberImpl((name) => {
+      if (name === 'TransactWriteCommand') return Promise.reject({ name: 'TransactionCanceledException' });
+      return undefined;
+    }));
+
+    const res = await handler(adminEvent('POST', '/admin/teams/{teamId}/members', { teamId: 'team-1' }, { userId: 'target-1', role: 'reader' }));
+    expect(res.statusCode).toBe(409);
   });
 });

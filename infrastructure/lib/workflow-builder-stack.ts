@@ -26,6 +26,12 @@ export class WorkflowBuilderStack extends cdk.Stack {
   private _cognitoAuthorizer?: apigateway.CognitoUserPoolsAuthorizer;
   private readonly config: StackConfig;
   private workflowsTable: dynamodb.Table;
+  private teamsTable!: dynamodb.Table;
+  private membershipsTable!: dynamodb.Table;
+  private adminsTable!: dynamodb.Table;
+  private adminAuditLogTable!: dynamodb.Table;
+  private workflowChangeLogsTable!: dynamodb.Table;
+  private changelogLambda?: lambda.Function;
   public readonly frontendHosting: FrontendHosting;
   private readonly vpc: ec2.IVpc | undefined;
   private readonly lambdaSecurityGroup: ec2.ISecurityGroup | undefined;
@@ -38,6 +44,14 @@ export class WorkflowBuilderStack extends cdk.Stack {
   // narrow read-only access in the AOSS data access policy. Consumed when
   // the search Lambda function is constructed alongside the API Gateway.
   private opensearchSearchLambdaRole?: iam.Role;
+  // Name of the OpenSearch Serverless collection (set when the collection is
+  // created). Passed to the deployment Lambda so it can build data access
+  // policy rules that reference the collection by name.
+  private opensearchCollectionName?: string;
+  // Name of the AOSS data access policy that the deployment Lambda maintains
+  // to grant per-workflow indexer roles write access. Kept separate from the
+  // static search-only policy created in createOpenSearchServerlessCollection.
+  private opensearchIndexerAccessPolicyName?: string;
 
   constructor(scope: Construct, id: string, props?: cdk.StackProps) {
     super(scope, id, props);
@@ -110,20 +124,36 @@ export class WorkflowBuilderStack extends cdk.Stack {
 
     // Create API Gateway first (needed for Identity Pool permissions)
     this.api = this.createApiGateway();
-    
+
+    // Create Teams / Memberships / Admins / AdminAuditLog tables. resolveCaller
+    // reads Memberships + Admins live on every request to resolve team roles
+    // and admin status (the JWT carries identity only).
+    this.createTeamTables();
+
     // Create Cognito User Pool
     this.userPool = this.createUserPool();
-    
+
+    // Add the bootstrap "admins" Cognito group. First admin must be added via
+    // AWS console; subsequent admins are managed via the admin API.
+    new cognito.CfnUserPoolGroup(this, 'AdminsGroup', {
+      userPoolId: this.userPool.userPoolId,
+      groupName: 'admins',
+      description: 'Workflow Builder admins. Members can manage teams and users.',
+    });
+
     // Create Cognito User Pool Client
     this.userPoolClient = this.createUserPoolClient();
-    
+
     // Create Cognito Identity Pool
     this.identityPool = this.createIdentityPool();
-    
+
     // Cognito authorizer will be created lazily when needed
-    
+
     // Create deployment endpoints
     this.createDeploymentEndpoints();
+
+    // Admin + me-teams API endpoints
+    this.createAdminEndpoints();
     
     // Create WebSocket API for real-time deployment updates
     this.createWebSocketApi();
@@ -159,18 +189,10 @@ export class WorkflowBuilderStack extends cdk.Stack {
           mutable: true,
         },
       },
-      customAttributes: {
-        'user_role': new cognito.StringAttribute({ 
-          minLen: 1, 
-          maxLen: 50, 
-          mutable: true 
-        }),
-        'organization': new cognito.StringAttribute({ 
-          minLen: 1, 
-          maxLen: 100, 
-          mutable: true 
-        }),
-      },
+      // user_role / organization attributes are intentionally removed.
+      // Roles are derived live from the Memberships table per team by
+      // resolveCaller on every request — not stored on the user or in the JWT.
+      customAttributes: {},
       passwordPolicy: this.config.cognito.passwordPolicy,
       accountRecovery: cognito.AccountRecovery.EMAIL_ONLY,
       // MFA Configuration
@@ -181,13 +203,8 @@ export class WorkflowBuilderStack extends cdk.Stack {
       },
       // Advanced security features can be enabled later through the AWS Console
       // Email configuration (using default Cognito email for now)
-      // Device tracking
-      deviceTracking: {
-        challengeRequiredOnNewDevice: true,
-        deviceOnlyRememberedOnUserPrompt: false,
-      },
-      removalPolicy: this.config.environment === 'production' 
-        ? cdk.RemovalPolicy.RETAIN 
+      removalPolicy: this.config.environment === 'production'
+        ? cdk.RemovalPolicy.RETAIN
         : cdk.RemovalPolicy.DESTROY,
     });
 
@@ -199,6 +216,191 @@ export class WorkflowBuilderStack extends cdk.Stack {
     });
 
     return userPool;
+  }
+
+  private createTeamTables(): void {
+    this.teamsTable = new dynamodb.Table(this, 'TeamsTable', {
+      tableName: PROJECT.dynamodb.teamsTable,
+      partitionKey: { name: 'teamId', type: dynamodb.AttributeType.STRING },
+      billingMode: dynamodb.BillingMode.PAY_PER_REQUEST,
+      pointInTimeRecoverySpecification: { pointInTimeRecoveryEnabled: true },
+      removalPolicy: this.config.environment === 'production'
+        ? cdk.RemovalPolicy.RETAIN
+        : cdk.RemovalPolicy.DESTROY,
+    });
+
+    this.membershipsTable = new dynamodb.Table(this, 'MembershipsTable', {
+      tableName: PROJECT.dynamodb.membershipsTable,
+      partitionKey: { name: 'teamId', type: dynamodb.AttributeType.STRING },
+      sortKey: { name: 'userId', type: dynamodb.AttributeType.STRING },
+      billingMode: dynamodb.BillingMode.PAY_PER_REQUEST,
+      pointInTimeRecoverySpecification: { pointInTimeRecoveryEnabled: true },
+      removalPolicy: this.config.environment === 'production'
+        ? cdk.RemovalPolicy.RETAIN
+        : cdk.RemovalPolicy.DESTROY,
+    });
+    // GSI for "list teams for a given user" — used by resolveCaller's live
+    // membership lookup (loadMembershipsForUser) on every request.
+    this.membershipsTable.addGlobalSecondaryIndex({
+      indexName: 'UserIdIndex',
+      partitionKey: { name: 'userId', type: dynamodb.AttributeType.STRING },
+      sortKey: { name: 'teamId', type: dynamodb.AttributeType.STRING },
+    });
+
+    // Admins table — authoritative source of admin status, keyed by Cognito
+    // sub. resolveCaller reads this on every request so promote/demote takes
+    // effect on the next request (the JWT is identity-only). The Cognito
+    // 'admins' group is used solely as a one-shot bootstrap when this table is
+    // empty (see resolveCaller / adminHandler).
+    this.adminsTable = new dynamodb.Table(this, 'AdminsTable', {
+      tableName: PROJECT.dynamodb.adminsTable,
+      partitionKey: { name: 'userId', type: dynamodb.AttributeType.STRING },
+      billingMode: dynamodb.BillingMode.PAY_PER_REQUEST,
+      pointInTimeRecoverySpecification: { pointInTimeRecoveryEnabled: true },
+      removalPolicy: this.config.environment === 'production'
+        ? cdk.RemovalPolicy.RETAIN
+        : cdk.RemovalPolicy.DESTROY,
+    });
+
+    this.adminAuditLogTable = new dynamodb.Table(this, 'AdminAuditLogTable', {
+      tableName: PROJECT.dynamodb.adminAuditLogTable,
+      partitionKey: { name: 'pk', type: dynamodb.AttributeType.STRING }, // 'AUDIT' (single hot partition is fine for our scale)
+      sortKey: { name: 'timestamp', type: dynamodb.AttributeType.STRING },
+      billingMode: dynamodb.BillingMode.PAY_PER_REQUEST,
+      pointInTimeRecoverySpecification: { pointInTimeRecoveryEnabled: true },
+      removalPolicy: this.config.environment === 'production'
+        ? cdk.RemovalPolicy.RETAIN
+        : cdk.RemovalPolicy.DESTROY,
+    });
+    this.adminAuditLogTable.addGlobalSecondaryIndex({
+      indexName: 'ActorIndex',
+      partitionKey: { name: 'actorUserId', type: dynamodb.AttributeType.STRING },
+      sortKey: { name: 'timestamp', type: dynamodb.AttributeType.STRING },
+    });
+
+    // WorkflowChangeLogs — one row per mutation on any workflow.
+    // PK = workflowId, SK = timestamp#uuid (newest-first queries via ScanIndexForward=false).
+    // GSI on actorUserId so admins can see all changes by a specific user.
+    this.workflowChangeLogsTable = new dynamodb.Table(this, 'WorkflowChangeLogsTable', {
+      tableName: PROJECT.dynamodb.workflowChangeLogsTable,
+      partitionKey: { name: 'workflowId', type: dynamodb.AttributeType.STRING },
+      sortKey: { name: 'sk', type: dynamodb.AttributeType.STRING }, // ISO timestamp#uuid
+      billingMode: dynamodb.BillingMode.PAY_PER_REQUEST,
+      pointInTimeRecoverySpecification: { pointInTimeRecoveryEnabled: true },
+      removalPolicy: this.config.environment === 'production'
+        ? cdk.RemovalPolicy.RETAIN
+        : cdk.RemovalPolicy.DESTROY,
+    });
+    this.workflowChangeLogsTable.addGlobalSecondaryIndex({
+      indexName: 'ActorIndex',
+      partitionKey: { name: 'actorUserId', type: dynamodb.AttributeType.STRING },
+      sortKey: { name: 'sk', type: dynamodb.AttributeType.STRING },
+    });
+  }
+
+  private createAdminEndpoints(): void {
+    // Admin API Lambda — handles team and user management. Internally checks
+    // that the caller is an admin (authoritative row in the Admins table, read
+    // live via resolveCaller; the Cognito 'admins' group is only a one-shot
+    // bootstrap when the table is empty).
+    const adminLambda = this.createLambdaFunction(
+      'AdminLambda',
+      PROJECT.lambda.adminTeams,
+      '../lambda-functions/deployment-lambda/dist',
+      'index.adminHandler',
+      {
+        TEAMS_TABLE: this.teamsTable.tableName,
+        MEMBERSHIPS_TABLE: this.membershipsTable.tableName,
+        ADMINS_TABLE: this.adminsTable.tableName,
+        ADMIN_AUDIT_LOG_TABLE: this.adminAuditLogTable.tableName,
+        WORKFLOWS_TABLE: this.workflowsTable.tableName,
+        USER_POOL_ID: this.userPool.userPoolId,
+      }
+    );
+
+    this.teamsTable.grantReadWriteData(adminLambda);
+    this.membershipsTable.grantReadWriteData(adminLambda);
+    this.adminsTable.grantReadWriteData(adminLambda);
+    this.adminAuditLogTable.grantReadWriteData(adminLambda);
+    this.workflowsTable.grantReadData(adminLambda);
+
+    // Cognito permissions: list users for the admin UI and globally sign out
+    // users on demotion / critical removal (defense-in-depth). Admin status is
+    // now stored in the Admins table, so the AdminAddUserToGroup /
+    // AdminRemoveUserFromGroup / ListUsersInGroup / AdminListGroupsForUser
+    // permissions are no longer needed.
+    adminLambda.addToRolePolicy(
+      new iam.PolicyStatement({
+        effect: iam.Effect.ALLOW,
+        actions: [
+          'cognito-idp:ListUsers',
+          'cognito-idp:AdminUserGlobalSignOut',
+        ],
+        resources: [this.userPool.userPoolArn],
+      })
+    );
+
+    // /admin/teams (list, create), /admin/teams/{teamId}/members (add, list),
+    // /admin/teams/{teamId}/members/{userId} (PATCH role, DELETE),
+    // /admin/users (list), /admin/users/{userId}/admin (POST/DELETE),
+    // /admin/audit-log (list)
+    const adminResource = this.api.root.addResource('admin');
+
+    const adminTeamsResource = adminResource.addResource('teams');
+    this.addLambdaIntegration(adminTeamsResource, 'GET', adminLambda, true);
+    this.addLambdaIntegration(adminTeamsResource, 'POST', adminLambda, true);
+
+    const adminTeamIdResource = adminTeamsResource.addResource('{teamId}');
+    this.addLambdaIntegration(adminTeamIdResource, 'GET', adminLambda, true);
+    this.addLambdaIntegration(adminTeamIdResource, 'DELETE', adminLambda, true);
+
+    const adminTeamMembersResource = adminTeamIdResource.addResource('members');
+    this.addLambdaIntegration(adminTeamMembersResource, 'GET', adminLambda, true);
+    this.addLambdaIntegration(adminTeamMembersResource, 'POST', adminLambda, true);
+
+    const adminTeamMemberUserResource = adminTeamMembersResource.addResource('{userId}');
+    this.addLambdaIntegration(adminTeamMemberUserResource, 'PATCH', adminLambda, true);
+    this.addLambdaIntegration(adminTeamMemberUserResource, 'DELETE', adminLambda, true);
+
+    const adminUsersResource = adminResource.addResource('users');
+    this.addLambdaIntegration(adminUsersResource, 'GET', adminLambda, true);
+
+    const adminUserIdResource = adminUsersResource.addResource('{userId}');
+    const adminUserAdminResource = adminUserIdResource.addResource('admin');
+    this.addLambdaIntegration(adminUserAdminResource, 'POST', adminLambda, true);
+    this.addLambdaIntegration(adminUserAdminResource, 'DELETE', adminLambda, true);
+
+    const adminAuditResource = adminResource.addResource('audit-log');
+    this.addLambdaIntegration(adminAuditResource, 'GET', adminLambda, true);
+
+    // /me/teams — any authenticated caller; returns their teams + roles
+    // (so the frontend can render a team switcher and detect "pending").
+    const meLambda = this.createLambdaFunction(
+      'MeTeamsLambda',
+      PROJECT.lambda.meTeams,
+      '../lambda-functions/deployment-lambda/dist',
+      'index.meTeamsHandler',
+      {
+        TEAMS_TABLE: this.teamsTable.tableName,
+        MEMBERSHIPS_TABLE: this.membershipsTable.tableName,
+        ADMINS_TABLE: this.adminsTable.tableName,
+      }
+    );
+    this.teamsTable.grantReadData(meLambda);
+    this.membershipsTable.grantReadData(meLambda);
+    this.adminsTable.grantReadData(meLambda);
+
+    const meResource = this.api.root.addResource('me');
+    const meTeamsResource = meResource.addResource('teams');
+    this.addLambdaIntegration(meTeamsResource, 'GET', meLambda, true);
+
+    // /admin/workflow-changes — admin view of the full workflow changelog.
+    // changelogLambda is created in createDeploymentEndpoints(); by the time
+    // this method runs it is already defined.
+    if (this.changelogLambda) {
+      const adminWorkflowChangesResource = adminResource.addResource('workflow-changes');
+      this.addLambdaIntegration(adminWorkflowChangesResource, 'GET', this.changelogLambda, true);
+    }
   }
 
   private createUserPoolClient(): cognito.UserPoolClient {
@@ -225,9 +427,17 @@ export class WorkflowBuilderStack extends cdk.Stack {
         logoutUrls: this.config.cognito.logoutUrls,
       },
       preventUserExistenceErrors: true,
-      refreshTokenValidity: cdk.Duration.days(30),
-      accessTokenValidity: cdk.Duration.hours(1),
-      idTokenValidity: cdk.Duration.hours(1),
+      // Short-lived access/ID tokens shrink the window in which a token's
+      // identity claims can be stale. Authorization itself is already live
+      // (resolveCaller reads DynamoDB every request), so this is defense in
+      // depth, not the revocation mechanism.
+      // The refresh token validity is an ABSOLUTE session cap in Cognito —
+      // REFRESH_TOKEN_AUTH does not reissue the refresh token — so 24h means a
+      // user re-authenticates at most once per day even while actively working.
+      // Do not lower it without accepting mid-task logouts.
+      refreshTokenValidity: cdk.Duration.hours(24),
+      accessTokenValidity: cdk.Duration.minutes(15),
+      idTokenValidity: cdk.Duration.minutes(15),
       // Enable token revocation
       enableTokenRevocation: true,
       // Supported identity providers
@@ -284,25 +494,14 @@ export class WorkflowBuilderStack extends cdk.Stack {
               ],
               resources: ['*'], // Cognito Identity actions do not support resource-level permissions
             }),
-            new iam.PolicyStatement({
-              effect: iam.Effect.ALLOW,
-              actions: [
-                'states:ListStateMachines',
-                'states:DescribeStateMachine',
-                'states:CreateStateMachine',
-                'states:UpdateStateMachine',
-                'states:DeleteStateMachine',
-                'states:StartExecution',
-                'states:StopExecution',
-                'states:DescribeExecution',
-                'states:ListExecutions',
-                'states:GetExecutionHistory',
-              ],
-              resources: [
-                `arn:aws:states:${this.region}:${this.account}:stateMachine:${PROJECT.projectName}-*`,
-                `arn:aws:states:${this.region}:${this.account}:execution:${PROJECT.projectName}-*:*`,
-              ],
-            }),
+            // NOTE: the authenticated role intentionally has NO direct Step
+            // Functions permissions. The browser never calls Step Functions
+            // with these STS credentials — every workflow/execution operation
+            // goes through API Gateway, where the Lambda handlers enforce
+            // per-team authorization (resolveCaller / canReadTeam /
+            // canWriteTeam). Granting states:* here would let any logged-in
+            // user exchange their token for STS creds and call Step Functions
+            // directly, bypassing all of those team checks. Do not re-add it.
           ],
         }),
       },
@@ -421,6 +620,7 @@ export class WorkflowBuilderStack extends cdk.Stack {
       partitionKey: { name: 'PK', type: dynamodb.AttributeType.STRING },
       sortKey: { name: 'SK', type: dynamodb.AttributeType.STRING },
       billingMode: dynamodb.BillingMode.PAY_PER_REQUEST,
+      pointInTimeRecoverySpecification: { pointInTimeRecoveryEnabled: true },
       removalPolicy: this.config.environment === 'production' 
         ? cdk.RemovalPolicy.RETAIN 
         : cdk.RemovalPolicy.DESTROY,
@@ -439,9 +639,32 @@ export class WorkflowBuilderStack extends cdk.Stack {
       partitionKey: { name: 'PK', type: dynamodb.AttributeType.STRING },
       sortKey: { name: 'SK', type: dynamodb.AttributeType.STRING },
       billingMode: dynamodb.BillingMode.PAY_PER_REQUEST,
-      removalPolicy: this.config.environment === 'production' 
-        ? cdk.RemovalPolicy.RETAIN 
+      pointInTimeRecoverySpecification: { pointInTimeRecoveryEnabled: true },
+      removalPolicy: this.config.environment === 'production'
+        ? cdk.RemovalPolicy.RETAIN
         : cdk.RemovalPolicy.DESTROY,
+    });
+    // GSI1 — list workflows for a team sorted by updatedAt (handlers query
+    // GSI1PK = TEAM#<teamId>, GSI1SK begins_with 'WORKFLOW#').
+    this.workflowsTable.addGlobalSecondaryIndex({
+      indexName: 'GSI1',
+      partitionKey: { name: 'GSI1PK', type: dynamodb.AttributeType.STRING },
+      sortKey: { name: 'GSI1SK', type: dynamodb.AttributeType.STRING },
+    });
+
+    // Access-logs bucket for S3 server access logging (no public access, TLS-only).
+    const accessLogsBucket = new s3.Bucket(this, 'AccessLogsBucket', {
+      encryption: s3.BucketEncryption.S3_MANAGED,
+      blockPublicAccess: s3.BlockPublicAccess.BLOCK_ALL,
+      enforceSSL: true,
+      objectOwnership: s3.ObjectOwnership.BUCKET_OWNER_PREFERRED,
+      removalPolicy: this.config.environment === 'production'
+        ? cdk.RemovalPolicy.RETAIN
+        : cdk.RemovalPolicy.DESTROY,
+      autoDeleteObjects: this.config.environment !== 'production',
+      lifecycleRules: [
+        { id: 'ExpireAccessLogs', enabled: true, expiration: cdk.Duration.days(90) },
+      ],
     });
 
     // Create S3 bucket for Lambda code storage
@@ -450,6 +673,9 @@ export class WorkflowBuilderStack extends cdk.Stack {
       versioned: true,
       encryption: s3.BucketEncryption.S3_MANAGED,
       blockPublicAccess: s3.BlockPublicAccess.BLOCK_ALL,
+      enforceSSL: true,
+      serverAccessLogsBucket: accessLogsBucket,
+      serverAccessLogsPrefix: 'lambda-code-bucket/',
       removalPolicy: this.config.environment === 'production'
         ? cdk.RemovalPolicy.RETAIN
         : cdk.RemovalPolicy.DESTROY,
@@ -490,9 +716,17 @@ export class WorkflowBuilderStack extends cdk.Stack {
       {
         DEPLOYMENTS_TABLE: deploymentsTable.tableName,
         WORKFLOWS_TABLE: this.workflowsTable.tableName,
+        MEMBERSHIPS_TABLE: this.membershipsTable.tableName,
+        TEAMS_TABLE: this.teamsTable.tableName,
+        WORKFLOW_CHANGE_LOGS_TABLE: this.workflowChangeLogsTable.tableName,
         AWS_ACCOUNT_ID: this.account,
         LAMBDA_CODE_BUCKET: lambdaCodeBucket.bucketName,
         OPENSEARCH_ENDPOINT: opensearchCollection?.attrCollectionEndpoint ?? '',
+        OPENSEARCH_COLLECTION_ARN: opensearchCollection?.attrArn ?? '',
+        // Used by openSearchAccessManager.ts to grant/revoke per-workflow
+        // indexer roles on the AOSS data access policy at deploy/delete time.
+        OPENSEARCH_COLLECTION_NAME: this.opensearchCollectionName ?? '',
+        OPENSEARCH_INDEXER_ACCESS_POLICY_NAME: this.opensearchIndexerAccessPolicyName ?? '',
         ...this.vpcConfigEnv,
       }
     );
@@ -505,6 +739,7 @@ export class WorkflowBuilderStack extends cdk.Stack {
       'index.getDeploymentStatus',
       {
         DEPLOYMENTS_TABLE: deploymentsTable.tableName,
+        MEMBERSHIPS_TABLE: this.membershipsTable.tableName,
         AWS_ACCOUNT_ID: this.account,
       }
     );
@@ -538,9 +773,21 @@ export class WorkflowBuilderStack extends cdk.Stack {
     deploymentsTable.grantReadWriteData(deploymentLambda);
     deploymentsTable.grantReadWriteData(deploymentStatusLambda);
     deploymentsTable.grantReadWriteData(deploymentStatusUpdateLambda);
-    this.workflowsTable.grantReadWriteData(deploymentLambda); // Changed from grantReadData to grantReadWriteData for deletion
+    // deployWorkflow and getDeploymentStatus both call resolveCaller, which now
+    // ALWAYS reads the Memberships + Admins tables (previously it could rely on
+    // JWT claims and skip DynamoDB). They had the MEMBERSHIPS_TABLE env var but
+    // were missing the read grant; without these grants resolveCaller would
+    // fail-closed and deny every request. Add memberships + admins read access.
+    for (const fn of [deploymentLambda, deploymentStatusLambda]) {
+      this.membershipsTable.grantReadData(fn);
+      fn.addEnvironment('ADMINS_TABLE', this.adminsTable.tableName);
+      this.adminsTable.grantReadData(fn);
+    }
+    this.workflowsTable.grantReadWriteData(deploymentLambda);
     this.workflowsTable.grantReadWriteData(deploymentStatusUpdateLambda);
     this.workflowsTable.grantReadWriteData(workflowStatusUpdateLambda);
+    this.workflowChangeLogsTable.grantReadWriteData(deploymentLambda);
+    this.workflowChangeLogsTable.grantReadWriteData(deploymentStatusUpdateLambda);
 
     // Grant CloudFormation permissions to status update Lambda
     deploymentStatusUpdateLambda.addToRolePolicy(
@@ -714,6 +961,28 @@ export class WorkflowBuilderStack extends cdk.Stack {
         resources: ['*'], // EventBridge doesn't support resource-level permissions
       })
     );
+
+    // Grant the deployment Lambda permission to manage the AOSS data access
+    // policy that authorises per-workflow indexer roles. The Lambda
+    // adds/removes exact role ARNs as workflows are deployed/deleted (see
+    // openSearchAccessManager.ts). AOSS control-plane actions do not support
+    // resource-level permissions, so the resource is '*'; this is only added
+    // when OpenSearch is enabled.
+    if (enableOpenSearch) {
+      deploymentLambda.addToRolePolicy(
+        new iam.PolicyStatement({
+          effect: iam.Effect.ALLOW,
+          actions: [
+            'aoss:GetAccessPolicy',
+            'aoss:CreateAccessPolicy',
+            'aoss:UpdateAccessPolicy',
+            'aoss:DeleteAccessPolicy',
+            'aoss:ListAccessPolicies',
+          ],
+          resources: ['*'],
+        })
+      );
+    }
 
     // Grant Step Functions permissions to deployment Lambda (broad permissions for direct deployment)
     deploymentLambda.addToRolePolicy(
@@ -939,12 +1208,27 @@ export class WorkflowBuilderStack extends cdk.Stack {
             'states:DescribeStateMachineForExecution',
             'states:RedriveExecution',
           ],
+          // Defense-in-depth: scope to per-workflow state machines only
+          // (named `SF-<workflowId>`). Even if the handler's team-authz check
+          // regressed, the role still couldn't reach the internal
+          // deployment/deletion machines or any unrelated state machine.
           resources: [
-            `arn:aws:states:${this.region}:${this.account}:stateMachine:*`,
-            `arn:aws:states:${this.region}:${this.account}:execution:*:*`,
+            `arn:aws:states:${this.region}:${this.account}:stateMachine:SF-*`,
+            `arn:aws:states:${this.region}:${this.account}:execution:SF-*:*`,
           ],
         })
       );
+
+      // The handlers now enforce team authorization server-side: they resolve
+      // the caller (Memberships + Admins) and the owning workflow's team
+      // (Workflows) live from DynamoDB and reject cross-tenant ARNs. Wire the
+      // table names and grant read-only access for those lookups.
+      lambdaFunction.addEnvironment('WORKFLOWS_TABLE', this.workflowsTable.tableName);
+      lambdaFunction.addEnvironment('MEMBERSHIPS_TABLE', this.membershipsTable.tableName);
+      lambdaFunction.addEnvironment('ADMINS_TABLE', this.adminsTable.tableName);
+      this.workflowsTable.grantReadData(lambdaFunction);
+      this.membershipsTable.grantReadData(lambdaFunction);
+      this.adminsTable.grantReadData(lambdaFunction);
     });
 
     // Create API Gateway resources
@@ -1055,6 +1339,7 @@ export class WorkflowBuilderStack extends cdk.Stack {
       'index.layerHandler',
       {
         WORKFLOWS_TABLE: this.workflowsTable.tableName,
+        MEMBERSHIPS_TABLE: this.membershipsTable.tableName,
         LAMBDA_CODE_BUCKET: lambdaCodeBucket.bucketName,
         AWS_ACCOUNT_ID: this.account,
         USER_POOL_ID: this.userPool.userPoolId,
@@ -1063,6 +1348,9 @@ export class WorkflowBuilderStack extends cdk.Stack {
     );
 
     this.workflowsTable.grantReadWriteData(layerLambda);
+    this.membershipsTable.grantReadData(layerLambda);
+    layerLambda.addEnvironment('ADMINS_TABLE', this.adminsTable.tableName);
+    this.adminsTable.grantReadData(layerLambda);
     lambdaCodeBucket.grantReadWrite(layerLambda);
 
     layerLambda.addToRolePolicy(
@@ -1108,9 +1396,21 @@ export class WorkflowBuilderStack extends cdk.Stack {
       environment: {
         OPENSEARCH_ENDPOINT: opensearchCollection.attrCollectionEndpoint,
         ALLOWED_ORIGIN: `https://${this.frontendHosting.distribution.distributionDomainName}`,
+        // Tables used to derive the caller's accessible workflows server-side
+        // (never trusting allowedWorkflowIds from the request body).
+        WORKFLOWS_TABLE: this.workflowsTable.tableName,
+        MEMBERSHIPS_TABLE: this.membershipsTable.tableName,
+        ADMINS_TABLE: this.adminsTable.tableName,
       },
     });
-    
+
+    // Read access for server-side team-scoping: resolve the caller's teams +
+    // admin status and the workflows they own, to constrain every search to
+    // their own tenants' indexed documents.
+    this.workflowsTable.grantReadData(opensearchSearchLambda);
+    this.membershipsTable.grantReadData(opensearchSearchLambda);
+    this.adminsTable.grantReadData(opensearchSearchLambda);
+
     // Grant OpenSearch Serverless permissions
     opensearchSearchLambda.addToRolePolicy(
       new iam.PolicyStatement({
@@ -1131,6 +1431,7 @@ export class WorkflowBuilderStack extends cdk.Stack {
       'index.listWorkflows',
       {
         WORKFLOWS_TABLE: this.workflowsTable.tableName,
+        MEMBERSHIPS_TABLE: this.membershipsTable.tableName,
         AWS_ACCOUNT_ID: this.account,
         USER_POOL_ID: this.userPool.userPoolId,
         USER_POOL_CLIENT_ID: this.userPoolClient.userPoolClientId,
@@ -1145,6 +1446,8 @@ export class WorkflowBuilderStack extends cdk.Stack {
       'index.saveWorkflow',
       {
         WORKFLOWS_TABLE: this.workflowsTable.tableName,
+        MEMBERSHIPS_TABLE: this.membershipsTable.tableName,
+        WORKFLOW_CHANGE_LOGS_TABLE: this.workflowChangeLogsTable.tableName,
         AWS_ACCOUNT_ID: this.account,
         USER_POOL_ID: this.userPool.userPoolId,
         USER_POOL_CLIENT_ID: this.userPoolClient.userPoolClientId,
@@ -1153,7 +1456,7 @@ export class WorkflowBuilderStack extends cdk.Stack {
 
     // GET /workflows/{workflowId} - Get workflow details
     const workflowIdResource = workflowsResource.addResource('{workflowId}');
-    
+
     // Create workflow Lambda function
     const workflowLambda = this.createLambdaFunction(
       'WorkflowLambda',
@@ -1162,6 +1465,7 @@ export class WorkflowBuilderStack extends cdk.Stack {
       'index.getWorkflow',
       {
         WORKFLOWS_TABLE: this.workflowsTable.tableName,
+        MEMBERSHIPS_TABLE: this.membershipsTable.tableName,
         AWS_ACCOUNT_ID: this.account,
         USER_POOL_ID: this.userPool.userPoolId,
         USER_POOL_CLIENT_ID: this.userPoolClient.userPoolClientId,
@@ -1172,6 +1476,16 @@ export class WorkflowBuilderStack extends cdk.Stack {
     this.workflowsTable.grantReadData(listWorkflowsLambda);
     this.workflowsTable.grantReadWriteData(saveWorkflowLambda);
     this.workflowsTable.grantReadData(workflowLambda);
+    this.membershipsTable.grantReadData(listWorkflowsLambda);
+    this.membershipsTable.grantReadData(saveWorkflowLambda);
+    this.membershipsTable.grantReadData(workflowLambda);
+    // Admin status is now read live from the Admins table by resolveCaller.
+    for (const fn of [listWorkflowsLambda, saveWorkflowLambda, workflowLambda]) {
+      fn.addEnvironment('ADMINS_TABLE', this.adminsTable.tableName);
+      this.adminsTable.grantReadData(fn);
+    }
+    this.workflowChangeLogsTable.grantReadWriteData(saveWorkflowLambda);
+    this.workflowChangeLogsTable.grantReadData(workflowLambda);
 
 
 
@@ -1184,6 +1498,8 @@ export class WorkflowBuilderStack extends cdk.Stack {
       {
         WORKFLOWS_TABLE: this.workflowsTable.tableName,
         DEPLOYMENTS_TABLE: deploymentsTable.tableName,
+        MEMBERSHIPS_TABLE: this.membershipsTable.tableName,
+        WORKFLOW_CHANGE_LOGS_TABLE: this.workflowChangeLogsTable.tableName,
         AWS_ACCOUNT_ID: this.account,
         USER_POOL_ID: this.userPool.userPoolId,
         USER_POOL_CLIENT_ID: this.userPoolClient.userPoolClientId,
@@ -1194,6 +1510,10 @@ export class WorkflowBuilderStack extends cdk.Stack {
     // Grant permissions to delete workflow Lambda
     this.workflowsTable.grantReadWriteData(deleteWorkflowLambda);
     deploymentsTable.grantReadWriteData(deleteWorkflowLambda);
+    this.membershipsTable.grantReadData(deleteWorkflowLambda);
+    deleteWorkflowLambda.addEnvironment('ADMINS_TABLE', this.adminsTable.tableName);
+    this.adminsTable.grantReadData(deleteWorkflowLambda);
+    this.workflowChangeLogsTable.grantReadWriteData(deleteWorkflowLambda);
 
     // Grant permissions to delete AWS resources
     deleteWorkflowLambda.addToRolePolicy(
@@ -1284,6 +1604,8 @@ export class WorkflowBuilderStack extends cdk.Stack {
       'getDeploymentHistory.handler',
       {
         DEPLOYMENT_TABLE_NAME: deploymentsTable.tableName,
+        WORKFLOWS_TABLE: this.workflowsTable.tableName,
+        MEMBERSHIPS_TABLE: this.membershipsTable.tableName,
         AWS_ACCOUNT_ID: this.account,
         USER_POOL_ID: this.userPool.userPoolId,
         USER_POOL_CLIENT_ID: this.userPoolClient.userPoolClientId,
@@ -1292,6 +1614,10 @@ export class WorkflowBuilderStack extends cdk.Stack {
 
     // Grant permissions to deployment history Lambda
     deploymentsTable.grantReadData(deploymentHistoryLambda);
+    this.workflowsTable.grantReadData(deploymentHistoryLambda);
+    this.membershipsTable.grantReadData(deploymentHistoryLambda);
+    deploymentHistoryLambda.addEnvironment('ADMINS_TABLE', this.adminsTable.tableName);
+    this.adminsTable.grantReadData(deploymentHistoryLambda);
 
 
     // Add API endpoints
@@ -1304,6 +1630,28 @@ export class WorkflowBuilderStack extends cdk.Stack {
     // Add deployment history endpoint: GET /workflows/{workflowId}/deployments
     const workflowDeploymentsResource = workflowIdResource.addResource('deployments');
     this.addLambdaIntegration(workflowDeploymentsResource, 'GET', deploymentHistoryLambda, true);
+
+    // GET /workflows/{workflowId}/changelog
+    // Store as a class field so createAdminEndpoints() can attach the
+    // /admin/workflow-changes route after the /admin resource is created.
+    this.changelogLambda = this.createLambdaFunction(
+      'GetWorkflowChangelogLambda',
+      PROJECT.lambda.getWorkflowChangelog,
+      '../lambda-functions/deployment-lambda/dist',
+      'index.getWorkflowChangelog',
+      {
+        WORKFLOWS_TABLE: this.workflowsTable.tableName,
+        MEMBERSHIPS_TABLE: this.membershipsTable.tableName,
+        WORKFLOW_CHANGE_LOGS_TABLE: this.workflowChangeLogsTable.tableName,
+      }
+    );
+    this.workflowsTable.grantReadData(this.changelogLambda);
+    this.membershipsTable.grantReadData(this.changelogLambda);
+    this.changelogLambda.addEnvironment('ADMINS_TABLE', this.adminsTable.tableName);
+    this.adminsTable.grantReadData(this.changelogLambda);
+    this.workflowChangeLogsTable.grantReadData(this.changelogLambda);
+    const changelogResource = workflowIdResource.addResource('changelog');
+    this.addLambdaIntegration(changelogResource, 'GET', this.changelogLambda, true);
   }
 
   public get cognitoAuthorizer(): apigateway.CognitoUserPoolsAuthorizer {
@@ -1774,6 +2122,7 @@ export class WorkflowBuilderStack extends cdk.Stack {
       tableName: 'WebSocketConnections',
       partitionKey: { name: 'connectionId', type: dynamodb.AttributeType.STRING },
       billingMode: dynamodb.BillingMode.PAY_PER_REQUEST,
+      pointInTimeRecoverySpecification: { pointInTimeRecoveryEnabled: true },
       timeToLiveAttribute: 'ttl',
       removalPolicy: this.config.environment === 'production' 
         ? cdk.RemovalPolicy.RETAIN 
@@ -2178,6 +2527,11 @@ export class WorkflowBuilderStack extends cdk.Stack {
    */
   private createOpenSearchServerlessCollection(): cdk.aws_opensearchserverless.CfnCollection {
     const collectionName = `health-msgs-${this.account.slice(-6)}`;
+    // Expose the collection name and the indexer data access policy name so
+    // the deployment Lambda (which dynamically grants per-workflow indexer
+    // roles) can target the same collection and policy.
+    this.opensearchCollectionName = collectionName;
+    this.opensearchIndexerAccessPolicyName = `health-msgs-idx-${this.account.slice(-6)}`;
 
     // Encryption policy (required before collection)
     const encryptionPolicy = new cdk.aws_opensearchserverless.CfnSecurityPolicy(this, 'OpenSearchEncryptionPolicy', {
@@ -2242,19 +2596,24 @@ export class WorkflowBuilderStack extends cdk.Stack {
 
     // Data access policy - scoped to specific Lambda principals with
     // narrowly-defined permissions instead of `aoss:*` to the account root.
-    //   - Search Lambda: read-only on the collection (exact role ARN; CDK
-    //     resolves the token to the concrete ARN at deploy time).
-    //   - Per-workflow OpenSearch indexer Lambdas: read+write+create-index.
-    //     CFN templates create their roles with name pattern
-    //     OpenSearch-Lambda-Role-${WorkflowId} (see
-    //     cloudFormationTemplateGenerator.ts), but AOSS data access
-    //     policies do NOT support wildcards in IAM role ARN principals,
-    //     and the per-workflow role names are not known at CDK synth
-    //     time. As a pragmatic compromise we keep the principal at
-    //     account root for this rule but tighten the permissions from
-    //     `aoss:*` to the specific data-plane actions the indexer needs.
-    //     A future change can move to dynamic UpdateAccessPolicy calls
-    //     from the deployment Lambda to enumerate exact role ARNs.
+    // Data access policy (static): grants ONLY the OpenSearch search Lambda
+    // read-only access by its exact role ARN. CDK resolves the role token to
+    // the concrete ARN at deploy time.
+    //
+    // Per-workflow indexer Lambdas are intentionally NOT granted here. AOSS
+    // data access policies do not support wildcard principals, and each
+    // workflow's indexer role (OpenSearch-Lambda-Role-<WorkflowId>, created by
+    // the per-workflow CloudFormation stack — see
+    // cloudFormationTemplateGenerator.ts) is unknown at synth time. Granting
+    // the account root (the previous behaviour) would let any principal in the
+    // account that also holds `aoss:APIAccessAll` write to the collection.
+    // Instead, the deployment Lambda maintains a SEPARATE data access policy
+    // (`health-msgs-idx-<suffix>`, see deployment-lambda
+    // services/openSearchAccessManager.ts) that lists the exact indexer role
+    // ARN for each deployed workflow and removes it on deletion. AOSS unions
+    // all data access policies that match a collection, so the two compose.
+    // The indexer policy name is passed to the deployment Lambda via
+    // OPENSEARCH_INDEXER_ACCESS_POLICY_NAME.
     const dataAccessPolicy = new cdk.aws_opensearchserverless.CfnAccessPolicy(this, 'OpenSearchDataAccessPolicy', {
       name: `health-msgs-access-${this.account.slice(-6)}`,
       type: 'data',
@@ -2274,32 +2633,6 @@ export class WorkflowBuilderStack extends cdk.Stack {
             },
           ],
           Principal: [this.opensearchSearchLambdaRole.roleArn],
-        },
-        {
-          Description: 'Read+write access for per-workflow OpenSearch indexer Lambdas',
-          Rules: [
-            {
-              ResourceType: 'index',
-              Resource: [`index/${collectionName}/*`],
-              Permission: [
-                'aoss:CreateIndex',
-                'aoss:UpdateIndex',
-                'aoss:DescribeIndex',
-                'aoss:ReadDocument',
-                'aoss:WriteDocument',
-              ],
-            },
-            {
-              ResourceType: 'collection',
-              Resource: [`collection/${collectionName}`],
-              Permission: [
-                'aoss:CreateCollectionItems',
-                'aoss:UpdateCollectionItems',
-                'aoss:DescribeCollectionItems',
-              ],
-            },
-          ],
-          Principal: [`arn:aws:iam::${this.account}:root`],
         },
       ]),
     });
@@ -2336,6 +2669,7 @@ import hashlib
 from botocore.auth import SigV4Auth
 from botocore.awsrequest import AWSRequest
 from urllib.parse import urlparse
+from boto3.dynamodb.conditions import Key
 
 CORS_HEADERS = {
     'Access-Control-Allow-Origin': os.environ.get('ALLOWED_ORIGIN', 'http://localhost:3000'),
@@ -2344,23 +2678,171 @@ CORS_HEADERS = {
     'Content-Type': 'application/json'
 }
 
+ddb = boto3.resource('dynamodb')
+WORKFLOWS_TABLE = os.environ.get('WORKFLOWS_TABLE', 'WorkflowBuilder-Workflows')
+MEMBERSHIPS_TABLE = os.environ.get('MEMBERSHIPS_TABLE', 'WorkflowBuilder-Memberships')
+ADMINS_TABLE = os.environ.get('ADMINS_TABLE', 'WorkflowBuilder-Admins')
+
+
+def _extract_user_id(event):
+    # API Gateway Cognito authorizer puts the verified identity in claims.
+    # The JWT is proof of identity only; authorization is derived live below.
+    claims = (event.get('requestContext', {}).get('authorizer', {}) or {}).get('claims', {}) or {}
+    return claims.get('sub') or claims.get('cognito:username'), claims
+
+
+def _parse_groups(raw):
+    if not raw:
+        return []
+    if isinstance(raw, list):
+        return [str(g) for g in raw]
+    s = str(raw).strip()
+    if s.startswith('['):
+        inner = s[1:-1] if s.endswith(']') else s[1:]
+        return [g.strip() for g in inner.split(',') if g.strip()]
+    return [g.strip() for g in s.replace(',', ' ').split() if g.strip()]
+
+
+def _zero_admins_exist():
+    try:
+        resp = ddb.Table(ADMINS_TABLE).scan(Select='COUNT', Limit=1)
+        return resp.get('Count', 0) == 0
+    except Exception as e:
+        print('zero-admins check failed (fail-closed to non-bootstrap):', e)
+        return False
+
+
+def _is_admin(user_id, claims):
+    # Authoritative: a durable row in the Admins table. Fail-closed on error.
+    try:
+        resp = ddb.Table(ADMINS_TABLE).get_item(Key={'userId': user_id})
+        if resp.get('Item'):
+            return True
+    except Exception as e:
+        print('admin lookup failed (treating as non-admin):', e)
+        return False
+    # One-shot bootstrap fallback, mirroring resolveCaller: a Cognito
+    # admins-group member counts as admin ONLY while no admin rows exist.
+    if 'admins' in _parse_groups(claims.get('cognito:groups')):
+        return _zero_admins_exist()
+    return False
+
+
+def _team_ids_for_user(user_id):
+    team_ids = []
+    last_key = None
+    table = ddb.Table(MEMBERSHIPS_TABLE)
+    while True:
+        kwargs = {
+            'IndexName': 'UserIdIndex',
+            'KeyConditionExpression': Key('userId').eq(user_id),
+        }
+        if last_key:
+            kwargs['ExclusiveStartKey'] = last_key
+        resp = table.query(**kwargs)
+        for item in resp.get('Items', []):
+            if item.get('teamId'):
+                team_ids.append(item['teamId'])
+        last_key = resp.get('LastEvaluatedKey')
+        if not last_key:
+            break
+    return team_ids
+
+
+def _workflow_ids_for_team(team_id):
+    ids = []
+    last_key = None
+    table = ddb.Table(WORKFLOWS_TABLE)
+    while True:
+        kwargs = {
+            'IndexName': 'GSI1',
+            'KeyConditionExpression': Key('GSI1PK').eq('TEAM#' + team_id) & Key('GSI1SK').begins_with('WORKFLOW#'),
+            'ProjectionExpression': '#wid',
+            'ExpressionAttributeNames': {'#wid': 'id'},
+        }
+        if last_key:
+            kwargs['ExclusiveStartKey'] = last_key
+        resp = table.query(**kwargs)
+        for item in resp.get('Items', []):
+            if item.get('id'):
+                ids.append(item['id'])
+        last_key = resp.get('LastEvaluatedKey')
+        if not last_key:
+            break
+    return ids
+
+
+def _resolve_allowed_workflow_ids(user_id, claims, requested_team_id=None):
+    '''
+    Returns the set of workflowIds the caller may search, computed entirely
+    server-side. Returns None to mean "no restriction" (admin, no team filter).
+    For a non-admin, any failure fails CLOSED (returns [] -> matches nothing)
+    rather than exposing other tenants' data.
+
+    When requested_team_id is provided (the UI's team switcher), the scope is
+    narrowed to that single team — but ONLY after verifying the caller may read
+    it (admin, or a member of that team). The team id is authorized here, never
+    trusted blindly: an unauthorized team yields [] (matches nothing), so this
+    can only ever narrow within what the caller is already allowed to see.
+    '''
+    is_admin = _is_admin(user_id, claims)
+
+    if requested_team_id:
+        # Authorize the requested team server-side before scoping to it.
+        if not is_admin:
+            try:
+                if requested_team_id not in _team_ids_for_user(user_id):
+                    return []
+            except Exception as e:
+                print('failed to verify team membership (fail-closed):', e)
+                return []
+        try:
+            return sorted(set(_workflow_ids_for_team(requested_team_id)))
+        except Exception as e:
+            print('failed to resolve team workflows (fail-closed):', e)
+            return []
+
+    if is_admin:
+        return None
+    try:
+        allowed = []
+        for team_id in _team_ids_for_user(user_id):
+            allowed.extend(_workflow_ids_for_team(team_id))
+        return sorted(set(allowed))
+    except Exception as e:
+        print('failed to resolve allowed workflows (fail-closed):', e)
+        return []
+
+
 def lambda_handler(event, context):
     if event.get('httpMethod') == 'OPTIONS':
         return {'statusCode': 200, 'headers': CORS_HEADERS, 'body': ''}
-    
+
+    # Require an authenticated identity from the Cognito authorizer.
+    user_id, claims = _extract_user_id(event)
+    if not user_id:
+        return {'statusCode': 401, 'headers': CORS_HEADERS, 'body': json.dumps({'error': 'Authentication required'})}
+
     try:
-        body = json.loads(event.get('body', '{}'))
+        body = json.loads(event.get('body', '{}') or '{}')
         endpoint = os.environ.get('OPENSEARCH_ENDPOINT', '').rstrip('/')
         index_name = body.get('indexName', 'health-messages')
         query_params = body.get('query', {})
         config = body.get('searchConfig', {})
         workflow_id = body.get('workflowId', '')
-        allowed_workflow_ids = body.get('allowedWorkflowIds')
+        requested_team_id = body.get('teamId') or None
 
         if not endpoint or not index_name:
             return {'statusCode': 400, 'headers': CORS_HEADERS, 'body': json.dumps({'error': 'indexName required'})}
 
-        # Add workflowId filter if provided
+        # SECURITY: the workflow scope is derived from the caller's identity,
+        # NEVER from the request body. Any client-supplied allowedWorkflowIds
+        # is ignored. An optional teamId (the UI's team switcher) only narrows
+        # the scope and is authorized server-side inside the resolver.
+        allowed_workflow_ids = _resolve_allowed_workflow_ids(user_id, claims, requested_team_id)
+
+        # Add workflowId filter if provided (intersects with allowed set, so a
+        # workflowId the caller can't access yields no results).
         if workflow_id:
             query_params['workflowId'] = workflow_id
 
@@ -2368,20 +2850,20 @@ def lambda_handler(event, context):
         url = f"{endpoint}/{index_name}/_search"
         data = json.dumps(query).encode('utf-8')
         body_hash = hashlib.sha256(data).hexdigest()
-        
+
         parsed = urlparse(url)
         session = boto3.Session()
         creds = session.get_credentials().get_frozen_credentials()
         region = os.environ['AWS_REGION']
-        
+
         headers = {'Content-Type': 'application/json', 'Host': parsed.netloc, 'x-amz-content-sha256': body_hash}
         request = AWSRequest(method='POST', url=url, data=data, headers=headers)
         SigV4Auth(creds, 'aoss', region).add_auth(request)
-        
+
         req = urllib.request.Request(url, data=data, method='POST')
         for k, v in request.headers.items():
             req.add_header(k, v)
-        
+
         with urllib.request.urlopen(req) as resp:
             result = json.loads(resp.read().decode('utf-8'))
             hits = result.get('hits', {})
@@ -2412,6 +2894,8 @@ def build_query(params, config, allowed_workflow_ids=None):
         must.append({'match': {'fillerOrderNumber': {'query': params['fillerOrderNumber'], 'fuzziness': 'AUTO'}}})
     if params.get('workflowId'):
         filters.append({'term': {'workflowId.keyword': params['workflowId']}})
+    # Server-derived tenant scope. None => admin (no restriction). An empty
+    # list => caller owns no workflows, so match nothing (never match all).
     if allowed_workflow_ids is not None:
         if len(allowed_workflow_ids) > 0:
             filters.append({'terms': {'workflowId.keyword': allowed_workflow_ids}})

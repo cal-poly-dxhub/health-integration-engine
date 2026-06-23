@@ -3,7 +3,8 @@ import { DynamoDBClient } from '@aws-sdk/client-dynamodb';
 import { DynamoDBDocumentClient, GetCommand, UpdateCommand } from '@aws-sdk/lib-dynamodb';
 import { SFNClient, DescribeStateMachineCommand } from '@aws-sdk/client-sfn';
 import { CloudFormationClient, DescribeStacksCommand } from '@aws-sdk/client-cloudformation';
-import { validateJWTToken, extractUserIdFromEvent, createAuthErrorResponse, createSuccessHeaders } from '../utils/auth';
+import { createSuccessHeaders } from '../utils/auth';
+import { resolveCaller, canReadTeam, unauthenticated, forbidden } from '../utils/authz';
 
 const dynamoClient = new DynamoDBClient({ region: process.env.AWS_REGION });
 const docClient = DynamoDBDocumentClient.from(dynamoClient);
@@ -13,7 +14,9 @@ const cfnClient = new CloudFormationClient({ region: process.env.AWS_REGION });
 const WORKFLOWS_TABLE = process.env.WORKFLOWS_TABLE || 'WorkflowBuilder-Workflows';
 
 /**
- * Get workflow details from database
+ * Get a single workflow. Caller must be a reader on the workflow's team
+ * (or admin). Returns 404 to avoid leaking the existence of out-of-scope
+ * workflows.
  */
 export const handler = async (
   event: APIGatewayProxyEvent
@@ -22,55 +25,44 @@ export const handler = async (
 
   try {
     const workflowId = event.pathParameters?.workflowId;
-    
     if (!workflowId) {
       return {
         statusCode: 400,
         headers: createSuccessHeaders(),
-        body: JSON.stringify({
-          error: 'Workflow ID is required',
-        }),
+        body: JSON.stringify({ error: 'Workflow ID is required' }),
       };
     }
 
-    // Validate authentication - try API Gateway authorizer first, then JWT validation
-    let userId = extractUserIdFromEvent(event);
-    
-    if (!userId) {
-      // Fallback to manual JWT validation
-      const authResult = await validateJWTToken(event);
-      if (!authResult.isValid) {
-        console.error('JWT validation failed:', authResult.error);
-        return createAuthErrorResponse(authResult.error || 'Valid authentication token required');
-      }
-      userId = authResult.userId!;
-    }
+    const caller = await resolveCaller(event);
+    if (!caller) return unauthenticated();
 
-    // Fetch workflow from database
-    const workflow = await getWorkflowFromDatabase(workflowId, userId);
-    
+    const workflow = await getWorkflowFromDatabase(workflowId);
     if (!workflow) {
       return {
         statusCode: 404,
         headers: createSuccessHeaders(),
-        body: JSON.stringify({
-          error: 'Workflow not found',
-        }),
+        body: JSON.stringify({ error: 'Workflow not found' }),
       };
     }
 
-    // Refresh deployment status from AWS if workflow has Step Function ARN
-    const updatedWorkflow = await refreshWorkflowDeploymentStatus(workflow, userId);
+    if (!canReadTeam(caller, workflow.teamId)) {
+      // Mask as 404 so out-of-scope workflows aren't enumerable.
+      return {
+        statusCode: 404,
+        headers: createSuccessHeaders(),
+        body: JSON.stringify({ error: 'Workflow not found' }),
+      };
+    }
+
+    const updated = await refreshWorkflowDeploymentStatus(workflow);
 
     return {
       statusCode: 200,
       headers: createSuccessHeaders(),
-      body: JSON.stringify(updatedWorkflow),
+      body: JSON.stringify(updated),
     };
-
   } catch (error) {
     console.error('Get workflow error:', error);
-    
     return {
       statusCode: 500,
       headers: createSuccessHeaders(),
@@ -82,100 +74,50 @@ export const handler = async (
   }
 };
 
-/**
- * Get workflow from database
- */
-async function getWorkflowFromDatabase(workflowId: string, userId: string): Promise<any | null> {
+async function getWorkflowFromDatabase(workflowId: string): Promise<any | null> {
   try {
-    console.log('Looking up workflow:', { workflowId, userId });
-    
     const response = await docClient.send(new GetCommand({
       TableName: WORKFLOWS_TABLE,
       Key: {
-        PK: `USER#${userId}`,
-        SK: `WORKFLOW#${workflowId}`,
+        PK: `WORKFLOW#${workflowId}`,
+        SK: 'META',
       },
     }));
-
-    if (!response.Item) {
-      console.log('No workflow found with ID:', workflowId);
-      return null;
-    }
-
-    console.log('Found workflow record:', {
-      id: response.Item.id,
-      name: response.Item.name,
-      isDeployed: response.Item.isDeployed,
-      deploymentStatus: response.Item.deploymentStatus,
-      stepFunctionArn: response.Item.stepFunctionArn,
-    });
-
-    return response.Item;
-    
+    return response.Item || null;
   } catch (error) {
     console.error('Error fetching workflow:', error);
     return null;
   }
 }
 
-/**
- * Refresh deployment status from AWS for a single workflow
- */
-async function refreshWorkflowDeploymentStatus(workflow: any, userId: string): Promise<any> {
-  // Skip if no Step Function ARN or already marked as failed
+async function refreshWorkflowDeploymentStatus(workflow: any): Promise<any> {
   if (!workflow.stepFunctionArn || workflow.deploymentStatus === 'failed') {
     return workflow;
   }
 
   try {
-    // Check if Step Function still exists and is active
     const stepFunctionStatus = await checkStepFunctionStatus(workflow.stepFunctionArn);
-    
-    // Check CloudFormation stack status if we have a stack name
     const stackName = `workflow-${workflow.id}`;
     const cloudFormationStatus = await checkCloudFormationStatus(stackName);
 
-    // Determine actual deployment status
     let actualStatus = workflow.deploymentStatus;
     let isDeployed = workflow.isDeployed;
 
     const stackIsComplete = cloudFormationStatus === 'CREATE_COMPLETE' || cloudFormationStatus === 'UPDATE_COMPLETE';
-    
-    if (stepFunctionStatus === 'ACTIVE' && stackIsComplete) {
-      actualStatus = 'deployed';
-      isDeployed = true;
-    } else if (stepFunctionStatus === 'DELETING' || cloudFormationStatus === 'DELETE_IN_PROGRESS') {
-      actualStatus = 'deleting';
-      isDeployed = false;
-    } else if (stepFunctionStatus === null && (cloudFormationStatus === 'DELETE_COMPLETE' || cloudFormationStatus === null)) {
-      actualStatus = 'draft';
-      isDeployed = false;
-    } else if (cloudFormationStatus === 'CREATE_FAILED' || cloudFormationStatus === 'UPDATE_FAILED' || cloudFormationStatus === 'ROLLBACK_COMPLETE') {
-      actualStatus = 'failed';
-      isDeployed = false;
-    } else if (cloudFormationStatus === 'CREATE_IN_PROGRESS' || cloudFormationStatus === 'UPDATE_IN_PROGRESS') {
-      actualStatus = 'deploying';
-      isDeployed = false;
-    }
+    if (stepFunctionStatus === 'ACTIVE' && stackIsComplete) { actualStatus = 'deployed'; isDeployed = true; }
+    else if (stepFunctionStatus === 'DELETING' || cloudFormationStatus === 'DELETE_IN_PROGRESS') { actualStatus = 'deleting'; isDeployed = false; }
+    else if (stepFunctionStatus === null && (cloudFormationStatus === 'DELETE_COMPLETE' || cloudFormationStatus === null)) { actualStatus = 'draft'; isDeployed = false; }
+    else if (cloudFormationStatus === 'CREATE_FAILED' || cloudFormationStatus === 'UPDATE_FAILED' || cloudFormationStatus === 'ROLLBACK_COMPLETE') { actualStatus = 'failed'; isDeployed = false; }
+    else if (cloudFormationStatus === 'CREATE_IN_PROGRESS' || cloudFormationStatus === 'UPDATE_IN_PROGRESS') { actualStatus = 'deploying'; isDeployed = false; }
 
-    // Update database if status changed
     if (actualStatus !== workflow.deploymentStatus || isDeployed !== workflow.isDeployed) {
-      console.log(`Updating workflow ${workflow.id} status: ${workflow.deploymentStatus} -> ${actualStatus}`);
-      
-      await updateWorkflowDeploymentStatus(workflow.id, userId, {
+      await updateWorkflowDeploymentStatus(workflow.id, {
         deploymentStatus: actualStatus,
         isDeployed,
         updatedAt: new Date().toISOString(),
       });
-
-      return {
-        ...workflow,
-        deploymentStatus: actualStatus,
-        isDeployed,
-        updatedAt: new Date().toISOString(),
-      };
+      return { ...workflow, deploymentStatus: actualStatus, isDeployed, updatedAt: new Date().toISOString() };
     }
-
     return workflow;
   } catch (error) {
     console.error(`Error checking deployment status for workflow ${workflow.id}:`, error);
@@ -183,69 +125,38 @@ async function refreshWorkflowDeploymentStatus(workflow: any, userId: string): P
   }
 }
 
-/**
- * Check Step Function status
- */
 async function checkStepFunctionStatus(stateMachineArn: string): Promise<string | null> {
   try {
-    const response = await sfnClient.send(new DescribeStateMachineCommand({
-      stateMachineArn,
-    }));
-    
+    const response = await sfnClient.send(new DescribeStateMachineCommand({ stateMachineArn }));
     return response.status || 'ACTIVE';
   } catch (error: any) {
-    if (error.name === 'StateMachineDoesNotExist') {
-      return null;
-    }
-    console.error('Error checking Step Function status:', error);
+    if (error.name === 'StateMachineDoesNotExist') return null;
     return null;
   }
 }
 
-/**
- * Check CloudFormation stack status
- */
 async function checkCloudFormationStatus(stackName: string): Promise<string | null> {
   try {
-    const response = await cfnClient.send(new DescribeStacksCommand({
-      StackName: stackName,
-    }));
-    
-    const stack = response.Stacks?.[0];
-    return stack?.StackStatus || null;
+    const response = await cfnClient.send(new DescribeStacksCommand({ StackName: stackName }));
+    return response.Stacks?.[0]?.StackStatus || null;
   } catch (error: any) {
-    if (error.name === 'ValidationError' && error.message.includes('does not exist')) {
-      return 'DELETE_COMPLETE';
-    }
-    console.error('Error checking CloudFormation status:', error);
+    if (error.name === 'ValidationError' && error.message.includes('does not exist')) return 'DELETE_COMPLETE';
     return null;
   }
 }
 
-/**
- * Update workflow deployment status in database
- */
 async function updateWorkflowDeploymentStatus(
-  workflowId: string, 
-  userId: string, 
+  workflowId: string,
   updates: { deploymentStatus: string; isDeployed: boolean; updatedAt: string }
 ): Promise<void> {
-  try {
-    await docClient.send(new UpdateCommand({
-      TableName: WORKFLOWS_TABLE,
-      Key: {
-        PK: `USER#${userId}`,
-        SK: `WORKFLOW#${workflowId}`,
-      },
-      UpdateExpression: 'SET deploymentStatus = :status, isDeployed = :deployed, updatedAt = :updatedAt',
-      ExpressionAttributeValues: {
-        ':status': updates.deploymentStatus,
-        ':deployed': updates.isDeployed,
-        ':updatedAt': updates.updatedAt,
-      },
-    }));
-  } catch (error) {
-    console.error('Error updating workflow deployment status:', error);
-    throw error;
-  }
+  await docClient.send(new UpdateCommand({
+    TableName: WORKFLOWS_TABLE,
+    Key: { PK: `WORKFLOW#${workflowId}`, SK: 'META' },
+    UpdateExpression: 'SET deploymentStatus = :status, isDeployed = :deployed, updatedAt = :updatedAt',
+    ExpressionAttributeValues: {
+      ':status': updates.deploymentStatus,
+      ':deployed': updates.isDeployed,
+      ':updatedAt': updates.updatedAt,
+    },
+  }));
 }

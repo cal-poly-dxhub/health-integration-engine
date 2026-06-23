@@ -7,7 +7,16 @@ interface WorkflowListProps {
   loading?: boolean;
   error?: string;
   username?: string;
+  /** teamId -> human-friendly team name. Falls back to teamId on miss. */
+  teamNamesById?: Record<string, string>;
+  /** When provided, returns whether the caller can write to a given workflow's team.
+   *  Rows where this is false hide edit / delete / duplicate actions. */
+  canWriteWorkflow?: (workflow: WorkflowMetadata) => boolean;
   onCreateNew: () => void;
+  /** When false, the create button is disabled (e.g. a read-only team is selected). */
+  canCreate?: boolean;
+  /** Tooltip explaining why creation is disabled. */
+  createDisabledReason?: string;
   onEditWorkflow: (workflowId: string) => void;
   onViewWorkflow?: (workflowId: string) => void;
   onDeleteWorkflow: (workflowId: string) => void;
@@ -27,7 +36,11 @@ const WorkflowList: React.FC<WorkflowListProps> = ({
   workflows,
   loading = false,
   error,
+  teamNamesById,
+  canWriteWorkflow,
   onCreateNew,
+  canCreate = true,
+  createDisabledReason,
   onEditWorkflow,
   onViewWorkflow,
   onDeleteWorkflow,
@@ -153,27 +166,32 @@ const WorkflowList: React.FC<WorkflowListProps> = ({
               <RefreshIcon />
             </button>
           )}
-          <button
-            type="button"
-            className="wfl-btn wfl-btn--primary"
-            onClick={onCreateNew}
-            disabled={isCreating}
+          <span
+            title={!canCreate ? createDisabledReason : undefined}
+            style={{ display: 'inline-flex' }}
           >
-            {isCreating ? (
-              <>
-                <span
-                  className="wfl-spinner-sm"
-                  aria-hidden="true"
-                />
-                Creating…
-              </>
-            ) : (
-              <>
-                <PlusIcon />
-                Create workflow
-              </>
-            )}
-          </button>
+            <button
+              type="button"
+              className="wfl-btn wfl-btn--primary"
+              onClick={onCreateNew}
+              disabled={isCreating || !canCreate}
+            >
+              {isCreating ? (
+                <>
+                  <span
+                    className="wfl-spinner-sm"
+                    aria-hidden="true"
+                  />
+                  Creating…
+                </>
+              ) : (
+                <>
+                  <PlusIcon />
+                  Create workflow
+                </>
+              )}
+            </button>
+          </span>
         </div>
       </header>
 
@@ -275,15 +293,20 @@ const WorkflowList: React.FC<WorkflowListProps> = ({
               Get started by creating your first AWS Step Functions workflow.
             </p>
             <div className="wfl-state-actions">
-              <button
-                type="button"
-                onClick={onCreateNew}
-                className="wfl-btn wfl-btn--primary"
-                disabled={isCreating}
+              <span
+                title={!canCreate ? createDisabledReason : undefined}
+                style={{ display: 'inline-flex' }}
               >
-                <PlusIcon />
-                Create workflow
-              </button>
+                <button
+                  type="button"
+                  onClick={onCreateNew}
+                  className="wfl-btn wfl-btn--primary"
+                  disabled={isCreating || !canCreate}
+                >
+                  <PlusIcon />
+                  Create workflow
+                </button>
+              </span>
             </div>
           </div>
         ) : (
@@ -314,7 +337,8 @@ const WorkflowList: React.FC<WorkflowListProps> = ({
           <table className="wfl-table">
             <thead>
               <tr>
-                <th style={{ width: '40%' }}>Name</th>
+                <th style={{ width: '36%' }}>Name</th>
+                <th>Team</th>
                 <th>Created</th>
                 <th>Modified</th>
                 <th>Status</th>
@@ -341,11 +365,21 @@ const WorkflowList: React.FC<WorkflowListProps> = ({
                       </p>
                     )}
                   </td>
+                  <td data-label="Team">
+                    {workflow.teamId
+                      ? (teamNamesById?.[workflow.teamId] || workflow.teamId)
+                      : <span style={{ color: '#9ca3af' }}>—</span>}
+                  </td>
                   <td className="wfl-cell-date" data-label="Created">
                     {formatDate(workflow.createdAt)}
                   </td>
                   <td className="wfl-cell-date" data-label="Modified">
-                    {formatDate(workflow.updatedAt)}
+                    <div>{formatDate(workflow.updatedAt)}</div>
+                    {workflow.updatedByEmail && (
+                      <div style={{ fontSize: 11, color: '#6b7280', marginTop: 2 }}>
+                        by {workflow.updatedByEmail}
+                      </div>
+                    )}
                   </td>
                   <td>
                     <StatusBadge
@@ -355,48 +389,70 @@ const WorkflowList: React.FC<WorkflowListProps> = ({
                   </td>
                   <td style={{ textAlign: 'right' }}>
                     <div className="wfl-actions">
-                      <button
-                        type="button"
-                        className="wfl-action wfl-action--edit"
-                        onClick={() => onEditWorkflow(workflow.id)}
-                        title="Edit workflow"
-                        aria-label={`Edit ${workflow.name}`}
-                      >
-                        <EditIcon />
-                      </button>
-                      <button
-                        type="button"
-                        className="wfl-action"
-                        onClick={() =>
-                          onViewWorkflow
-                            ? onViewWorkflow(workflow.id)
-                            : onEditWorkflow(workflow.id)
-                        }
-                        title="View workflow details"
-                        aria-label={`View ${workflow.name}`}
-                      >
-                        <EyeIcon />
-                      </button>
-                      {onDuplicateWorkflow && (
-                        <button
-                          type="button"
-                          className="wfl-action"
-                          onClick={() => onDuplicateWorkflow(workflow.id)}
-                          title="Duplicate workflow"
-                          aria-label={`Duplicate ${workflow.name}`}
-                        >
-                          <CopyIcon />
-                        </button>
-                      )}
-                      <button
-                        type="button"
-                        className="wfl-action wfl-action--danger"
-                        onClick={() => onDeleteWorkflow(workflow.id)}
-                        title="Delete workflow"
-                        aria-label={`Delete ${workflow.name}`}
-                      >
-                        <TrashIcon />
-                      </button>
+                      {(() => {
+                        const canWrite = canWriteWorkflow ? canWriteWorkflow(workflow) : true;
+                        return (
+                          <>
+                            {/* Writers get the edit (pencil) icon → canvas editor.
+                                Readers get the eye icon → canvas in read-only mode.
+                                Both get the details (view) icon → WorkflowDetails. */}
+                            {canWrite ? (
+                              <button
+                                type="button"
+                                className="wfl-action wfl-action--edit"
+                                onClick={() => onEditWorkflow(workflow.id)}
+                                title="Edit workflow"
+                                aria-label={`Edit ${workflow.name}`}
+                              >
+                                <EditIcon />
+                              </button>
+                            ) : (
+                              <button
+                                type="button"
+                                className="wfl-action wfl-action--edit"
+                                onClick={() => onEditWorkflow(workflow.id)}
+                                title="View canvas (read-only)"
+                                aria-label={`View canvas for ${workflow.name}`}
+                              >
+                                <EyeIcon />
+                              </button>
+                            )}
+                            {onViewWorkflow && (
+                              <button
+                                type="button"
+                                className="wfl-action"
+                                onClick={() => onViewWorkflow(workflow.id)}
+                                title="View workflow details"
+                                aria-label={`View details for ${workflow.name}`}
+                              >
+                                <DetailsIcon />
+                              </button>
+                            )}
+                            {canWrite && onDuplicateWorkflow && (
+                              <button
+                                type="button"
+                                className="wfl-action"
+                                onClick={() => onDuplicateWorkflow(workflow.id)}
+                                title="Duplicate workflow"
+                                aria-label={`Duplicate ${workflow.name}`}
+                              >
+                                <CopyIcon />
+                              </button>
+                            )}
+                            {canWrite && (
+                              <button
+                                type="button"
+                                className="wfl-action wfl-action--danger"
+                                onClick={() => onDeleteWorkflow(workflow.id)}
+                                title="Delete workflow"
+                                aria-label={`Delete ${workflow.name}`}
+                              >
+                                <TrashIcon />
+                              </button>
+                            )}
+                          </>
+                        );
+                      })()}
                     </div>
                   </td>
                 </tr>
@@ -523,6 +579,16 @@ function TrashIcon() {
       <path d="m19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" />
       <line x1="10" y1="11" x2="10" y2="17" />
       <line x1="14" y1="11" x2="14" y2="17" />
+    </svg>
+  );
+}
+
+function DetailsIcon() {
+  return (
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <rect x="3" y="3" width="18" height="18" rx="2" />
+      <line x1="3" y1="9" x2="21" y2="9" />
+      <line x1="9" y1="21" x2="9" y2="9" />
     </svg>
   );
 }

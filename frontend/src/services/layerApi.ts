@@ -11,6 +11,7 @@ export interface LayerMetadata {
   version: number;
   sizeBytes?: number;
   createdAt: string;
+  teamId?: string;
 }
 
 export interface UploadUrlResponse {
@@ -27,6 +28,7 @@ export interface CreateLayerRequest {
   compatibleRuntimes: string[];
   compatibleArchitectures: string[];
   s3Key: string;
+  teamId: string;
 }
 
 export interface LayerInUseError {
@@ -36,13 +38,14 @@ export interface LayerInUseError {
 }
 
 class LayerApiService {
-  async listLayers(): Promise<LayerMetadata[]> {
-    const response = await apiService.get<{ layers: LayerMetadata[] }>('/layers');
+  async listLayers(teamId?: string): Promise<LayerMetadata[]> {
+    const url = teamId ? `/layers?teamId=${encodeURIComponent(teamId)}` : '/layers';
+    const response = await apiService.get<{ layers: LayerMetadata[] }>(url);
     return response.layers;
   }
 
-  async getUploadUrl(name: string): Promise<UploadUrlResponse> {
-    return await apiService.post<UploadUrlResponse>('/layers/upload-url', { name });
+  async getUploadUrl(name: string, teamId: string): Promise<UploadUrlResponse> {
+    return await apiService.post<UploadUrlResponse>('/layers/upload-url', { name, teamId });
   }
 
   /**

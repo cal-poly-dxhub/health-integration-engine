@@ -27,8 +27,6 @@
     "deploy:frontend:staging": "tsx scripts/deployment/deploy-frontend.ts --env=staging",
     "deploy:frontend:prod": "tsx scripts/deployment/deploy-frontend.ts --env=production",
     "deploy:production": "tsx scripts/deployment/deploy-frontend.ts --env=production --skip-validation --auto-approve --skip-linting --verbose",
-    "deploy:direct": "tsx scripts/deployment/deploy-frontend-direct.ts",
-    "deploy:direct:prod": "tsx scripts/deployment/deploy-frontend-direct.ts --env=production",
     "deploy:frontend:rollback": "tsx scripts/deployment/rollback-frontend.ts",
     "deploy:status": "tsx scripts/deployment/deployment-status.ts",
     "deploy:validate": "tsx scripts/deployment/validate-deployment.ts"
@@ -38,7 +36,7 @@
     "@aws-sdk/credential-providers": "^3.913.0",
     "@monaco-editor/react": "^4.4.6",
     "@reduxjs/toolkit": "^1.9.3",
-    "axios": "1.6.8",
+    "axios": "^1.12.0",
     "buffer": "^4.9.2",
     "cross-fetch": "^4.1.0",
     "process": "^0.11.10",

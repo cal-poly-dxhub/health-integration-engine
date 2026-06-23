@@ -1,4 +1,5 @@
 import { Workflow } from '../types/workflow';
+import { isValidBucketName } from '../utils/bucketName';
 
 /**
  * IAM Permission Analyzer - analyzes workflow nodes to determine required permissions
@@ -73,9 +74,6 @@ export class IAMPermissionAnalyzer {
       case 'lambda':
         return this.getLambdaPermissions(workflowId);
 
-      case 'database':
-        return this.getDatabasePermissions(config);
-
       case 'opensearch':
         return this.getOpenSearchPermissions(workflowId);
 
@@ -93,7 +91,14 @@ export class IAMPermissionAnalyzer {
    */
   private static getS3Permissions(config: any): { actions: string[], resources: string[] } {
     const operation = config.operation || 'write';
-    const bucketName = config.bucketName || '*';
+    const bucketName = (config.bucketName || '').trim();
+    if (!isValidBucketName(bucketName)) {
+      // Fail closed: an invalid/wildcard bucket name could grant account-wide S3 access.
+      throw new Error(
+        'S3 node has an invalid or missing bucket name. Use a valid S3 bucket name so the workflow role is not granted account-wide S3 access.'
+      );
+    }
+    // An object-key wildcard is scoped to the specific bucket above, so it is safe.
     const objectKey = config.objectKey || '*';
     
     const bucketArn = `arn:aws:s3:::${bucketName}`;
@@ -125,25 +130,6 @@ export class IAMPermissionAnalyzer {
       actions: ['lambda:InvokeFunction'],
       resources: [functionArn],
     };
-  }
-
-  /**
-   * Get Database-specific permissions (DynamoDB)
-   */
-  private static getDatabasePermissions(config: any): { actions: string[], resources: string[] } {
-    const operation = config.operation || 'read';
-    const tableName = config.tableName || '*';
-    const tableArn = `arn:aws:dynamodb:*:*:table/${tableName}`;
-
-    const operationPermissions: Record<string, string[]> = {
-      read: ['dynamodb:GetItem', 'dynamodb:Query', 'dynamodb:Scan'],
-      write: ['dynamodb:PutItem', 'dynamodb:UpdateItem'],
-      delete: ['dynamodb:DeleteItem'],
-    };
-
-    const actions = operationPermissions[operation] || operationPermissions.read;
-    
-    return { actions, resources: [tableArn] };
   }
 
   /**

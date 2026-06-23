@@ -45,8 +45,11 @@ export const useWorkflows = (params: ListWorkflowsParams = {}) => {
         id: workflow.id,
         name: workflow.name,
         description: workflow.description,
+        teamId: workflow.teamId,
         createdAt: workflow.createdAt,
         updatedAt: workflow.updatedAt,
+        updatedBy: workflow.updatedBy,
+        updatedByEmail: workflow.updatedByEmail,
         isDeployed: workflow.isDeployed || false,
         deploymentStatus: workflow.deploymentStatus,
         stepFunctionArn: workflow.stepFunctionArn,
@@ -158,16 +161,19 @@ export const useWorkflows = (params: ListWorkflowsParams = {}) => {
     // No cleanup needed here as it's handled in the main WebSocket effect
   }, [activeDeployments, handleDeploymentUpdate]);
 
-  // Initial load
+  // Initial load + reload when team filter changes.
+  // Pass teamId explicitly so loadWorkflows doesn't use a stale closure.
   useEffect(() => {
-    loadWorkflows();
-  }, []); // Empty dependency array - only run once on mount
+    loadWorkflows({ teamId: params.teamId });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [params.teamId]);
 
 
-  // Create workflow with optimistic update
-  const createWorkflow = useCallback(async (name: string, description?: string) => {
+  // Create workflow with optimistic update.
+  // teamId is required when the caller belongs to multiple writer-teams; the
+  // backend defaults to the caller's only team if there's just one.
+  const createWorkflow = useCallback(async (name: string, description?: string, teamId?: string) => {
     try {
-      // Optimistic update
       const tempId = `temp-${Date.now()}`;
       const optimisticWorkflow: WorkflowMetadata = {
         id: tempId,
@@ -184,21 +190,24 @@ export const useWorkflows = (params: ListWorkflowsParams = {}) => {
         workflows: [optimisticWorkflow, ...prev.workflows],
       }));
 
-      // Save to backend
       const response = await workflowApiService.saveWorkflow({
         name,
         description,
         nodes: [],
         connections: [],
-      });
+        ...(teamId ? { teamId } : {}),
+      } as any, { autoResolveName: true });
       
       // Replace optimistic update with real data
       const realWorkflowMetadata: WorkflowMetadata = {
         id: response.workflow.id,
         name: response.workflow.name,
         description: response.workflow.description,
+        teamId: response.workflow.teamId,
         createdAt: response.workflow.createdAt,
         updatedAt: response.workflow.updatedAt,
+        updatedBy: response.workflow.updatedBy,
+        updatedByEmail: response.workflow.updatedByEmail,
         isDeployed: response.workflow.isDeployed || false,
         deploymentStatus: response.workflow.deploymentStatus,
         nodeCount: response.workflow.nodes?.length || 0,
@@ -206,19 +215,17 @@ export const useWorkflows = (params: ListWorkflowsParams = {}) => {
 
       setState(prev => ({
         ...prev,
-        workflows: prev.workflows.map(w => 
+        workflows: prev.workflows.map(w =>
           w.id === tempId ? realWorkflowMetadata : w
         ),
       }));
 
       return realWorkflowMetadata;
     } catch (error) {
-      // Remove optimistic update on error
       setState(prev => ({
         ...prev,
         workflows: prev.workflows.filter(w => !w.id.startsWith('temp-')),
       }));
-      
       console.error('Failed to create workflow:', error);
       throw error;
     }
@@ -408,18 +415,20 @@ export const useWorkflows = (params: ListWorkflowsParams = {}) => {
   }, [state.workflows]);
 
   // Duplicate workflow
-  const duplicateWorkflow = useCallback(async (workflowId: string) => {
+  const duplicateWorkflow = useCallback(async (workflowId: string, teamId?: string) => {
     try {
       // Get the full workflow
       const originalWorkflow = await workflowApiService.getWorkflow(workflowId);
-      
-      // Create a copy
+
+      // Create a copy. teamId determines which team the copy belongs to;
+      // defaults to the source workflow's team when not explicitly chosen.
       const response = await workflowApiService.saveWorkflow({
         name: `${originalWorkflow.name} (Copy)`,
         description: originalWorkflow.description,
+        teamId: teamId || originalWorkflow.teamId,
         nodes: originalWorkflow.nodes,
         connections: originalWorkflow.connections,
-      });
+      }, { autoResolveName: true });
 
       const duplicatedMetadata: WorkflowMetadata = {
         id: response.workflow.id,
@@ -507,7 +516,12 @@ export const useWorkflows = (params: ListWorkflowsParams = {}) => {
 export const useWorkflow = (workflowId?: string) => {
   const [workflow, setWorkflow] = useState<Workflow | null>(null);
   const [loading, setLoading] = useState(!!workflowId);
-  const [error, setError] = useState<string | null>(null);
+  // loadError: workflow couldn't be fetched at all — render a full-page state.
+  // saveError: a save attempt failed but the page is still usable — show inline.
+  // Mixing them as one `error` field caused failed saves to blank the canvas
+  // out as if the workflow no longer existed.
+  const [loadError, setLoadError] = useState<string | null>(null);
+  const [saveError, setSaveError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
 
   useEffect(() => {
@@ -519,13 +533,13 @@ export const useWorkflow = (workflowId?: string) => {
   const loadWorkflow = async (id: string) => {
     try {
       setLoading(true);
-      setError(null);
-      
+      setLoadError(null);
+
       const workflowData = await workflowApiService.getWorkflow(id);
       setWorkflow(workflowData);
     } catch (err) {
       console.error('Failed to load workflow:', err);
-      setError(err instanceof Error ? err.message : 'Failed to load workflow');
+      setLoadError(err instanceof Error ? err.message : 'Failed to load workflow');
     } finally {
       setLoading(false);
     }
@@ -536,38 +550,43 @@ export const useWorkflow = (workflowId?: string) => {
 
     try {
       setSaving(true);
-      setError(null);
+      setSaveError(null);
 
       const updatedWorkflowData = {
         ...workflow,
         ...workflowData,
       };
 
-      // Validate before saving
       const validation = workflowApiService.validateWorkflow(updatedWorkflowData);
       if (!validation.isValid) {
         throw new Error(validation.errors.join(', '));
       }
 
-      // Optimistic update
       setWorkflow(updatedWorkflowData);
 
-      // Save to backend - remove version to avoid conflicts
       // eslint-disable-next-line @typescript-eslint/no-unused-vars
       const { version, ...workflowDataToSave } = updatedWorkflowData;
       const response = await workflowApiService.saveWorkflow(workflowDataToSave);
-      
+
       setWorkflow(response.workflow);
       return response.workflow;
     } catch (err) {
       console.error('Failed to save workflow:', err);
-      
-      // Rollback optimistic update on error
+
+      // Rollback optimistic update — but DO NOT set loadError here. A failed
+      // save (e.g. 403 for a reader) shouldn't replace the whole canvas with
+      // a "Failed to load workflow" screen.
       if (workflowId) {
-        await loadWorkflow(workflowId);
+        try {
+          const fresh = await workflowApiService.getWorkflow(workflowId);
+          setWorkflow(fresh);
+        } catch {
+          // Reload itself failed — leave the optimistic copy in place rather
+          // than blanking out the page. Saving is what the user cares about.
+        }
       }
-      
-      setError(err instanceof Error ? err.message : 'Failed to save workflow');
+
+      setSaveError(err instanceof Error ? err.message : 'Failed to save workflow');
       throw err;
     } finally {
       setSaving(false);
@@ -580,11 +599,18 @@ export const useWorkflow = (workflowId?: string) => {
     }
   }, [workflowId]);
 
+  const clearSaveError = useCallback(() => setSaveError(null), []);
+
   return {
     workflow,
     loading,
     saving,
-    error,
+    // Backwards-compat: existing consumers expect `error`. Keep it as a
+    // load-error alias; new code should distinguish via loadError/saveError.
+    error: loadError,
+    loadError,
+    saveError,
+    clearSaveError,
     saveWorkflow,
     refreshWorkflow,
   };

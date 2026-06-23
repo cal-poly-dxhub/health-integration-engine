@@ -3,6 +3,7 @@ import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { Workflow } from '../../types/workflow';
 import { useWorkflows } from '../../hooks/useWorkflows';
 import { useDocumentTitle } from '../../hooks/useDocumentTitle';
+import { useMe } from '../../contexts/MeContext';
 import {
   stepFunctionsService,
   StepFunctionExecution,
@@ -13,6 +14,8 @@ import ExecutionDetails from './ExecutionDetails';
 import DeleteWorkflowModal from './DeleteWorkflowModal';
 import DeploymentStatusModal from './DeploymentStatusModal';
 import OpenSearchPanel from './OpenSearchPanel';
+import { teamApiService, WorkflowChangeEntry, ChangeAction } from '../../services/teamApi';
+import ChangeDiffView from '../ChangeDiffView';
 import './WorkflowDetails.css';
 
 interface WorkflowDetailsProps {
@@ -26,7 +29,7 @@ interface BatchProgress {
   running: boolean;
 }
 
-type TabKey = 'executions' | 'definition' | 'details' | 'search';
+type TabKey = 'executions' | 'definition' | 'details' | 'search' | 'changelog';
 
 const WorkflowDetails: React.FC<WorkflowDetailsProps> = ({
   workflow: propWorkflow,
@@ -36,11 +39,22 @@ const WorkflowDetails: React.FC<WorkflowDetailsProps> = ({
   const [searchParams, setSearchParams] = useSearchParams();
   const executionParam = searchParams.get('execution');
   const { getWorkflow, deleteWorkflow } = useWorkflows();
+  const { me, teamsById } = useMe();
 
   const [activeTab, setActiveTab] = useState<TabKey>('executions');
   const [workflow, setWorkflow] = useState<Workflow | null>(
     propWorkflow || null
   );
+
+  // Reader-only on this workflow's team? Hide Edit / Delete / Deploy actions.
+  const isReadOnly = (() => {
+    if (!workflow) return false;
+    if (!me) return false;
+    if (me.isAdmin) return false;
+    const membership = teamsById[workflow.teamId];
+    if (!membership) return true;
+    return membership.role !== 'writer';
+  })();
   const [stateMachineDetails, setStateMachineDetails] =
     useState<StateMachineDetails | null>(null);
   const [executions, setExecutions] = useState<StepFunctionExecution[]>([]);
@@ -60,6 +74,9 @@ const WorkflowDetails: React.FC<WorkflowDetailsProps> = ({
   const [showDeploymentModal, setShowDeploymentModal] = useState(false);
   const [deploymentId, setDeploymentId] = useState<string>('');
   const [deletionStatus, setDeletionStatus] = useState<string>('');
+
+  const [changelogEntries, setChangelogEntries] = useState<WorkflowChangeEntry[]>([]);
+  const [changelogLoading, setChangelogLoading] = useState(false);
 
   const [selectedExecutions, setSelectedExecutions] = useState<Set<string>>(
     new Set()
@@ -402,6 +419,7 @@ const WorkflowDetails: React.FC<WorkflowDetailsProps> = ({
       <ExecutionDetails
         execution={selectedExecution}
         onClose={() => setSelectedExecution(null)}
+        isReadOnly={isReadOnly}
       />
     );
   }
@@ -415,7 +433,20 @@ const WorkflowDetails: React.FC<WorkflowDetailsProps> = ({
       label: 'Message Search',
       enabled: import.meta.env.VITE_ENABLE_OPENSEARCH !== 'false',
     },
+    { key: 'changelog', label: 'Changelog', enabled: true },
   ];
+
+  const handleTabChange = (key: TabKey) => {
+    setActiveTab(key);
+    if (key === 'changelog' && workflowId && changelogEntries.length === 0) {
+      setChangelogLoading(true);
+      teamApiService
+        .getWorkflowChangelog(workflowId)
+        .then(setChangelogEntries)
+        .catch(console.error)
+        .finally(() => setChangelogLoading(false));
+    }
+  };
 
   const allChecked =
     filteredExecutions.length > 0 &&
@@ -442,26 +473,49 @@ const WorkflowDetails: React.FC<WorkflowDetailsProps> = ({
             {workflow.description && (
               <p className="wfd-description">{workflow.description}</p>
             )}
+            {workflow.updatedByEmail && (
+              <p style={{ fontSize: 12, color: '#6b7280', margin: '4px 0 0' }}>
+                Last edited by {workflow.updatedByEmail} · {formatDate(workflow.updatedAt)}
+              </p>
+            )}
           </div>
         </div>
 
         <div className="wfd-nav-right">
-          <button
-            type="button"
-            className="wfd-btn wfd-btn--danger"
-            onClick={handleDeleteWorkflow}
-          >
-            <TrashIcon />
-            Delete
-          </button>
-          <button
-            type="button"
-            className="wfd-btn wfd-btn--primary"
-            onClick={handleEditWorkflow}
-          >
-            <EditIcon />
-            Edit
-          </button>
+          {isReadOnly ? (
+            <span
+              style={{
+                fontSize: 12,
+                fontWeight: 500,
+                padding: '4px 10px',
+                borderRadius: 999,
+                background: '#f3f4f6',
+                color: '#4b5563',
+              }}
+              title="You have read-only access on this team. Ask an admin for writer access."
+            >
+              Read-only
+            </span>
+          ) : (
+            <>
+              <button
+                type="button"
+                className="wfd-btn wfd-btn--danger"
+                onClick={handleDeleteWorkflow}
+              >
+                <TrashIcon />
+                Delete
+              </button>
+              <button
+                type="button"
+                className="wfd-btn wfd-btn--primary"
+                onClick={handleEditWorkflow}
+              >
+                <EditIcon />
+                Edit
+              </button>
+            </>
+          )}
         </div>
       </nav>
 
@@ -478,7 +532,7 @@ const WorkflowDetails: React.FC<WorkflowDetailsProps> = ({
                   type="button"
                   role="tab"
                   aria-selected={activeTab === tab.key}
-                  onClick={() => setActiveTab(tab.key)}
+                  onClick={() => handleTabChange(tab.key)}
                   className={`wfd-tab${
                     activeTab === tab.key ? ' wfd-tab--active' : ''
                   }`}
@@ -503,7 +557,7 @@ const WorkflowDetails: React.FC<WorkflowDetailsProps> = ({
                   </span>
                 </h3>
                 <div className="wfd-pane-actions">
-                  {selectedExecutions.size > 0 && (
+                  {!isReadOnly && selectedExecutions.size > 0 && (
                     <button
                       type="button"
                       onClick={() => setShowBatchConfirmModal(true)}
@@ -864,6 +918,56 @@ const WorkflowDetails: React.FC<WorkflowDetailsProps> = ({
                 }
               />
             )}
+
+          {activeTab === 'changelog' && (
+            <div className="wfd-pane">
+              <div className="wfd-pane-head">
+                <h3 className="wfd-pane-title">
+                  Changelog{' '}
+                  <span className="wfd-pane-title-count">
+                    ({changelogEntries.length})
+                  </span>
+                </h3>
+                <div className="wfd-pane-actions">
+                  <button
+                    type="button"
+                    className="wfd-btn"
+                    disabled={changelogLoading}
+                    onClick={() => {
+                      if (!workflowId) return;
+                      setChangelogLoading(true);
+                      teamApiService
+                        .getWorkflowChangelog(workflowId)
+                        .then(setChangelogEntries)
+                        .catch(console.error)
+                        .finally(() => setChangelogLoading(false));
+                    }}
+                  >
+                    <RefreshIcon />
+                    {changelogLoading ? 'Refreshing…' : 'Refresh'}
+                  </button>
+                </div>
+              </div>
+              {changelogLoading ? (
+                <div className="wfd-state">
+                  <span className="wfd-state-spinner" aria-hidden="true" />
+                  <p className="wfd-state-sub">Loading changelog…</p>
+                </div>
+              ) : changelogEntries.length === 0 ? (
+                <div className="wfd-state">
+                  <span className="wfd-state-icon" aria-hidden="true">
+                    <ClockIcon />
+                  </span>
+                  <h3 className="wfd-state-title">No changes recorded yet</h3>
+                  <p className="wfd-state-sub">
+                    Edits, deploys, and deletions for this workflow will appear here.
+                  </p>
+                </div>
+              ) : (
+                <ChangelogTable entries={changelogEntries} />
+              )}
+            </div>
+          )}
         </div>
       </div>
 
@@ -1036,6 +1140,100 @@ function ExecutionStatusBadge({ status }: { status: string }) {
 
 /* ---------- Inline SVG icons ---------- */
 
+function ChangelogTable({ entries }: { entries: WorkflowChangeEntry[] }) {
+  const [expanded, setExpanded] = React.useState<Set<string>>(new Set());
+
+  const toggle = (sk: string) => {
+    setExpanded(prev => {
+      const next = new Set(prev);
+      next.has(sk) ? next.delete(sk) : next.add(sk);
+      return next;
+    });
+  };
+
+  return (
+    <div className="wfd-table-wrap">
+      <table className="wfd-table">
+        <thead>
+          <tr>
+            <th>When</th>
+            <th>Action</th>
+            <th>By</th>
+            <th></th>
+          </tr>
+        </thead>
+        <tbody>
+          {entries.map((entry) => {
+            const isOpen = expanded.has(entry.sk);
+            const metaEntries = entry.meta ? Object.entries(entry.meta) : [];
+            return (
+              <React.Fragment key={entry.sk}>
+                <tr className={isOpen ? 'wfd-row--selected' : undefined}>
+                  <td style={{ whiteSpace: 'nowrap' }}>
+                    {new Date(entry.timestamp).toLocaleString()}
+                  </td>
+                  <td>
+                    <ChangeActionBadge action={entry.action} />
+                  </td>
+                  <td>{entry.actorEmail || entry.actorUserId}</td>
+                  <td style={{ textAlign: 'right' }}>
+                    <button
+                      type="button"
+                      className="wfd-btn"
+                      onClick={() => toggle(entry.sk)}
+                      style={{ padding: '3px 10px', fontSize: 12 }}
+                    >
+                      {isOpen ? '▲ Less' : '▼ Details'}
+                    </button>
+                  </td>
+                </tr>
+                {isOpen && (
+                  <tr className="wfd-row--selected">
+                    <td colSpan={4} style={{ paddingLeft: 28 }}>
+                      {entry.changes ? (
+                        <ChangeDiffView diff={entry.changes} />
+                      ) : metaEntries.length > 0 ? (
+                        <dl style={{ margin: 0, display: 'grid', gridTemplateColumns: 'max-content 1fr', gap: '4px 16px', fontSize: 12 }}>
+                          {metaEntries.map(([k, v]) => (
+                            <React.Fragment key={k}>
+                              <dt style={{ color: 'var(--wfd-text-muted)', fontWeight: 500 }}>{k}</dt>
+                              <dd style={{ margin: 0, color: 'var(--wfd-text)', fontFamily: 'monospace', wordBreak: 'break-all' }}>{v}</dd>
+                            </React.Fragment>
+                          ))}
+                        </dl>
+                      ) : (
+                        <span style={{ fontSize: 12, color: 'var(--wfd-text-muted)', fontStyle: 'italic' }}>No additional details recorded.</span>
+                      )}
+                    </td>
+                  </tr>
+                )}
+              </React.Fragment>
+            );
+          })}
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
+function ChangeActionBadge({ action }: { action: ChangeAction }) {
+  const styles: Record<ChangeAction, { bg: string; color: string; label: string }> = {
+    created:          { bg: '#dbeafe', color: '#1e40af', label: 'Created' },
+    saved:            { bg: '#f3f4f6', color: '#374151', label: 'Saved' },
+    deploy_triggered: { bg: '#fef3c7', color: '#92400e', label: 'Deploy triggered' },
+    deployed:         { bg: '#dcfce7', color: '#166534', label: 'Deployed' },
+    deploy_failed:    { bg: '#fef2f2', color: '#b91c1c', label: 'Deploy failed' },
+    delete_triggered: { bg: '#fef2f2', color: '#b91c1c', label: 'Delete triggered' },
+    deleted:          { bg: '#f1f5f9', color: '#64748b', label: 'Deleted' },
+  };
+  const s = styles[action] || { bg: '#f3f4f6', color: '#374151', label: action };
+  return (
+    <span style={{ display: 'inline-block', padding: '2px 8px', borderRadius: 999, fontSize: 11, fontWeight: 500, background: s.bg, color: s.color }}>
+      {s.label}
+    </span>
+  );
+}
+
 function ArrowLeftIcon() {
   return (
     <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -1088,6 +1286,15 @@ function AlertIcon() {
       <circle cx="12" cy="12" r="10" />
       <path d="M12 8v4" />
       <path d="M12 16h.01" />
+    </svg>
+  );
+}
+
+function ClockIcon() {
+  return (
+    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <circle cx="12" cy="12" r="10" />
+      <polyline points="12 6 12 12 16 14" />
     </svg>
   );
 }

@@ -4,6 +4,7 @@ import { HTML5Backend } from 'react-dnd-html5-backend';
 import { useNavigate, useParams } from 'react-router-dom';
 import { Connection, WorkflowNode } from '../../types/workflow';
 import { useWorkflow } from '../../hooks/useWorkflows';
+import { useMe } from '../../contexts/MeContext';
 import {
   DeploymentService,
   DeploymentStatus,
@@ -22,7 +23,26 @@ const CONFIGURABLE_TYPES = ['s3', 'lambda', 'opensearch'];
 const WorkflowCanvasContent: React.FC = () => {
   const { workflowId } = useParams<{ workflowId?: string }>();
   const navigate = useNavigate();
-  const { workflow, loading, error, saveWorkflow } = useWorkflow(workflowId);
+  const {
+    workflow,
+    loading,
+    error,
+    saveError,
+    clearSaveError,
+    saveWorkflow,
+  } = useWorkflow(workflowId);
+  const { me, teamsById } = useMe();
+
+  // Determine the caller's effective role on this workflow's team. Admins are
+  // implicit writers everywhere; otherwise consult their per-team membership.
+  const isReadOnly = (() => {
+    if (!workflow) return false;
+    if (!me) return false;
+    if (me.isAdmin) return false;
+    const membership = teamsById[workflow.teamId];
+    if (!membership) return true;             // not on the team at all → read-only (shouldn't normally happen)
+    return membership.role !== 'writer';
+  })();
 
   const [workflowName, setWorkflowName] = useState('Untitled Workflow');
   const [workflowDescription, setWorkflowDescription] = useState('');
@@ -164,6 +184,8 @@ const WorkflowCanvasContent: React.FC = () => {
   const [{ isOver }, drop] = useDrop({
     accept: ['node-type', 'workflow-node'],
     drop: (item: any, monitor) => {
+      // Read-only viewers can't add or move nodes.
+      if (isReadOnly) return;
       const offset = monitor.getClientOffset();
       if (offset && canvasRef.current) {
         const canvasRect = canvasRef.current.getBoundingClientRect();
@@ -222,6 +244,7 @@ const WorkflowCanvasContent: React.FC = () => {
 
   const deleteNode = useCallback(
     (nodeId: string) => {
+      if (isReadOnly) return;
       setNodes((prev) => prev.filter((node) => node.id !== nodeId));
       setConnections((prev) =>
         prev.filter(
@@ -231,7 +254,7 @@ const WorkflowCanvasContent: React.FC = () => {
       );
       if (selectedNode === nodeId) setSelectedNode(null);
     },
-    [selectedNode]
+    [selectedNode, isReadOnly]
   );
 
   const handleNodeSelect = useCallback(
@@ -247,6 +270,7 @@ const WorkflowCanvasContent: React.FC = () => {
 
   const handleConfigSave = useCallback(
     (nodeId: string, config: any) => {
+      if (isReadOnly) { setConfigModalOpen(false); return; }
       setNodes((prev) =>
         prev.map((node) =>
           node.id === nodeId
@@ -256,18 +280,19 @@ const WorkflowCanvasContent: React.FC = () => {
       );
       setConfigModalOpen(false);
     },
-    []
+    [isReadOnly]
   );
 
   const startConnection = useCallback(
     (sourceNodeId: string, sourceHandle: string) => {
+      if (isReadOnly) return;
       setIsConnecting({
         sourceNodeId,
         sourceHandle,
         mousePosition: { x: 0, y: 0 },
       });
     },
-    []
+    [isReadOnly]
   );
 
   const updateConnectionMouse = useCallback(
@@ -288,6 +313,7 @@ const WorkflowCanvasContent: React.FC = () => {
 
   const completeConnection = useCallback(
     (targetNodeId: string, targetHandle: string) => {
+      if (isReadOnly) { setIsConnecting(null); return; }
       if (isConnecting && isConnecting.sourceNodeId !== targetNodeId) {
         const newConnection: Connection = {
           id: `conn-${Date.now()}`,
@@ -300,12 +326,13 @@ const WorkflowCanvasContent: React.FC = () => {
       }
       setIsConnecting(null);
     },
-    [isConnecting, connections]
+    [isConnecting, connections, isReadOnly]
   );
 
   const deleteConnection = useCallback((connectionId: string) => {
+    if (isReadOnly) return;
     setConnections((prev) => prev.filter((conn) => conn.id !== connectionId));
-  }, []);
+  }, [isReadOnly]);
 
   const handleCanvasClick = useCallback((e: React.MouseEvent) => {
     if (e.target === e.currentTarget) {
@@ -315,19 +342,22 @@ const WorkflowCanvasContent: React.FC = () => {
   }, []);
 
   const handleWorkflowNameChange = useCallback((name: string) => {
+    if (isReadOnly) return;
     setWorkflowName(name);
     setHasUnsavedChanges(true);
-  }, []);
+  }, [isReadOnly]);
 
   const handleWorkflowDescriptionChange = useCallback((description: string) => {
+    if (isReadOnly) return;
     setWorkflowDescription(description);
     setHasUnsavedChanges(true);
-  }, []);
+  }, [isReadOnly]);
 
   /* ---------- Save / Deploy ---------- */
 
   const handleSave = useCallback(async () => {
     if (isSaving || !workflow) return;
+    if (isReadOnly) return;
     try {
       setIsSaving(true);
       isSavingRefRef.current = true;
@@ -367,10 +397,12 @@ const WorkflowCanvasContent: React.FC = () => {
     opensearchEnabled,
     opensearchIndexName,
     buildOpensearchNode,
+    isReadOnly,
   ]);
 
   const handleDeploy = useCallback(async () => {
     if (isDeploying || !workflow) return;
+    if (isReadOnly) return;
 
     const deployNodes = opensearchEnabled
       ? [...nodes, buildOpensearchNode()]
@@ -441,6 +473,7 @@ const WorkflowCanvasContent: React.FC = () => {
     hasUnsavedChanges,
     opensearchEnabled,
     buildOpensearchNode,
+    isReadOnly,
   ]);
 
   const loadLastDeploymentStatus = useCallback(async (deploymentId: string) => {
@@ -510,7 +543,8 @@ const WorkflowCanvasContent: React.FC = () => {
   }, [nodes, connections]);
 
   const handleBack = () => {
-    if (hasUnsavedChanges) {
+    // Readers can't save anything, so never prompt them on exit.
+    if (hasUnsavedChanges && !isReadOnly) {
       setConfirmLeave(true);
       return;
     }
@@ -599,6 +633,68 @@ const WorkflowCanvasContent: React.FC = () => {
 
   return (
     <div className="wfc-root">
+      {/* ---------- Inline banners ---------- */}
+      {isReadOnly && (
+        <div
+          role="status"
+          style={{
+            background: '#f1f5f9',
+            color: '#334155',
+            borderBottom: '1px solid #e2e8f0',
+            padding: '8px 16px',
+            fontSize: 13,
+            display: 'flex',
+            alignItems: 'center',
+            gap: 8,
+          }}
+        >
+          <span aria-hidden="true">
+            <AlertIcon />
+          </span>
+          <span>
+            You have read-only access on this team. Ask an admin for writer
+            access to make changes to this workflow.
+          </span>
+        </div>
+      )}
+      {saveError && (
+        <div
+          role="alert"
+          style={{
+            background: '#fef2f2',
+            color: '#b91c1c',
+            borderBottom: '1px solid #fecaca',
+            padding: '8px 16px',
+            fontSize: 13,
+            display: 'flex',
+            alignItems: 'center',
+            gap: 8,
+          }}
+        >
+          <span aria-hidden="true">
+            <AlertIcon />
+          </span>
+          <span style={{ flex: 1 }}>
+            Could not save: {saveError}
+          </span>
+          <button
+            type="button"
+            onClick={clearSaveError}
+            style={{
+              background: 'transparent',
+              border: 'none',
+              color: '#b91c1c',
+              cursor: 'pointer',
+              padding: 4,
+              fontSize: 18,
+              lineHeight: 1,
+            }}
+            aria-label="Dismiss"
+          >
+            ×
+          </button>
+        </div>
+      )}
       {/* ---------- Toolbar ---------- */}
       <div className="wfc-toolbar">
         <div className="wfc-toolbar-left">
@@ -613,6 +709,7 @@ const WorkflowCanvasContent: React.FC = () => {
               onChange={(e) => handleWorkflowNameChange(e.target.value)}
               className="wfc-name"
               placeholder="Workflow name"
+              readOnly={isReadOnly}
             />
             <input
               type="text"
@@ -623,13 +720,29 @@ const WorkflowCanvasContent: React.FC = () => {
               className="wfc-desc"
               placeholder="Add a description (optional)"
               aria-label="Workflow description"
+              readOnly={isReadOnly}
             />
             <div className="wfc-name-meta">
               {workflowId && (
                 <span className="wfc-id">ID: {workflowId}</span>
               )}
-              {hasUnsavedChanges && (
+              {hasUnsavedChanges && !isReadOnly && (
                 <span className="wfc-unsaved">Unsaved changes</span>
+              )}
+              {isReadOnly && (
+                <span
+                  style={{
+                    fontSize: 11,
+                    fontWeight: 500,
+                    padding: '2px 8px',
+                    borderRadius: 999,
+                    background: '#f3f4f6',
+                    color: '#4b5563',
+                  }}
+                  title="You have read-only access on this team. Ask an admin for writer access to edit this workflow."
+                >
+                  Read-only
+                </span>
               )}
             </div>
           </div>
@@ -647,17 +760,19 @@ const WorkflowCanvasContent: React.FC = () => {
             Auto layout
           </button>
 
-          <button
-            type="button"
-            onClick={handleSave}
-            className={`wfc-btn${
-              hasUnsavedChanges ? ' wfc-btn--has-changes' : ''
-            }`}
-            disabled={isSaving}
-          >
-            <SaveIcon />
-            {isSaving ? 'Saving…' : 'Save'}
-          </button>
+          {!isReadOnly && (
+            <button
+              type="button"
+              onClick={handleSave}
+              className={`wfc-btn${
+                hasUnsavedChanges ? ' wfc-btn--has-changes' : ''
+              }`}
+              disabled={isSaving}
+            >
+              <SaveIcon />
+              {isSaving ? 'Saving…' : 'Save'}
+            </button>
+          )}
 
           {isOpensearchEnabledFlag && (
             <>
@@ -688,36 +803,49 @@ const WorkflowCanvasContent: React.FC = () => {
             </>
           )}
 
-          <button
-            type="button"
-            onClick={handleDeploy}
-            className="wfc-btn wfc-btn--success"
-            disabled={deployButtonDisabled}
-            title={
-              hasUnsavedChanges
-                ? 'Save your changes before deploying'
-                : !workflowValidation.isValid
-                ? workflowValidation.reason
-                : 'Deploy to AWS Step Functions'
-            }
-          >
-            <RocketIcon />
-            {isDeploying ? 'Starting…' : 'Deploy to AWS'}
-          </button>
-
-          {lastDeploymentStatus && (
+          {!isReadOnly && (
             <button
               type="button"
-              onClick={() => {
-                setCurrentDeploymentId(lastDeploymentStatus.deploymentId);
-                setDeploymentModalOpen(true);
-              }}
-              className={`wfc-deploy-pill wfc-deploy-pill--${lastDeploymentStatus.status}`}
-              title={`Last deployment: ${lastDeploymentStatus.status.toUpperCase()}`}
+              onClick={handleDeploy}
+              className="wfc-btn wfc-btn--success"
+              disabled={deployButtonDisabled}
+              title={
+                hasUnsavedChanges
+                  ? 'Save your changes before deploying'
+                  : !workflowValidation.isValid
+                  ? workflowValidation.reason
+                  : 'Deploy to AWS Step Functions'
+              }
             >
-              <span className="wfc-deploy-pill-dot" aria-hidden="true" />
-              {deploymentLabel(lastDeploymentStatus.status)}
+              <RocketIcon />
+              {isDeploying ? 'Starting…' : 'Deploy to AWS'}
             </button>
+          )}
+
+          {lastDeploymentStatus && (
+            isReadOnly ? (
+              <span
+                className={`wfc-deploy-pill wfc-deploy-pill--${lastDeploymentStatus.status}`}
+                title={`Last deployment: ${lastDeploymentStatus.status.toUpperCase()}`}
+                style={{ cursor: 'default' }}
+              >
+                <span className="wfc-deploy-pill-dot" aria-hidden="true" />
+                {deploymentLabel(lastDeploymentStatus.status)}
+              </span>
+            ) : (
+              <button
+                type="button"
+                onClick={() => {
+                  setCurrentDeploymentId(lastDeploymentStatus.deploymentId);
+                  setDeploymentModalOpen(true);
+                }}
+                className={`wfc-deploy-pill wfc-deploy-pill--${lastDeploymentStatus.status}`}
+                title={`Last deployment: ${lastDeploymentStatus.status.toUpperCase()}`}
+              >
+                <span className="wfc-deploy-pill-dot" aria-hidden="true" />
+                {deploymentLabel(lastDeploymentStatus.status)}
+              </button>
+            )
           )}
         </div>
       </div>
@@ -752,7 +880,9 @@ const WorkflowCanvasContent: React.FC = () => {
 
       {/* ---------- Body ---------- */}
       <div className="wfc-body">
-        {leftPanelOpen ? (
+        {/* Readers can't drop new components onto the canvas, so the sidebar
+            (and its reopen button) are hidden entirely for them. */}
+        {!isReadOnly && (leftPanelOpen ? (
           <NodeSidebar onHide={() => setLeftPanelOpen(false)} />
         ) : (
           <button
@@ -765,7 +895,7 @@ const WorkflowCanvasContent: React.FC = () => {
             <ChevronRightIcon />
             <span>Components</span>
           </button>
-        )}
+        ))}
 
         <div
           ref={(node) => {
@@ -975,6 +1105,7 @@ const WorkflowCanvasContent: React.FC = () => {
           isOpen={configModalOpen}
           onClose={() => setConfigModalOpen(false)}
           onSave={handleConfigSave}
+          teamId={workflow?.teamId}
         />
       )}
 

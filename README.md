@@ -67,7 +67,6 @@ This project was built to simplify the orchestration of healthcare data processi
 |:-----|:------------|
 | **Start / End** | Workflow entry and exit points |
 | **Lambda** | AWS Lambda function invocation |
-| **Database** | DynamoDB and RDS Data API operations |
 | **S3** | S3 operations (get, put, list, delete) with event-driven triggers |
 | **OpenSearch** | Index processed data into Amazon OpenSearch Serverless for search and analytics |
 
@@ -243,8 +242,37 @@ Estimates assume **us-east-1** pricing and 1 million workflow executions per mon
 
 # Usage
 
+## First-time setup: bootstrap the first admin
+
+Self-signup is enabled, but new users land in a **pending** state with no team and no permissions. An admin must add them to a team before they can do anything.
+
+Admin status is stored in the **`WorkflowBuilder-Admins`** DynamoDB table and read live on every request, so promote/demote takes effect on the user's next request. The Cognito **`admins`** group is used only as a one-shot bootstrap: it grants admin **only while the Admins table is empty**. As soon as the first admin row exists, the group is ignored — a lingering group membership can never re-grant or undo admin.
+
+> **Bootstrap rule: add exactly ONE admin via the Cognito console. Create all other admins through the app.** Adding more than one console admin before any of them logs in is the only case the in-app self-heal can't fully cover — and is easily avoided by following this rule.
+
+To bootstrap the very first admin:
+
+1. Deploy the stack (this creates the `WorkflowBuilder-Admins` table).
+2. Sign up through the app (email + password, then confirm via the verification email).
+3. In the AWS Cognito console: open the user pool, find your user, and add them to the **`admins`** group.
+4. Sign in and open the admin page (`/admin`). The first privileged action **self-heals** a durable row into the Admins table for you, so your admin status no longer depends on the Cognito group.
+5. Use the admin page to create teams, add users to teams, and promote/demote other admins. After this, you never need to touch the Cognito console for admin tasks again — and you can safely remove yourself from the Cognito `admins` group.
+
+The admin page enforces a **last-admin guard** (counted from the Admins table): you cannot demote the only remaining admin. Promote a second admin first if you need to demote yourself.
+
+## Roles
+
+- **Admin** — Stored in the `WorkflowBuilder-Admins` table (bootstrapped once via the Cognito `admins` group). Full visibility across all teams; can manage teams/users; can read/write any workflow.
+- **Writer** — Per-team role. Can create, edit, deploy, and delete workflows owned by that team.
+- **Reader** — Per-team role. Read-only access to workflows owned by that team.
+- **Pending** — Authenticated user with no team memberships. Sees a "waiting for admin" screen; cannot use any workflow APIs.
+
+Every workflow shows "Last edited by `<email>` on `<date>`" so changes are attributable. All admin actions (team create/delete, member add/remove, role changes, admin promotion/demotion) are recorded in the **Audit log** tab on the admin page.
+
+## Day-to-day
+
 1. **Create a Workflow**: Click "Create New Workflow" from the dashboard
-2. **Add Nodes**: Drag and drop nodes (Lambda, S3, Database) onto the canvas
+2. **Add Nodes**: Drag and drop nodes (Lambda, S3, OpenSearch) onto the canvas
 3. **Connect Nodes**: Draw connections between nodes to define the execution flow
 4. **Configure Nodes**: Click a node to configure its properties (function ARN, bucket name, etc.)
 5. **Deploy**: Click "Deploy" to generate a CloudFormation template and deploy to AWS — real-time progress is shown in a step-by-step modal

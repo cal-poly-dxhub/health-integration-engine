@@ -5,9 +5,30 @@ import {
   LAMBDA_ARCHITECTURES,
   MAX_LAYER_ZIP_BYTES,
 } from '../../constants/lambdaRuntimes';
+import { useMe } from '../../contexts/MeContext';
 import './LayerManagement.css';
 
 const LayerManagement: React.FC = () => {
+  const { me, selectedTeamId, canWriteSelected, teamNamesById, teamsById, allTeamsForAdmin } = useMe();
+
+  // Teams the caller can create layers in — admins: all teams; others: their
+  // writer teams. Mirrors the workflow create-eligibility logic.
+  const eligibleCreateTeams = (() => {
+    if (!me) return [] as { teamId: string; name: string }[];
+    if (me.isAdmin) return allTeamsForAdmin;
+    return me.teams.filter(t => t.role === 'writer').map(t => ({ teamId: t.teamId, name: t.name }));
+  })();
+
+  // Create is gated exactly like workflows: disabled when a read-only team is
+  // selected, or when the user has no writer teams anywhere.
+  const canCreate = eligibleCreateTeams.length > 0 && !(selectedTeamId && !canWriteSelected);
+  const createDisabledReason =
+    selectedTeamId && !canWriteSelected
+      ? `You have read-only access to ${teamNamesById[selectedTeamId] || selectedTeamId}. Switch to a team where you have writer access to create layers.`
+      : eligibleCreateTeams.length === 0
+        ? 'You need writer access on at least one team to create layers.'
+        : undefined;
+
   const [layers, setLayers] = useState<LayerMetadata[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -16,6 +37,7 @@ const LayerManagement: React.FC = () => {
   const [creating, setCreating] = useState(false);
   const [formName, setFormName] = useState('');
   const [formDescription, setFormDescription] = useState('');
+  const [formTeamId, setFormTeamId] = useState('');
   const [formRuntimes, setFormRuntimes] = useState<string[]>([]);
   const [formArchitectures, setFormArchitectures] = useState<string[]>([
     'x86_64',
@@ -34,18 +56,46 @@ const LayerManagement: React.FC = () => {
     try {
       setLoading(true);
       setError(null);
-      const result = await layerApiService.listLayers();
+      const result = await layerApiService.listLayers(selectedTeamId || undefined);
       setLayers(result);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to load layers');
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [selectedTeamId]);
 
   useEffect(() => {
     loadLayers();
   }, [loadLayers]);
+
+  // Resolve the default target team for a new layer, then open the form.
+  const openCreateForm = () => {
+    const defaultTeam =
+      selectedTeamId && canWriteSelected
+        ? selectedTeamId
+        : eligibleCreateTeams.length === 1
+          ? eligibleCreateTeams[0].teamId
+          : '';
+    setFormTeamId(defaultTeam);
+    setShowCreateForm(true);
+  };
+
+  // The target team is locked only when you're viewing a specific writable
+  // team (that's the create context). When no team is selected ("All teams"),
+  // always show the selector so the user explicitly picks a team.
+  const teamIsLocked = Boolean(selectedTeamId && canWriteSelected);
+
+  // Whether the caller can delete a given layer (writer on its team, or admin).
+  const canWriteLayer = (layer: LayerMetadata): boolean => {
+    if (!me) return false;
+    if (me.isAdmin) return true;
+    if (!layer.teamId) return false;
+    return teamsById[layer.teamId]?.role === 'writer';
+  };
+
+  // Show a team column when not scoped to a single selected team.
+  const showTeamColumn = !selectedTeamId;
 
   const resetForm = () => {
     setFormName('');
@@ -110,6 +160,10 @@ const LayerManagement: React.FC = () => {
       setFormError('Upload a zip file');
       return;
     }
+    if (!formTeamId) {
+      setFormError('Select a team for this layer');
+      return;
+    }
 
     try {
       setCreating(true);
@@ -120,7 +174,7 @@ const LayerManagement: React.FC = () => {
         s3Key,
         layerId,
         contentType: signedContentType,
-      } = await layerApiService.getUploadUrl(trimmedName);
+      } = await layerApiService.getUploadUrl(trimmedName, formTeamId);
       await layerApiService.uploadFile(uploadUrl, formFile, signedContentType);
 
       await layerApiService.createLayer({
@@ -130,14 +184,17 @@ const LayerManagement: React.FC = () => {
         compatibleRuntimes: formRuntimes,
         compatibleArchitectures: formArchitectures,
         s3Key,
+        teamId: formTeamId,
       });
 
       setShowCreateForm(false);
       resetForm();
       await loadLayers();
-    } catch (err) {
+    } catch (err: any) {
+      // Prefer the backend's message (e.g. duplicate-name conflict).
+      const backendMsg = err?.response?.data?.error;
       setFormError(
-        err instanceof Error ? err.message : 'Failed to create layer'
+        backendMsg || (err instanceof Error ? err.message : 'Failed to create layer')
       );
     } finally {
       setCreating(false);
@@ -211,15 +268,20 @@ const LayerManagement: React.FC = () => {
             functions.
           </p>
         </div>
-        <button
-          type="button"
-          className="lyr-btn lyr-btn--primary"
-          onClick={() => setShowCreateForm(true)}
-          disabled={showCreateForm}
+        <span
+          title={!canCreate ? createDisabledReason : undefined}
+          style={{ display: 'inline-flex' }}
         >
-          <PlusIcon />
-          Create layer
-        </button>
+          <button
+            type="button"
+            className="lyr-btn lyr-btn--primary"
+            onClick={openCreateForm}
+            disabled={showCreateForm || !canCreate}
+          >
+            <PlusIcon />
+            Create layer
+          </button>
+        </span>
       </header>
 
       {error && (
@@ -229,11 +291,43 @@ const LayerManagement: React.FC = () => {
         </div>
       )}
 
-      {showCreateForm && (
+      {showCreateForm && canCreate && (
         <div className="lyr-form-card">
           <h3 className="lyr-form-title">Create new layer</h3>
 
           <form onSubmit={handleCreate} className="lyr-form-grid">
+            <div className="lyr-field">
+              <label htmlFor="lyr-team" className="lyr-label">
+                Team *
+              </label>
+              {teamIsLocked ? (
+                <input
+                  id="lyr-team"
+                  type="text"
+                  value={teamNamesById[formTeamId] || formTeamId}
+                  className="lyr-input"
+                  disabled
+                  readOnly
+                />
+              ) : (
+                <select
+                  id="lyr-team"
+                  value={formTeamId}
+                  onChange={(e) => setFormTeamId(e.target.value)}
+                  className="lyr-input"
+                  disabled={creating}
+                >
+                  <option value="" disabled>
+                    Select a team…
+                  </option>
+                  {eligibleCreateTeams.map((t) => (
+                    <option key={t.teamId} value={t.teamId}>
+                      {t.name}
+                    </option>
+                  ))}
+                </select>
+              )}
+            </div>
             <div className="lyr-row">
               <div className="lyr-field">
                 <label htmlFor="lyr-name" className="lyr-label">
@@ -393,14 +487,20 @@ const LayerManagement: React.FC = () => {
             workflow functions.
           </p>
           <div className="lyr-state-actions">
-            <button
-              type="button"
-              className="lyr-btn lyr-btn--primary"
-              onClick={() => setShowCreateForm(true)}
+            <span
+              title={!canCreate ? createDisabledReason : undefined}
+              style={{ display: 'inline-flex' }}
             >
-              <PlusIcon />
-              Create layer
-            </button>
+              <button
+                type="button"
+                className="lyr-btn lyr-btn--primary"
+                onClick={openCreateForm}
+                disabled={!canCreate}
+              >
+                <PlusIcon />
+                Create layer
+              </button>
+            </span>
           </div>
         </div>
       ) : (
@@ -410,6 +510,7 @@ const LayerManagement: React.FC = () => {
               <thead>
                 <tr>
                   <th style={{ width: '30%' }}>Name</th>
+                  {showTeamColumn && <th>Team</th>}
                   <th>Runtimes</th>
                   <th>Architectures</th>
                   <th>Version</th>
@@ -426,6 +527,11 @@ const LayerManagement: React.FC = () => {
                         <div className="lyr-desc">{layer.description}</div>
                       )}
                     </td>
+                    {showTeamColumn && (
+                      <td className="lyr-cell-mono">
+                        {layer.teamId ? (teamNamesById[layer.teamId] || layer.teamId) : '—'}
+                      </td>
+                    )}
                     <td>
                       <div className="lyr-tags">
                         {layer.compatibleRuntimes.map((rt) => (
@@ -443,15 +549,17 @@ const LayerManagement: React.FC = () => {
                       {new Date(layer.createdAt).toLocaleDateString()}
                     </td>
                     <td style={{ textAlign: 'right' }}>
-                      <button
-                        type="button"
-                        className="lyr-btn lyr-btn--icon lyr-btn--danger"
-                        onClick={() => handleDelete(layer.id, layer.name)}
-                        title={`Delete ${layer.name}`}
-                        aria-label={`Delete ${layer.name}`}
-                      >
-                        <TrashIcon />
-                      </button>
+                      {canWriteLayer(layer) && (
+                        <button
+                          type="button"
+                          className="lyr-btn lyr-btn--icon lyr-btn--danger"
+                          onClick={() => handleDelete(layer.id, layer.name)}
+                          title={`Delete ${layer.name}`}
+                          aria-label={`Delete ${layer.name}`}
+                        >
+                          <TrashIcon />
+                        </button>
+                      )}
                     </td>
                   </tr>
                 ))}

@@ -67,7 +67,11 @@ export interface DeploymentHistoryRecord {
 export interface DeploymentStatus {
   deploymentId: string;
   workflowId: string;
-  userId?: string;
+  // Team that owns the underlying workflow at deploy time.
+  teamId?: string;
+  // Audit: who triggered this deployment.
+  createdBy?: string;
+  createdByEmail?: string;
   status: 'pending' | 'in_progress' | 'completed' | 'failed' | 'cancelled';
   stepFunctionArn?: string; // Actual workflow Step Functions ARN (alias ARN for new executions)
   stepFunctionVersionArn?: string; // Specific version ARN for this deployment
@@ -285,7 +289,9 @@ export const DeploymentHistoryRecordSchema = z.object({
 export const DeploymentStatusSchema = z.object({
   deploymentId: z.string().min(1),
   workflowId: z.string().min(1),
-  userId: z.string().optional(),
+  teamId: z.string().optional(),
+  createdBy: z.string().optional(),
+  createdByEmail: z.string().optional(),
   status: z.enum(['pending', 'in_progress', 'completed', 'failed', 'cancelled']),
   stepFunctionArn: z.string().optional(),
   stepFunctionVersionArn: z.string().optional(),

@@ -48,23 +48,24 @@ class ApiService {
       }
     );
 
-    // Response interceptor to handle auth errors
+    // Response interceptor to handle auth errors. On a 401 we force a token
+    // refresh via the refresh token and retry the request exactly once. The
+    // __isRetry guard prevents an infinite loop if the refreshed token is
+    // still rejected (e.g. the session/refresh token itself has expired).
     this.client.interceptors.response.use(
       (response) => response,
       async (error) => {
-        if (error.response?.status === 401) {
-          // Token might be expired, try to refresh
+        const originalRequest = error.config;
+        if (error.response?.status === 401 && originalRequest && !originalRequest.__isRetry) {
+          originalRequest.__isRetry = true;
           try {
-            await authService.getTokens(); // This will refresh tokens if needed
-            // Retry the original request
-            const originalRequest = error.config;
-            const tokens = await authService.getTokens();
+            const tokens = await authService.refreshTokens();
             originalRequest.headers.Authorization = `Bearer ${tokens.idToken}`;
             return this.client.request(originalRequest);
           } catch (refreshError) {
-            // Refresh failed, redirect to login
+            // Refresh failed (no/expired refresh token) — sign out and redirect.
             console.error('Token refresh failed:', refreshError);
-            authService.signOut();
+            await authService.signOut();
             window.location.href = '/signin';
           }
         }

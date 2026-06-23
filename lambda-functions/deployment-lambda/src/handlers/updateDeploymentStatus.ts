@@ -1,5 +1,6 @@
 import { DynamoDBClient } from '@aws-sdk/client-dynamodb';
 import { DynamoDBDocumentClient, UpdateCommand, ScanCommand, GetCommand } from '@aws-sdk/lib-dynamodb';
+import { writeWorkflowChangeLog } from '../utils/changeLog';
 import { CloudFormationClient, DescribeStacksCommand, GetTemplateCommand } from '@aws-sdk/client-cloudformation';
 import { S3EventBridgeService } from '../services/s3EventBridgeService';
 
@@ -67,8 +68,11 @@ export const handler = async (event: any): Promise<any> => {
       throw new Error(`Deployment ${deploymentId} not found`);
     }
 
-    const { workflowId, userId } = deploymentRecord;
-    console.log('Found deployment record:', { workflowId, userId });
+    const { workflowId } = deploymentRecord;
+    const actorUserId: string = deploymentRecord.createdBy || 'system';
+    const actorEmail: string = deploymentRecord.createdByEmail || 'system';
+    const deploymentTeamId: string = deploymentRecord.teamId || '';
+    console.log('Found deployment record:', { workflowId });
     console.log('Deployment record details:', JSON.stringify(deploymentRecord, null, 2));
 
     // Update deployment status
@@ -121,7 +125,18 @@ export const handler = async (event: any): Promise<any> => {
         
         // Update workflow status with deployment info
         console.log('Updating workflow status...');
-        await updateWorkflowStatus(userId, workflowId, workflowUpdates);
+        await updateWorkflowStatus(workflowId, workflowUpdates);
+
+        const currentWorkflowMeta = await getCurrentWorkflow(workflowId);
+        await writeWorkflowChangeLog({
+          workflowId,
+          action: 'deployed',
+          actorUserId,
+          actorEmail,
+          teamId: deploymentTeamId,
+          workflowName: currentWorkflowMeta?.name || workflowId,
+          meta: { deploymentId },
+        });
 
         console.log('Workflow status updated successfully');
         console.log('WORKFLOW UPDATE COMPLETE - UI should now show deployed status');
@@ -158,9 +173,19 @@ export const handler = async (event: any): Promise<any> => {
       console.log('Deployment failed, updating workflow status');
       
       try {
-        await updateWorkflowStatus(userId, workflowId, {
+        await updateWorkflowStatus(workflowId, {
           deploymentStatus: 'failed',
           updatedAt: new Date().toISOString(),
+        });
+        const currentWorkflowMeta = await getCurrentWorkflow(workflowId);
+        await writeWorkflowChangeLog({
+          workflowId,
+          action: 'deploy_failed',
+          actorUserId,
+          actorEmail,
+          teamId: deploymentTeamId,
+          workflowName: currentWorkflowMeta?.name || workflowId,
+          meta: { deploymentId, errorCode: error?.code || 'UNKNOWN' },
         });
         console.log('Workflow status updated to failed');
       } catch (workflowUpdateError) {
@@ -188,7 +213,7 @@ export const handler = async (event: any): Promise<any> => {
 /**
  * Get deployment record from database
  */
-async function getDeploymentRecord(deploymentId: string): Promise<{ workflowId: string; userId: string } | null> {
+async function getDeploymentRecord(deploymentId: string): Promise<Record<string, any> | null> {
   const response = await docClient.send(new ScanCommand({
     TableName: DEPLOYMENTS_TABLE,
     FilterExpression: 'deploymentId = :deploymentId',
@@ -201,16 +226,7 @@ async function getDeploymentRecord(deploymentId: string): Promise<{ workflowId: 
     return null;
   }
 
-  const record = response.Items[0];
-  
-  if (!record.userId) {
-    throw new Error(`Deployment ${deploymentId} missing userId - cannot update status`);
-  }
-  
-  return {
-    workflowId: record.workflowId,
-    userId: record.userId,
-  };
+  return response.Items[0] || null;
 }
 
 /**
@@ -250,15 +266,14 @@ async function updateDeploymentStatus(
  * Update workflow status in database with proper relationship maintenance
  */
 async function updateWorkflowStatus(
-  userId: string,
   workflowId: string,
   updates: Record<string, any>
 ): Promise<void> {
   // First, get the current workflow to preserve important fields
-  const currentWorkflow = await getCurrentWorkflow(userId, workflowId);
-  
+  const currentWorkflow = await getCurrentWorkflow(workflowId);
+
   if (!currentWorkflow) {
-    console.warn(`Workflow ${workflowId} not found for user ${userId}`);
+    console.warn(`Workflow ${workflowId} not found`);
     return;
   }
 
@@ -309,29 +324,25 @@ async function updateWorkflowStatus(
   await docClient.send(new UpdateCommand({
     TableName: WORKFLOWS_TABLE,
     Key: {
-      PK: `USER#${userId}`,
-      SK: `WORKFLOW#${workflowId}`,
+      PK: `WORKFLOW#${workflowId}`,
+      SK: 'META',
     },
     UpdateExpression: `SET ${updateExpression.join(', ')}`,
     ExpressionAttributeNames: expressionAttributeNames,
     ExpressionAttributeValues: expressionAttributeValues,
-    // Add condition to prevent overwriting if workflow was modified
     ConditionExpression: 'attribute_exists(PK)',
   }));
 
   console.log('Workflow status updated with proper relationship maintenance and deployment history');
 }
 
-/**
- * Get current workflow from database
- */
-async function getCurrentWorkflow(userId: string, workflowId: string): Promise<any | null> {
+async function getCurrentWorkflow(workflowId: string): Promise<any | null> {
   try {
     const response = await docClient.send(new GetCommand({
       TableName: WORKFLOWS_TABLE,
       Key: {
-        PK: `USER#${userId}`,
-        SK: `WORKFLOW#${workflowId}`,
+        PK: `WORKFLOW#${workflowId}`,
+        SK: 'META',
       },
     }));
 

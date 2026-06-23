@@ -3,7 +3,6 @@ import { randomUUID } from 'crypto';
 import { DynamoDBClient } from '@aws-sdk/client-dynamodb';
 import { DynamoDBDocumentClient, GetCommand, PutCommand, UpdateCommand, ScanCommand } from '@aws-sdk/lib-dynamodb';
 import { SFNClient, StartExecutionCommand } from '@aws-sdk/client-sfn';
-import { EventBridgeClient, PutEventsCommand } from '@aws-sdk/client-eventbridge';
 
 import { 
   DeploymentRequest, 
@@ -15,12 +14,15 @@ import { Workflow } from '../types/workflow';
 
 import { DeploymentOrchestrator } from '../services/deploymentOrchestrator';
 import { CloudFormationTemplateGenerator } from '../services/cloudFormationTemplateGenerator';
-import { extractUserIdFromEvent, createAuthErrorResponse, createSuccessHeaders } from '../utils/auth';
+import { getDefaultLambdaCode } from '../services/defaultLambda';
+import { grantIndexerAccess } from '../services/openSearchAccessManager';
+import { createAuthErrorResponse, createSuccessHeaders } from '../utils/auth';
+import { resolveCaller, canWriteTeam, forbidden } from '../utils/authz';
+import { writeWorkflowChangeLog } from '../utils/changeLog';
 
 const dynamoClient = new DynamoDBClient({ region: process.env.AWS_REGION });
 const docClient = DynamoDBDocumentClient.from(dynamoClient);
 const sfnClient = new SFNClient({ region: process.env.AWS_REGION });
-const eventBridgeClient = new EventBridgeClient({ region: process.env.AWS_REGION });
 
 const WORKFLOWS_TABLE = process.env.WORKFLOWS_TABLE || 'WorkflowBuilder-Workflows';
 const DEPLOYMENTS_TABLE = process.env.DEPLOYMENTS_TABLE || 'WorkflowBuilder-Deployments';
@@ -86,33 +88,33 @@ export const handler = async (
 
     const deploymentRequest: DeploymentRequest = requestBody;
 
-    const userId = extractUserIdFromEvent(apiEvent);
-    
-    if (!userId) {
+    const caller = await resolveCaller(apiEvent);
+    if (!caller) {
       return createAuthErrorResponse('Valid authentication token required');
     }
+    const userId = caller.userId;
 
-    // Get workflow data from request or database
-    let workflow: Workflow;
-    
-    if (deploymentRequest.workflowData) {
-      // Workflow data provided in request (from localStorage)
-      workflow = deploymentRequest.workflowData;
-    } else {
-      // Try to fetch from database (future implementation)
-      const dbWorkflow = await getWorkflow(deploymentRequest.workflowId, userId);
-      if (!dbWorkflow) {
-        return {
-          statusCode: 400,
-          headers: createSuccessHeaders(),
-          body: JSON.stringify({
-            error: 'Workflow data must be provided in request or stored in database',
-            hint: 'Include workflowData in the deployment request',
-          }),
-        };
-      }
-      workflow = dbWorkflow;
+    // Always reload from DB so we trust the workflow's teamId for the auth
+    // check; client-supplied workflowData can spoof the team otherwise.
+    const dbWorkflow = await getWorkflow(deploymentRequest.workflowId);
+    if (!dbWorkflow) {
+      return {
+        statusCode: 404,
+        headers: createSuccessHeaders(),
+        body: JSON.stringify({ error: 'Workflow not found' }),
+      };
     }
+
+    if (!canWriteTeam(caller, dbWorkflow.teamId)) {
+      return forbidden('You do not have writer access on this team');
+    }
+
+    // Allow the request to ride client-supplied node config if present
+    // (e.g. unsaved Lambda code), but pin the workflow's teamId/id to the
+    // server's canonical version.
+    const workflow: Workflow = deploymentRequest.workflowData
+      ? { ...deploymentRequest.workflowData, teamId: dbWorkflow.teamId, id: dbWorkflow.id }
+      : dbWorkflow;
 
     // Validate workflow is ready for deployment
     const validationResult = validateWorkflowForDeployment(workflow);
@@ -155,7 +157,9 @@ export const handler = async (
     const initialDeploymentStatus: DeploymentStatus = {
       deploymentId,
       workflowId: workflow.id,
-      userId,
+      teamId: dbWorkflow.teamId,
+      createdBy: caller.userId,
+      createdByEmail: caller.email,
       status: 'pending',
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString(),
@@ -219,7 +223,17 @@ export const handler = async (
 
     try {
       const executionArn = await startDeploymentStepFunction(deploymentContext, workflow, lambdaCodeUploads);
-      
+
+      await writeWorkflowChangeLog({
+        workflowId: workflow.id,
+        action: 'deploy_triggered',
+        actorUserId: caller.userId,
+        actorEmail: caller.email,
+        teamId: dbWorkflow.teamId,
+        workflowName: workflow.name,
+        meta: { deploymentId },
+      });
+
       // Return immediate response while deployment continues in background
       return {
         statusCode: 202,
@@ -280,15 +294,15 @@ export const handler = async (
 };
 
 /**
- * Get workflow from database
+ * Get workflow from database. Workflow ID is unique across the table.
  */
-async function getWorkflow(workflowId: string, userId: string): Promise<Workflow | null> {
+async function getWorkflow(workflowId: string): Promise<Workflow | null> {
   try {
     const response = await docClient.send(new GetCommand({
       TableName: WORKFLOWS_TABLE,
       Key: {
-        PK: `USER#${userId}`,
-        SK: `WORKFLOW#${workflowId}`,
+        PK: `WORKFLOW#${workflowId}`,
+        SK: 'META',
       },
     }));
 
@@ -443,7 +457,10 @@ async function startDeploymentStepFunction(
   };
 
   console.log('Starting Step Functions execution:', executionName);
-  console.log('Input:', JSON.stringify(input, null, 2));
+  // Input embeds the workflow definition and inline Lambda source; dump it only behind a debug flag.
+  if (process.env.DEBUG_DEPLOY_INPUT === 'true') {
+    console.debug('Step Functions input:', JSON.stringify(input, null, 2));
+  }
 
   const response = await sfnClient.send(new StartExecutionCommand({
     stateMachineArn: DEPLOYMENT_STATE_MACHINE_ARN,
@@ -475,7 +492,7 @@ async function preUploadLambdaCode(workflow: Workflow, deploymentContext: Deploy
   
   for (const lambdaNode of lambdaNodes) {
     try {
-      const code = lambdaNode.config?.code || getDefaultLambdaCodeForNode(lambdaNode);
+      const code = lambdaNode.config?.code || getDefaultLambdaCode(lambdaNode);
       
       if (!code) {
         console.warn(`PRE-UPLOAD: No code found for Lambda node ${lambdaNode.id}`);
@@ -578,39 +595,6 @@ async function uploadToS3(buffer: Buffer, bucketName: string, s3Key: string): Pr
 }
 
 /**
- * Get default Lambda code for a node
- */
-function getDefaultLambdaCodeForNode(lambdaNode: any): string {
-  return `
-import json
-import logging
-
-logger = logging.getLogger()
-logger.setLevel(logging.INFO)
-
-def lambda_handler(event, context):
-    """
-    Default Lambda function for workflow node: ${lambdaNode.name || lambdaNode.id}
-    """
-    logger.info(f"Processing event: {json.dumps(event)}")
-    
-    # TODO: Implement your business logic here
-    result = {
-        'statusCode': 200,
-        'body': {
-            'message': 'Lambda function executed successfully',
-            'nodeId': '${lambdaNode.id}',
-            'nodeName': '${lambdaNode.name || 'Unnamed'}',
-            'input': event
-        }
-    }
-    
-    logger.info(f"Returning result: {json.dumps(result)}")
-    return result
-  `.trim();
-}
-
-/**
  * Handle Step Functions template generation request
  */
 async function handleStepFunctionsTemplateGeneration(event: any): Promise<any> {
@@ -633,6 +617,17 @@ async function handleStepFunctionsTemplateGeneration(event: any): Promise<any> {
     console.log('STEP FUNCTIONS: Template generated successfully');
     console.log('STEP FUNCTIONS: Template size:', template.length, 'characters');
     console.log('STEP FUNCTIONS: Stack name:', stackName);
+
+    // If this workflow indexes into OpenSearch, authorise its indexer role on
+    // the shared AOSS data access policy by exact ARN. Best-effort — never
+    // blocks deployment. The per-workflow indexer role
+    // (OpenSearch-Lambda-Role-<WorkflowId>) is created by the CloudFormation
+    // stack below; AOSS accepts the principal ARN before the role exists.
+    const hasOpenSearchNode = Array.isArray(workflow?.nodes)
+      && workflow.nodes.some((node: any) => node?.type === 'opensearch');
+    if (hasOpenSearchNode) {
+      await grantIndexerAccess(deploymentContext.workflowId);
+    }
 
     return {
       statusCode: 200,
@@ -683,36 +678,5 @@ async function handleStepFunctionsTemplateGeneration(event: any): Promise<any> {
         message: `CloudFormation template generation failed: ${error instanceof Error ? error.message : 'Unknown error'}`
       })
     };
-  }
-}
-
-/**
- * Publish deployment status event to EventBridge
- */
-async function publishDeploymentStatusEvent(
-  deploymentId: string,
-  status: string,
-  details?: any
-): Promise<void> {
-  try {
-    await eventBridgeClient.send(new PutEventsCommand({
-      Entries: [
-        {
-          Source: 'workflow-builder.deployment',
-          DetailType: 'Deployment Status Update',
-          Detail: JSON.stringify({
-            deploymentId,
-            status,
-            timestamp: new Date().toISOString(),
-            ...details,
-          }),
-        },
-      ],
-    }));
-    
-    console.log('Published deployment status event:', { deploymentId, status });
-  } catch (error) {
-    console.error('Failed to publish deployment status event:', error);
-    // Don't throw - this is non-critical
   }
 }

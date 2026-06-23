@@ -1,6 +1,8 @@
 import { useEffect, useRef, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { authService, AuthUser } from '../services/auth';
 import { useDocumentTitle } from '../hooks/useDocumentTitle';
+import { useMe } from '../contexts/MeContext';
 import WorkflowList from './workflow/WorkflowList';
 import DeleteWorkflowModal from './workflow/DeleteWorkflowModal';
 import DeploymentStatusModal from './workflow/DeploymentStatusModal';
@@ -23,6 +25,8 @@ export default function Dashboard({
   onEditWorkflow,
   onViewWorkflow,
 }: DashboardProps) {
+  const navigate = useNavigate();
+  const { me, selectedTeamId, selectTeam, teamNamesById, teamNamesReady, teamsById, allTeamsForAdmin, canWriteSelected } = useMe();
   const [user, setUser] = useState<AuthUser | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -35,7 +39,7 @@ export default function Dashboard({
     deleteWorkflow,
     duplicateWorkflow,
     refreshWorkflows,
-  } = useWorkflows();
+  } = useWorkflows({ teamId: selectedTeamId || undefined });
 
   const [workflowToDelete, setWorkflowToDelete] =
     useState<WorkflowMetadata | null>(null);
@@ -43,6 +47,13 @@ export default function Dashboard({
   const [isCreating, setIsCreating] = useState(false);
   const [activeTab, setActiveTab] = useState<TabKey>('workflows');
   const [operationError, setOperationError] = useState<string | null>(null);
+
+  // Auto-dismiss operation error toast after 6 seconds.
+  useEffect(() => {
+    if (!operationError) return;
+    const t = setTimeout(() => setOperationError(null), 6000);
+    return () => clearTimeout(t);
+  }, [operationError]);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [deleteSuccess, setDeleteSuccess] = useState<string | null>(null);
   const [showDeletionProgressModal, setShowDeletionProgressModal] =
@@ -119,22 +130,85 @@ export default function Dashboard({
     }
   };
 
-  const handleCreateNew = async () => {
-    if (isCreating) return;
+  // When the caller could create in more than one team and hasn't picked
+  // one in the switcher, we pop a small modal so they pick before creating.
+  const [teamPickerOpen, setTeamPickerOpen] = useState(false);
+  // When duplicating and the target team is ambiguous, hold the source
+  // workflow id while the team picker is open.
+  const [duplicatePickerWorkflowId, setDuplicatePickerWorkflowId] = useState<string | null>(null);
 
+  const eligibleCreateTeams = (() => {
+    if (!me) return [] as { teamId: string; name: string }[];
+    if (me.isAdmin) {
+      // Admin can create in any team that exists.
+      return allTeamsForAdmin;
+    }
+    // Non-admin: only teams they have writer role on.
+    return me.teams
+      .filter(t => t.role === 'writer')
+      .map(t => ({ teamId: t.teamId, name: t.name }));
+  })();
+
+  const performCreate = async (teamId: string | undefined) => {
     try {
       setIsCreating(true);
       const newWorkflow = await createWorkflow(
         'Untitled Workflow',
-        'New workflow description'
+        'New workflow description',
+        teamId
       );
       handleEditWorkflow(newWorkflow.id);
     } catch (error) {
       console.error('Failed to create workflow:', error);
-      setOperationError('Failed to create workflow. Please try again.');
+      setOperationError(
+        error instanceof Error ? error.message : 'Failed to create workflow. Please try again.'
+      );
     } finally {
       setIsCreating(false);
     }
+  };
+
+  const handleCreateNew = async () => {
+    if (isCreating) return;
+    if (!me) return;
+
+    if (!me.isAdmin && eligibleCreateTeams.length === 0) {
+      setOperationError('You need writer access on at least one team to create workflows.');
+      return;
+    }
+
+    // A specific team is selected that the user can only read. Don't silently
+    // create in some other team — tell them to switch to a writable team.
+    if (selectedTeamId && !me.isAdmin && !eligibleCreateTeams.some(t => t.teamId === selectedTeamId)) {
+      const teamName = teamNamesById[selectedTeamId] || selectedTeamId;
+      setOperationError(
+        `You have read-only access to ${teamName}. Switch to a team where you have writer access to create a workflow.`
+      );
+      return;
+    }
+
+    // If the team switcher already targets a specific eligible team, use it.
+    if (selectedTeamId && eligibleCreateTeams.some(t => t.teamId === selectedTeamId)) {
+      await performCreate(selectedTeamId);
+      return;
+    }
+
+    // Otherwise: single eligible team auto-selects; multiple opens the picker.
+    if (eligibleCreateTeams.length === 1) {
+      await performCreate(eligibleCreateTeams[0].teamId);
+      return;
+    }
+
+    if (eligibleCreateTeams.length === 0) {
+      if (me.isAdmin) {
+        setOperationError('No teams exist yet. Create a team in the admin page first.');
+      } else {
+        setOperationError('You need to be a member of a team to create workflows.');
+      }
+      return;
+    }
+
+    setTeamPickerOpen(true);
   };
 
   const handleEditWorkflow = (workflowId: string) => {
@@ -193,14 +267,58 @@ export default function Dashboard({
     }
   };
 
-  const handleDuplicateWorkflow = async (workflowId: string) => {
+  const performDuplicate = async (workflowId: string, teamId: string | undefined) => {
     try {
-      const duplicatedWorkflow = await duplicateWorkflow(workflowId);
+      const duplicatedWorkflow = await duplicateWorkflow(workflowId, teamId);
       handleEditWorkflow(duplicatedWorkflow.id);
     } catch (error) {
       console.error('Failed to duplicate workflow:', error);
-      setOperationError('Failed to duplicate workflow. Please try again.');
+      setOperationError(
+        error instanceof Error ? error.message : 'Failed to duplicate workflow. Please try again.'
+      );
     }
+  };
+
+  const handleDuplicateWorkflow = async (workflowId: string) => {
+    if (!me) return;
+
+    if (!me.isAdmin && eligibleCreateTeams.length === 0) {
+      setOperationError('You need writer access on at least one team to duplicate workflows.');
+      return;
+    }
+
+    // A specific team is selected that the user can only read. Don't silently
+    // duplicate into some other team — tell them to switch to a writable team.
+    if (selectedTeamId && !me.isAdmin && !eligibleCreateTeams.some(t => t.teamId === selectedTeamId)) {
+      const teamName = teamNamesById[selectedTeamId] || selectedTeamId;
+      setOperationError(
+        `You have read-only access to ${teamName}. Switch to a team where you have writer access to duplicate workflows.`
+      );
+      return;
+    }
+
+    // If the team switcher already targets a specific eligible team, use it.
+    if (selectedTeamId && eligibleCreateTeams.some(t => t.teamId === selectedTeamId)) {
+      await performDuplicate(workflowId, selectedTeamId);
+      return;
+    }
+
+    // Otherwise: single eligible team auto-selects; multiple opens the picker.
+    if (eligibleCreateTeams.length === 1) {
+      await performDuplicate(workflowId, eligibleCreateTeams[0].teamId);
+      return;
+    }
+
+    if (eligibleCreateTeams.length === 0) {
+      setOperationError(
+        me.isAdmin
+          ? 'No teams exist yet. Create a team in the admin page first.'
+          : 'You need to be a member of a team to duplicate workflows.'
+      );
+      return;
+    }
+
+    setDuplicatePickerWorkflowId(workflowId);
   };
 
   if (loading) {
@@ -290,6 +408,49 @@ export default function Dashboard({
         </div>
 
         <div className="dash-nav-right">
+          {me && (me.teams.length > 0 || (me.isAdmin && allTeamsForAdmin.length > 0)) && (
+            <select
+              value={selectedTeamId || ''}
+              onChange={(e) => {
+                selectTeam(e.target.value || null);
+                // useWorkflows re-fetches automatically when params.teamId changes
+              }}
+              style={{
+                padding: '6px 10px',
+                border: '1px solid #d1d5db',
+                borderRadius: 6,
+                fontSize: 13,
+                background: '#fff',
+                color: '#374151',
+              }}
+              title="Filter workflows by team"
+            >
+              {/* "All" option available to everyone with multiple teams */}
+              {(me.isAdmin || me.teams.length > 1) && (
+                <option value="">
+                  {me.isAdmin ? 'All teams (admin)' : 'All my teams'}
+                </option>
+              )}
+              {/* Admins see every team in the system; non-admins see their own. */}
+              {(me.isAdmin ? allTeamsForAdmin : me.teams).map(t => (
+                <option key={t.teamId} value={t.teamId}>
+                  {t.name}{!me.isAdmin && 'role' in t ? ` (${(t as any).role})` : ''}
+                </option>
+              ))}
+            </select>
+          )}
+
+          {me?.isAdmin && (
+            <button
+              type="button"
+              className="dash-search-btn"
+              onClick={() => navigate('/admin')}
+              title="Open admin dashboard"
+            >
+              <span className="dash-search-btn-text">Admin</span>
+            </button>
+          )}
+
           {import.meta.env.VITE_ENABLE_OPENSEARCH !== 'false' && (
             <button
               type="button"
@@ -326,12 +487,6 @@ export default function Dashboard({
                   <div className="dash-menu-name">
                     {user?.email || 'Signed in'}
                   </div>
-                  {user?.userRole && (
-                    <div className="dash-menu-sub">
-                      {user.userRole}
-                      {user.organization ? ` · ${user.organization}` : ''}
-                    </div>
-                  )}
                 </div>
                 <button
                   type="button"
@@ -398,9 +553,22 @@ export default function Dashboard({
             {activeTab === 'workflows' && (
               <WorkflowList
                 workflows={workflows}
-                loading={workflowsLoading}
+                loading={workflowsLoading || !teamNamesReady}
                 error={workflowsError || undefined}
                 username={user?.email || user?.username || 'User'}
+                teamNamesById={teamNamesById}
+                canCreate={!(selectedTeamId && !canWriteSelected)}
+                createDisabledReason={
+                  selectedTeamId && !canWriteSelected
+                    ? `You have read-only access to ${teamNamesById[selectedTeamId] || selectedTeamId}. Switch to a team where you have writer access to create workflows.`
+                    : undefined
+                }
+                canWriteWorkflow={(w) => {
+                  if (!me) return false;
+                  if (me.isAdmin) return true;
+                  if (!w.teamId) return false;
+                  return teamsById[w.teamId]?.role === 'writer';
+                }}
                 onCreateNew={handleCreateNew}
                 onEditWorkflow={handleEditWorkflow}
                 onDeleteWorkflow={handleDeleteWorkflow}
@@ -418,6 +586,7 @@ export default function Dashboard({
             {activeTab === 'search' &&
               import.meta.env.VITE_ENABLE_OPENSEARCH !== 'false' && (
                 <OpenSearchPanel
+                  teamId={selectedTeamId || undefined}
                   allowedWorkflowIds={workflows
                     .filter((w) => w.deploymentStatus === 'deployed')
                     .map((w) => w.id)}
@@ -428,6 +597,33 @@ export default function Dashboard({
       </div>
 
       {/* ---------- Modals & toasts ---------- */}
+      {teamPickerOpen && (
+        <CreateInTeamPicker
+          teams={eligibleCreateTeams}
+          onCancel={() => setTeamPickerOpen(false)}
+          onConfirm={async (teamId) => {
+            setTeamPickerOpen(false);
+            await performCreate(teamId);
+          }}
+        />
+      )}
+
+      {duplicatePickerWorkflowId && (
+        <CreateInTeamPicker
+          teams={eligibleCreateTeams}
+          title="Duplicate workflow into which team?"
+          description="Pick the team the copied workflow should belong to."
+          confirmLabel="Duplicate"
+          defaultTeamId={workflows.find(w => w.id === duplicatePickerWorkflowId)?.teamId}
+          onCancel={() => setDuplicatePickerWorkflowId(null)}
+          onConfirm={async (teamId) => {
+            const sourceId = duplicatePickerWorkflowId;
+            setDuplicatePickerWorkflowId(null);
+            if (sourceId) await performDuplicate(sourceId, teamId);
+          }}
+        />
+      )}
+
       {workflowToDelete && (
         <DeleteWorkflowModal
           workflow={workflowToDelete}
@@ -496,6 +692,82 @@ export default function Dashboard({
           }}
         />
       )}
+    </div>
+  );
+}
+
+/* ---------- Pick-team modal ---------- */
+
+interface CreateInTeamPickerProps {
+  teams: { teamId: string; name: string }[];
+  onCancel: () => void;
+  onConfirm: (teamId: string) => void;
+  title?: string;
+  description?: string;
+  confirmLabel?: string;
+  /** Pre-selected team in the dropdown (falls back to the first team). */
+  defaultTeamId?: string;
+}
+
+function CreateInTeamPicker({ teams, onCancel, onConfirm, title, description, confirmLabel, defaultTeamId }: CreateInTeamPickerProps) {
+  const initial = defaultTeamId && teams.some(t => t.teamId === defaultTeamId)
+    ? defaultTeamId
+    : (teams[0]?.teamId || '');
+  const [picked, setPicked] = useState<string>(initial);
+  return (
+    <div
+      role="dialog"
+      aria-modal="true"
+      style={{
+        position: 'fixed', inset: 0, background: 'rgba(0, 0, 0, 0.45)',
+        display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000,
+      }}
+      onClick={(e) => { if (e.target === e.currentTarget) onCancel(); }}
+    >
+      <div style={{
+        background: '#fff', borderRadius: 12, padding: 24, width: '100%', maxWidth: 400,
+        boxShadow: '0 16px 40px rgba(0, 0, 0, 0.18)',
+      }}>
+        <h2 style={{ margin: '0 0 8px', fontSize: 18, fontWeight: 600 }}>{title || 'Create workflow in which team?'}</h2>
+        <p style={{ margin: '0 0 16px', fontSize: 13, color: '#6b7280' }}>
+          {description || 'You can create workflows in more than one team. Pick the team this workflow should belong to.'}
+        </p>
+        <select
+          value={picked}
+          onChange={(e) => setPicked(e.target.value)}
+          style={{
+            width: '100%', padding: '10px 12px', fontSize: 14,
+            border: '1px solid #d1d5db', borderRadius: 6, marginBottom: 16,
+          }}
+        >
+          {teams.map(t => (
+            <option key={t.teamId} value={t.teamId}>{t.name}</option>
+          ))}
+        </select>
+        <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
+          <button
+            type="button"
+            onClick={onCancel}
+            style={{
+              padding: '8px 14px', background: '#fff', color: '#374151',
+              border: '1px solid #d1d5db', borderRadius: 6, fontSize: 14, cursor: 'pointer',
+            }}
+          >
+            Cancel
+          </button>
+          <button
+            type="button"
+            onClick={() => picked && onConfirm(picked)}
+            disabled={!picked}
+            style={{
+              padding: '8px 14px', background: '#2563eb', color: '#fff',
+              border: 'none', borderRadius: 6, fontSize: 14, cursor: 'pointer',
+            }}
+          >
+            {confirmLabel || 'Create'}
+          </button>
+        </div>
+      </div>
     </div>
   );
 }

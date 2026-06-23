@@ -8,7 +8,9 @@ const WORKFLOWS_TABLE = process.env.WORKFLOWS_TABLE || 'WorkflowBuilder-Workflow
 
 export interface WorkflowStatusUpdateEvent {
   workflowId: string;
-  userId: string;
+  // userId is no longer used as a key but is preserved on the event payload
+  // for legacy callers; it's ignored.
+  userId?: string;
   status: 'deploying' | 'deployed' | 'failed' | 'not_deployed' | 'deleting' | 'delete_failed';
   stateMachineArn?: string;
   stackName?: string;
@@ -34,9 +36,8 @@ export const handler = async (event: WorkflowStatusUpdateEvent): Promise<Workflo
   try {
     const { workflowId, userId, status, stateMachineArn, stackName, errorMessage, message, timestamp } = event;
 
-    // Validate required fields
-    if (!workflowId || !userId || !status) {
-      throw new Error('Missing required fields: workflowId, userId, or status');
+    if (!workflowId || !status) {
+      throw new Error('Missing required fields: workflowId or status');
     }
 
     // Build update expression dynamically based on provided fields
@@ -81,17 +82,16 @@ export const handler = async (event: WorkflowStatusUpdateEvent): Promise<Workflo
       expressionAttributeValues[':errorMessage'] = null;
     }
 
-    // Update workflow in DynamoDB
     const updateCommand = new UpdateCommand({
       TableName: WORKFLOWS_TABLE,
       Key: {
-        PK: `USER#${userId}`,
-        SK: `WORKFLOW#${workflowId}`,
+        PK: `WORKFLOW#${workflowId}`,
+        SK: 'META',
       },
       UpdateExpression: `SET ${updateExpressions.join(', ')}`,
       ExpressionAttributeNames: expressionAttributeNames,
       ExpressionAttributeValues: expressionAttributeValues,
-      ConditionExpression: 'attribute_exists(PK)', // Ensure workflow exists
+      ConditionExpression: 'attribute_exists(PK)',
       ReturnValues: 'UPDATED_NEW',
     });
 
@@ -104,7 +104,7 @@ export const handler = async (event: WorkflowStatusUpdateEvent): Promise<Workflo
     });
 
     // Send WebSocket notification based on status
-    await sendWebSocketNotification(workflowId, userId, status, message, errorMessage);
+    await sendWebSocketNotification(workflowId, userId || '', status, message, errorMessage);
 
     return {
       success: true,

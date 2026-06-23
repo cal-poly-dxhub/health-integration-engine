@@ -8,6 +8,18 @@ const docClient = DynamoDBDocumentClient.from(dynamoClient);
 
 const CONNECTIONS_TABLE = process.env.CONNECTIONS_TABLE_NAME || 'WebSocketConnections';
 
+/**
+ * True when a GSI query failed because the index doesn't exist. DynamoDB
+ * reports this as ValidationException ("...does not have the specified index")
+ * for a missing index, or ResourceNotFoundException for a missing table — so
+ * we treat both as "index unavailable, fall back to a scan".
+ */
+function isIndexMissingError(err: any): boolean {
+  if (!err) return false;
+  if (err.name === 'ResourceNotFoundException') return true;
+  return err.name === 'ValidationException' && /index/i.test(err.message ?? '');
+}
+
 interface StepFunctionStateChangeEvent {
   executionArn: string;
   stateMachineArn: string;
@@ -70,8 +82,12 @@ async function handleDeploymentEvent(event: EventBridgeEvent<string, any>): Prom
     originalStatus: detail.status,
   };
 
-  // Broadcast to deployment-specific connections first, then all connections as fallback
-  await broadcastToDeploymentConnections(detail.deploymentId, progressUpdate);
+  // Scope to connections subscribed to this deployment (+ the initiating
+  // user's connections if the event carries a userId). Never broadcast to all.
+  await broadcastToScopedConnections(
+    { deploymentId: detail.deploymentId, userId: detail.userId },
+    progressUpdate
+  );
 }
 
 /**
@@ -91,7 +107,12 @@ async function handleDeletionEvent(event: EventBridgeEvent<string, any>): Promis
     timestamp: detail.timestamp || new Date().toISOString(),
   };
 
-  await broadcastToAllConnections(deletionUpdate);
+  // The deletion progress modal subscribes with the workflowId as its
+  // deploymentId, so scope by that id plus the initiating user's connections.
+  await broadcastToScopedConnections(
+    { deploymentId: detail.workflowId, userId: detail.userId },
+    deletionUpdate
+  );
 }
 
 /**
@@ -135,8 +156,9 @@ async function handleDeploymentStepFunctionEvent(detail: StepFunctionStateChange
     originalStatus: detail.status,
   };
 
-  // Broadcast to deployment-specific connections first, then all connections as fallback
-  await broadcastToDeploymentConnections(deploymentId, progressUpdate);
+  // Scope to connections subscribed to this deployment id (unguessable,
+  // owner-only). No all-connections fallback.
+  await broadcastToScopedConnections({ deploymentId }, progressUpdate);
 }
 
 /**
@@ -152,6 +174,10 @@ async function handleDeletionStepFunctionEvent(detail: StepFunctionStateChangeEv
 
   console.log(`Processing deletion Step Functions event for workflow: ${workflowId}`);
 
+  // The deletion execution input carries the initiating user's id (set by
+  // deleteWorkflow), so we can scope updates to that user's connections.
+  const ownerUserId = extractUserIdFromDeletionExecution(detail);
+
   // Create deletion update message
   const deletionUpdate = {
     type: 'workflow_deletion_update',
@@ -162,8 +188,11 @@ async function handleDeletionStepFunctionEvent(detail: StepFunctionStateChangeEv
     executionArn: detail.executionArn,
   };
 
-  // Broadcast to all connected WebSocket clients
-  await broadcastToAllConnections(deletionUpdate);
+  // Scope to the workflow's subscribers and the initiating user. Never all.
+  await broadcastToScopedConnections(
+    { deploymentId: workflowId, userId: ownerUserId || undefined },
+    deletionUpdate
+  );
 }
 
 /**
@@ -227,6 +256,23 @@ function extractWorkflowIdFromDeletionExecution(detail: StepFunctionStateChangeE
     }
   } catch (error) {
     console.error('Error parsing deletion execution input:', error);
+  }
+  return null;
+}
+
+/**
+ * Extract the initiating user's id from the deletion execution input
+ * (set by deleteWorkflow as { workflowId, userId, ... }). Used to scope
+ * realtime deletion updates to that user's connections.
+ */
+function extractUserIdFromDeletionExecution(detail: StepFunctionStateChangeEvent): string | null {
+  try {
+    if (detail.input) {
+      const input = JSON.parse(detail.input);
+      return input.userId || null;
+    }
+  } catch (error) {
+    console.error('Error parsing deletion execution input for userId:', error);
   }
   return null;
 }
@@ -338,11 +384,18 @@ function getDeletionStatusMessage(status: string): string {
 
 
 /**
- * Broadcast message to deployment-specific WebSocket connections with fallback to all connections
+ * Broadcast a message ONLY to connections that legitimately belong to the
+ * target deployment/workflow — connections subscribed to the exact
+ * deployment/workflow id and/or owned by the initiating user. Never broadcasts
+ * to all connections (which would leak other tenants' progress data).
  */
-async function broadcastToDeploymentConnections(deploymentId: string, message: any): Promise<void> {
+async function broadcastToScopedConnections(
+  scope: { deploymentId?: string; userId?: string },
+  message: any
+): Promise<void> {
   try {
-    console.log(`[websocket] INFO: [broadcaster] Starting broadcast for deployment ${deploymentId}`);
+    const scopeLabel = scope.deploymentId || scope.userId || 'unknown';
+    console.log(`[websocket] INFO: [broadcaster] Starting scoped broadcast for ${scopeLabel}`);
 
     // Get WebSocket endpoint from environment
     const websocketEndpoint = process.env.WEBSOCKET_ENDPOINT;
@@ -359,19 +412,23 @@ async function broadcastToDeploymentConnections(deploymentId: string, message: a
       region: process.env.AWS_REGION,
     });
 
-    // First try to get deployment-specific connections
-    let connections = await getDeploymentConnections(deploymentId);
-    console.log(`[websocket] INFO: Found ${connections.length} deployment-specific connections`);
+    // Resolve the UNION of (a) connections subscribed to this exact
+    // deployment/workflow id and (b) connections owned by the initiating user.
+    // Both are tenant-safe: the deployment/workflow id is an unguessable,
+    // owner-only identifier, and userId scopes to the acting user's own
+    // sessions. There is intentionally NO "broadcast to all connections"
+    // fallback — that would leak other tenants' deployment/deletion progress
+    // (ids, statuses, error messages, execution ARNs) to every connected
+    // client, regardless of team.
+    const [byDeployment, byUser] = await Promise.all([
+      scope.deploymentId ? getDeploymentConnections(scope.deploymentId) : Promise.resolve<string[]>([]),
+      scope.userId ? getUserConnections(scope.userId) : Promise.resolve<string[]>([]),
+    ]);
+    const connections = [...new Set([...byDeployment, ...byUser])];
+    console.log(`[websocket] INFO: Found ${connections.length} scoped connections (deployment=${byDeployment.length}, user=${byUser.length})`);
 
-    // If no deployment-specific connections, fall back to all connections
     if (connections.length === 0) {
-      console.log(`[websocket] INFO: No deployment-specific connections, falling back to all connections`);
-      connections = await getAllConnections();
-      console.log(`[websocket] INFO: Found ${connections.length} total connections for fallback`);
-    }
-
-    if (connections.length === 0) {
-      console.log(`[websocket] WARN: No connections found for broadcasting`);
+      console.log(`[websocket] WARN: No scoped connections found for broadcasting`);
       return;
     }
 
@@ -431,54 +488,34 @@ async function broadcastToDeploymentConnections(deploymentId: string, message: a
 }
 
 /**
- * Broadcast message to all WebSocket connections - simplified approach following AWS sample
+ * Get WebSocket connections owned by a specific user (Cognito sub) via the
+ * UserIdIndex GSI. Falls back to a userId-filtered scan if the GSI is absent.
+ * Always scoped to the one user — never returns unrelated connections.
  */
-async function broadcastToAllConnections(message: any): Promise<void> {
+async function getUserConnections(userId: string): Promise<string[]> {
   try {
-    // Get WebSocket endpoint from environment
-    const websocketEndpoint = process.env.WEBSOCKET_ENDPOINT;
-    if (!websocketEndpoint) {
-      console.error('WEBSOCKET_ENDPOINT environment variable not set');
-      return;
-    }
-
-    // Create API Gateway Management API client
-    // Convert WebSocket URL to HTTPS endpoint for API Gateway Management API
-    const httpsEndpoint = websocketEndpoint.replace('wss://', 'https://');
-    const apiGatewayClient = new ApiGatewayManagementApiClient({
-      endpoint: httpsEndpoint,
-      region: process.env.AWS_REGION,
-    });
-
-    // Get all active WebSocket connections
-    const connections = await getAllConnections();
-    console.log(`Found ${connections.length} active connections`);
-
-    // Send message to each connection
-    const sendPromises = connections.map(async (connectionId) => {
-      try {
-        await apiGatewayClient.send(new PostToConnectionCommand({
-          ConnectionId: connectionId,
-          Data: JSON.stringify(message),
+    try {
+      const response = await docClient.send(new QueryCommand({
+        TableName: CONNECTIONS_TABLE,
+        IndexName: 'UserIdIndex',
+        KeyConditionExpression: 'userId = :userId',
+        ExpressionAttributeValues: { ':userId': userId },
+      }));
+      return response.Items?.map(item => item.connectionId).filter(Boolean) || [];
+    } catch (gsiError: any) {
+      if (isIndexMissingError(gsiError)) {
+        const response = await docClient.send(new ScanCommand({
+          TableName: CONNECTIONS_TABLE,
+          FilterExpression: 'userId = :userId',
+          ExpressionAttributeValues: { ':userId': userId },
         }));
-        console.log(`Message sent to connection ${connectionId}`);
-      } catch (error: any) {
-        console.error(`Failed to send message to connection ${connectionId}:`, error);
-
-        // If connection is stale, remove it from DynamoDB (AWS sample pattern)
-        if (error.statusCode === 410) {
-          console.log(`Connection ${connectionId} is stale, removing from DynamoDB`);
-          await removeStaleConnection(connectionId);
-        }
+        return response.Items?.map(item => item.connectionId).filter(Boolean) || [];
       }
-    });
-
-    await Promise.allSettled(sendPromises);
-    console.log('WebSocket notifications sent');
-
+      throw gsiError;
+    }
   } catch (error) {
-    console.error('Error broadcasting to connections:', error);
-    throw error;
+    console.error(`[websocket] ERROR: Error getting user connections for ${userId}:`, error);
+    return [];
   }
 }
 
@@ -502,7 +539,7 @@ async function getDeploymentConnections(deploymentId: string): Promise<string[]>
       console.log(`[websocket] DEBUG: Found ${connections.length} connections via DeploymentIdIndex GSI`);
       return connections;
     } catch (gsiError: any) {
-      if (gsiError.name === 'ResourceNotFoundException') {
+      if (isIndexMissingError(gsiError)) {
         console.log(`[websocket] WARN: DeploymentIdIndex GSI not found, falling back to scan`);
 
         // Fallback to scanning all connections and filtering
@@ -523,24 +560,6 @@ async function getDeploymentConnections(deploymentId: string): Promise<string[]>
     }
   } catch (error) {
     console.error(`[websocket] ERROR: Error getting deployment connections for ${deploymentId}:`, error);
-    return [];
-  }
-}
-
-/**
- * Get all WebSocket connections - using correct table structure
- */
-async function getAllConnections(): Promise<string[]> {
-  try {
-    // Scan for all connections using the correct table structure
-    const response = await docClient.send(new ScanCommand({
-      TableName: CONNECTIONS_TABLE,
-      // No filter needed - all items in WebSocketConnections table are connections
-    }));
-
-    return response.Items?.map(item => item.connectionId).filter(Boolean) || [];
-  } catch (error) {
-    console.error('Error getting connections:', error);
     return [];
   }
 }

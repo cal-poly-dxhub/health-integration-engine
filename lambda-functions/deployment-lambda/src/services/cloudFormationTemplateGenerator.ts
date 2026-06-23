@@ -2,6 +2,8 @@ import { DeploymentContext } from '../types/deployment';
 import { Workflow } from '../types/workflow';
 import { NodeHandlerRegistry } from './nodeHandlers';
 import { IAMPermissionAnalyzer } from './iamPermissionAnalyzer';
+import { getDefaultHandler, getDefaultLambdaCode } from './defaultLambda';
+import { isValidBucketName } from '../utils/bucketName';
 
 interface VpcConfig {
   mode: 'none' | 'existing' | 'new';
@@ -186,10 +188,19 @@ export class CloudFormationTemplateGenerator {
     console.log('CFT GENERATOR: Starting template generation...');
     
     try {
-    // Validate IAM roles for S3 and database nodes
+    // Reject invalid/wildcard S3 bucket names up front so they can't expand to a wildcard ARN in any role.
+    for (const node of workflow.nodes) {
+      if (node.type === 's3' && !isValidBucketName(node.config?.bucketName)) {
+        throw new Error(
+          `S3 node "${node.name || node.id}" has an invalid or missing bucket name. Use a valid S3 bucket name (lowercase letters, numbers, dots, hyphens; 3-63 chars).`
+        );
+      }
+    }
+
+    // Validate IAM roles for S3 nodes
     const { validateIAMRoleArn } = await import('./iamRoleValidator');
     for (const node of workflow.nodes) {
-      if ((node.type === 's3' || node.type === 'database') && 
+      if (node.type === 's3' && 
           node.config?.iamRole?.useExisting && 
           node.config?.iamRole?.existingRoleArn) {
         const validation = await validateIAMRoleArn(node.config.iamRole.existingRoleArn, 'stepfunctions');
@@ -372,10 +383,10 @@ export class CloudFormationTemplateGenerator {
     console.log('CFT GENERATOR: Template generation completed');
     console.log('CFT GENERATOR: Template size:', templateJson.length, 'characters');
     console.log('CFT GENERATOR: Template resources:', Object.keys(template.Resources));
-    console.log('CFT GENERATOR: Generated CloudFormation Template:');
-    console.log('=' .repeat(80));
-    console.log(templateJson);
-    console.log('=' .repeat(80));
+    // Full template embeds inline Lambda source; only dump it behind a debug flag.
+    if (process.env.DEBUG_TEMPLATE === 'true') {
+      console.debug('CFT GENERATOR: Generated CloudFormation Template:\n' + templateJson);
+    }
     
     return templateJson;
     
@@ -737,9 +748,6 @@ export class CloudFormationTemplateGenerator {
       case 's3':
         return this.getS3PermissionsForLambda(config, accessType);
       
-      case 'database':
-        return this.getDatabasePermissionsForLambda(config, accessType);
-      
       case 'lambda':
         // Lambda functions don't need invoke permissions for other Lambda functions
         // Step Functions handles Lambda-to-Lambda invocation
@@ -754,7 +762,13 @@ export class CloudFormationTemplateGenerator {
    * Get S3 permissions for Lambda function
    */
   private static getS3PermissionsForLambda(config: any, accessType: 'read' | 'write'): any[] {
-    const bucketName = config.bucketName || '*';
+    const bucketName = (config.bucketName || '').trim();
+    if (!isValidBucketName(bucketName)) {
+      // Fail closed: an invalid/wildcard bucket name could grant the Lambda role account-wide S3 access.
+      throw new Error(
+        'S3 node has an invalid or missing bucket name. Use a valid S3 bucket name so the Lambda role is not granted account-wide S3 access.'
+      );
+    }
     const objectKey = config.objectKey || '*';
     
     const bucketArn = `arn:aws:s3:::${bucketName}`;
@@ -771,28 +785,6 @@ export class CloudFormationTemplateGenerator {
         Effect: 'Allow',
         Action: ['s3:PutObject', 's3:PutObjectAcl', 's3:DeleteObject'],
         Resource: [objectArn],
-      }];
-    }
-  }
-
-  /**
-   * Get Database permissions for Lambda function
-   */
-  private static getDatabasePermissionsForLambda(config: any, accessType: 'read' | 'write'): any[] {
-    const tableName = config.tableName || '*';
-    const tableArn = `arn:aws:dynamodb:*:*:table/${tableName}`;
-    
-    if (accessType === 'read') {
-      return [{
-        Effect: 'Allow',
-        Action: ['dynamodb:GetItem', 'dynamodb:Query', 'dynamodb:Scan'],
-        Resource: [tableArn],
-      }];
-    } else {
-      return [{
-        Effect: 'Allow',
-        Action: ['dynamodb:PutItem', 'dynamodb:UpdateItem', 'dynamodb:DeleteItem'],
-        Resource: [tableArn],
       }];
     }
   }
@@ -856,7 +848,7 @@ export class CloudFormationTemplateGenerator {
   private static async generateLambdaCodeAndHandler(lambdaNode: any, deploymentContext: DeploymentContext, lambdaCodeUploads?: any[]): Promise<{ Handler: string; Code: any }> {
     const runtime = lambdaNode.config?.runtime || 'python3.12';
     const customHandler = lambdaNode.config?.handler;
-    const defaultHandler = this.getDefaultHandler(runtime);
+    const defaultHandler = getDefaultHandler(runtime);
 
     console.log('CFT GENERATOR: Generating Lambda code config for node:', lambdaNode.id);
     
@@ -876,7 +868,7 @@ export class CloudFormationTemplateGenerator {
     // Fallback: try to create and upload code on-the-fly (legacy behavior)
     console.warn('CFT GENERATOR: No pre-uploaded code found, attempting on-the-fly upload for node:', lambdaNode.id);
     
-    const code = lambdaNode.config?.code || this.getDefaultLambdaCode(lambdaNode);
+    const code = lambdaNode.config?.code || getDefaultLambdaCode(lambdaNode);
     console.log('CFT GENERATOR: Code length:', code.length);
     
     try {
@@ -1164,57 +1156,6 @@ export class CloudFormationTemplateGenerator {
   }
 
   /**
-   * Get default handler based on runtime
-   */
-  private static getDefaultHandler(runtime: string): string {
-    if (runtime.includes('python')) {
-      return 'lambda_function.lambda_handler';
-    } else if (runtime.includes('nodejs')) {
-      return 'index.handler';
-    } else if (runtime.includes('java')) {
-      return 'com.example.Handler::handleRequest';
-    } else if (runtime.includes('dotnet')) {
-      return 'Assembly::Namespace.ClassName::MethodName';
-    } else {
-      // Default to Python
-      return 'index.lambda_handler';
-    }
-  }
-
-  /**
-   * Get default Lambda code for a node
-   */
-  private static getDefaultLambdaCode(lambdaNode: any): string {
-    return `
-import json
-import logging
-
-logger = logging.getLogger()
-logger.setLevel(logging.INFO)
-
-def handler(event, context):
-    """
-    Default Lambda function for workflow node: ${lambdaNode.name || lambdaNode.id}
-    """
-    logger.info(f"Processing event: {json.dumps(event)}")
-    
-    # TODO: Implement your business logic here
-    result = {
-        'statusCode': 200,
-        'body': {
-            'message': 'Lambda function executed successfully',
-            'nodeId': '${lambdaNode.id}',
-            'nodeName': '${lambdaNode.name || 'Unnamed'}',
-            'input': event
-        }
-    }
-    
-    logger.info(f"Returning result: {json.dumps(result)}")
-    return result
-    `.trim();
-  }
-
-  /**
    * Generate OpenSearch Lambda resources for indexing
    */
   private static generateOpenSearchResources(workflow: Workflow, deploymentContext: DeploymentContext): any {
@@ -1222,6 +1163,18 @@ def handler(event, context):
     if (opensearchNodes.length === 0) return {};
 
     console.log('CFT GENERATOR: Generating OpenSearch resources for', opensearchNodes.length, 'nodes');
+
+    // A workflow with an OpenSearch node REQUIRES the shared collection ARN
+    // (CDK injects it when OpenSearch is enabled). Fail closed rather than fall
+    // back to Resource: '*', which would grant account-wide AOSS access.
+    const collectionArn = process.env.OPENSEARCH_COLLECTION_ARN;
+    if (!collectionArn) {
+      throw new Error(
+        'Workflow has an OpenSearch node but OPENSEARCH_COLLECTION_ARN is not set — ' +
+        'refusing to generate an account-wide (Resource: "*") AOSS grant. ' +
+        'Ensure OpenSearch is enabled (config: enableOpenSearch) before deploying this workflow.'
+      );
+    }
 
     const resources: any = {};
 
@@ -1253,7 +1206,8 @@ def handler(event, context):
             Statement: [{
               Effect: 'Allow',
               Action: ['aoss:APIAccessAll'],
-              Resource: '*',
+              // Scoped to the shared collection ARN (validated above; never '*').
+              Resource: collectionArn,
             }],
           },
         }],

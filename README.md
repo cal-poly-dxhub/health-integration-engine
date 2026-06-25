@@ -21,7 +21,7 @@ This project was built to simplify the orchestration of healthcare data processi
 
 ## Architecture Diagram
 
-![Architecture Diagram](docs/architecture-diagram.png)
+![Architecture Diagram](docs/architecture-diagram.svg)
 
 # Description
 
@@ -67,7 +67,7 @@ This project was built to simplify the orchestration of healthcare data processi
 |:-----|:------------|
 | **Start / End** | Workflow entry and exit points |
 | **Lambda** | AWS Lambda function invocation |
-| **S3** | S3 operations (get, put, list, delete) with event-driven triggers |
+| **S3** | S3 operations (get, put, list, delete) with event-driven triggers Buckets must be pre-created — the node references them by name, it doesn't create them.|
 | **OpenSearch** | Index processed data into Amazon OpenSearch Serverless for search and analytics |
 
 Adding new node types (Wait, Choice, Parallel, SNS, SQS, etc.) is straightforward with the plugin-based handler system. See the [Node Handlers Guide](lambda-functions/deployment-lambda/src/services/nodeHandlers/README.md).

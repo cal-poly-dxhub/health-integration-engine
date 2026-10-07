@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { useAuth } from '../../contexts/AuthContext';
+import { NewPasswordRequiredError } from '../../services/auth';
 import { useDocumentTitle } from '../../hooks/useDocumentTitle';
 import './SignIn.css';
 
@@ -15,12 +16,16 @@ export default function SignIn({
   onSwitchToForgotPassword,
 }: SignInProps) {
   useDocumentTitle('Sign in');
-  const { signIn } = useAuth();
+  const { signIn, completeNewPassword } = useAuth();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // Set when Cognito requires the user to replace a temporary password.
+  const [challenge, setChallenge] = useState<{ email: string; session: string } | null>(null);
+  const [newPassword, setNewPassword] = useState('');
+  const [confirmNewPassword, setConfirmNewPassword] = useState('');
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -31,10 +36,51 @@ export default function SignIn({
       await signIn(email, password);
       onSignInSuccess();
     } catch (err) {
+      if (err instanceof NewPasswordRequiredError) {
+        setChallenge({ email: err.email, session: err.session });
+        setPassword('');
+        setNewPassword('');
+        setConfirmNewPassword('');
+        return;
+      }
       setError(err instanceof Error ? err.message : 'Sign in failed');
     } finally {
       setLoading(false);
     }
+  };
+
+  const handleNewPasswordSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!challenge) return;
+    setError(null);
+
+    if (newPassword !== confirmNewPassword) {
+      setError('Passwords do not match');
+      return;
+    }
+
+    setLoading(true);
+    try {
+      await completeNewPassword(challenge.email, newPassword, challenge.session);
+      setChallenge(null);
+      onSignInSuccess();
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Failed to set new password';
+      // The challenge session can't be reused once it expires; send the user back.
+      if (message.startsWith('Your session expired')) {
+        setChallenge(null);
+      }
+      setError(message);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const cancelNewPassword = () => {
+    setChallenge(null);
+    setNewPassword('');
+    setConfirmNewPassword('');
+    setError(null);
   };
 
   return (
@@ -95,6 +141,115 @@ export default function SignIn({
             <span>Health Data Integration Engine</span>
           </div>
 
+          {challenge ? (
+            <>
+              <h2 className="signin-title">Set a new password</h2>
+              <p className="signin-subtitle">
+                Your account uses a temporary password. Choose a new password
+                for {challenge.email} to finish signing in.
+              </p>
+
+              <form className="signin-form" onSubmit={handleNewPasswordSubmit} noValidate>
+                <div className="signin-field">
+                  <div className="signin-label-row">
+                    <label htmlFor="signin-new-password" className="signin-label">
+                      New password
+                    </label>
+                  </div>
+                  <div className="signin-input-wrap">
+                    <span className="signin-input-icon" aria-hidden="true">
+                      <LockIcon />
+                    </span>
+                    <input
+                      id="signin-new-password"
+                      type={showPassword ? 'text' : 'password'}
+                      autoComplete="new-password"
+                      autoFocus
+                      required
+                      disabled={loading}
+                      value={newPassword}
+                      onChange={(e) => setNewPassword(e.target.value)}
+                      placeholder="Enter a new password"
+                      className="signin-input signin-input--with-suffix"
+                    />
+                    <button
+                      type="button"
+                      className="signin-suffix-btn"
+                      onClick={() => setShowPassword((s) => !s)}
+                      aria-label={showPassword ? 'Hide password' : 'Show password'}
+                      aria-pressed={showPassword}
+                      tabIndex={loading ? -1 : 0}
+                    >
+                      {showPassword ? <EyeOffIcon /> : <EyeIcon />}
+                    </button>
+                  </div>
+                  <p className="signin-subtitle">
+                    At least 8 characters, with uppercase, lowercase, a number,
+                    and a symbol.
+                  </p>
+                </div>
+
+                <div className="signin-field">
+                  <div className="signin-label-row">
+                    <label htmlFor="signin-confirm-new-password" className="signin-label">
+                      Confirm new password
+                    </label>
+                  </div>
+                  <div className="signin-input-wrap">
+                    <span className="signin-input-icon" aria-hidden="true">
+                      <LockIcon />
+                    </span>
+                    <input
+                      id="signin-confirm-new-password"
+                      type={showPassword ? 'text' : 'password'}
+                      autoComplete="new-password"
+                      required
+                      disabled={loading}
+                      value={confirmNewPassword}
+                      onChange={(e) => setConfirmNewPassword(e.target.value)}
+                      placeholder="Re-enter the new password"
+                      className="signin-input"
+                    />
+                  </div>
+                </div>
+
+                {error && (
+                  <div className="signin-error" role="alert" aria-live="polite">
+                    <span className="signin-error-icon" aria-hidden="true">
+                      <AlertIcon />
+                    </span>
+                    <span>{error}</span>
+                  </div>
+                )}
+
+                <button
+                  type="submit"
+                  disabled={loading || !newPassword || !confirmNewPassword}
+                  className="signin-submit"
+                >
+                  {loading ? (
+                    <>
+                      <span className="signin-spinner" aria-hidden="true" />
+                      <span>Saving…</span>
+                    </>
+                  ) : (
+                    'Set password and sign in'
+                  )}
+                </button>
+              </form>
+
+              <div className="signin-footer">
+                <button
+                  type="button"
+                  onClick={cancelNewPassword}
+                  disabled={loading}
+                >
+                  Back to sign in
+                </button>
+              </div>
+            </>
+          ) : (
+          <>
           <h2 className="signin-title">Welcome back</h2>
           <p className="signin-subtitle">
             Sign in to access your workflows and integrations.
@@ -204,6 +359,8 @@ export default function SignIn({
               Create one
             </button>
           </div>
+          </>
+          )}
 
           <p className="signin-legal">
             By signing in, you agree to your organization's terms of use and

@@ -15,6 +15,7 @@ interface AuthContextType {
   isLoading: boolean;
   isAuthenticated: boolean;
   signIn: (email: string, password: string) => Promise<void>;
+  completeNewPassword: (email: string, newPassword: string, session: string) => Promise<void>;
   signUp: (userData: {
     email: string;
     password: string;
@@ -102,6 +103,22 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children, config }) 
   const signIn = async (email: string, password: string) => {
     try {
       const result = await authService.signIn({ email, password });
+
+      setUser(result.user);
+      setTokens(result.tokens);
+      setIsAuthenticated(true);
+    } catch (error) {
+      setUser(null);
+      setTokens(null);
+      setIsAuthenticated(false);
+      throw error;
+    }
+  };
+
+  // Complete a NEW_PASSWORD_REQUIRED challenge and finish sign-in
+  const completeNewPassword = async (email: string, newPassword: string, session: string) => {
+    try {
+      const result = await authService.completeNewPassword({ email, newPassword, session });
 
       setUser(result.user);
       setTokens(result.tokens);
@@ -267,6 +284,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children, config }) 
     isLoading,
     isAuthenticated,
     signIn,
+    completeNewPassword,
     signUp,
     signOut,
     confirmSignUp,

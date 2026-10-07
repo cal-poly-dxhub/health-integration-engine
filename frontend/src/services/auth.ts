@@ -11,8 +11,28 @@ import {
   UpdateUserAttributesCommand,
   DeleteUserCommand,
   GlobalSignOutCommand,
+  RespondToAuthChallengeCommand,
   AuthFlowType,
+  ChallengeNameType,
 } from '@aws-sdk/client-cognito-identity-provider';
+
+/**
+ * Thrown by signIn when Cognito returns NEW_PASSWORD_REQUIRED (user was
+ * created by an admin with a temporary password). Carries the challenge
+ * session so the UI can collect a new password and complete sign-in via
+ * completeNewPassword(). The session is short-lived (~3 minutes).
+ */
+export class NewPasswordRequiredError extends Error {
+  readonly email: string;
+  readonly session: string;
+
+  constructor(email: string, session: string) {
+    super('You must set a new password before signing in');
+    this.name = 'NewPasswordRequiredError';
+    this.email = email;
+    this.session = session;
+  }
+}
 
 // Types for authentication
 export interface AuthUser {
@@ -212,32 +232,85 @@ class AuthService {
 
       const result = await this.client.send(command);
       
-      if (result.ChallengeName === 'NEW_PASSWORD_REQUIRED') {
-        throw new Error('Password change required');
+      if (result.ChallengeName === ChallengeNameType.NEW_PASSWORD_REQUIRED) {
+        if (!result.Session) {
+          throw new Error('Authentication failed');
+        }
+        throw new NewPasswordRequiredError(credentials.email, result.Session);
       }
 
-      if (!result.AuthenticationResult) {
-        throw new Error('Authentication failed');
-      }
-
-      // Store tokens
-      this.currentTokens = {
-        accessToken: result.AuthenticationResult.AccessToken || '',
-        idToken: result.AuthenticationResult.IdToken || '',
-        refreshToken: result.AuthenticationResult.RefreshToken || '',
-      };
-
-      // Persist tokens to localStorage
-      this.storeTokens(this.currentTokens);
-
-      // Get user details
-      const user = await this.getCurrentUser();
-
-      return { user, tokens: this.currentTokens };
+      return await this.finishAuthentication(result.AuthenticationResult);
     } catch (error) {
+      if (error instanceof NewPasswordRequiredError) {
+        throw error;
+      }
       console.error('Sign in error:', error);
       throw this.handleAuthError(error);
     }
+  }
+
+  /**
+   * Complete a NEW_PASSWORD_REQUIRED challenge by setting the user's
+   * permanent password, then finish sign-in.
+   */
+  async completeNewPassword(data: {
+    email: string;
+    newPassword: string;
+    session: string;
+  }): Promise<{ user: AuthUser; tokens: AuthTokens }> {
+    if (!this.client || !this.config) {
+      throw new Error('Auth service not configured');
+    }
+
+    try {
+      const command = new RespondToAuthChallengeCommand({
+        ClientId: this.config.userPoolClientId,
+        ChallengeName: ChallengeNameType.NEW_PASSWORD_REQUIRED,
+        Session: data.session,
+        ChallengeResponses: {
+          USERNAME: data.email,
+          NEW_PASSWORD: data.newPassword,
+        },
+      });
+
+      const result = await this.client.send(command);
+      return await this.finishAuthentication(result.AuthenticationResult);
+    } catch (error) {
+      console.error('Complete new password error:', error);
+      const err = error as { code?: string; name?: string } | undefined;
+      const code = err?.code || err?.name;
+      // An expired/consumed challenge session surfaces as NotAuthorizedException;
+      // don't let handleAuthError mislabel it as a bad password.
+      if (code === 'NotAuthorizedException') {
+        throw new Error('Your session expired. Please sign in again with your temporary password.');
+      }
+      throw this.handleAuthError(error);
+    }
+  }
+
+  /**
+   * Store tokens from a successful authentication result and load the user.
+   */
+  private async finishAuthentication(
+    authResult: { AccessToken?: string; IdToken?: string; RefreshToken?: string } | undefined
+  ): Promise<{ user: AuthUser; tokens: AuthTokens }> {
+    if (!authResult) {
+      throw new Error('Authentication failed');
+    }
+
+    this.currentTokens = {
+      accessToken: authResult.AccessToken || '',
+      idToken: authResult.IdToken || '',
+      refreshToken: authResult.RefreshToken || '',
+    };
+
+    // Persist tokens to localStorage
+    this.storeTokens(this.currentTokens);
+
+    // Get user details
+    const user = await this.getCurrentUser();
+
+    return { user, tokens: this.currentTokens };
   }
 
   /**
